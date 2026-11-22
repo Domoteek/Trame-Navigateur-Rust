@@ -145,6 +145,8 @@ pub enum UserEvent {
         ajoutees: usize,
         retirees: usize,
     },
+    /// Une sauvegarde, une restauration ou un echange de favoris (fil annexe) est terminee.
+    Sauvegarde(crate::sauvegarde::Issue),
 }
 
 /// Ce qu'on demande au moteur d'extensions de WebView2, a chaud.
@@ -353,6 +355,15 @@ pub struct App {
     flottant_demande: Option<TabId>,
     /// Derniere place de la mini-fenetre (position, taille), reprise a la sortie suivante.
     flottant_place: Option<(tao::dpi::PhysicalPosition<i32>, tao::dpi::PhysicalSize<u32>)>,
+
+    // ---- sauvegarde et restauration (voir `sauvegarde.rs`)
+    /// Archive lue et verifiee, qui attend une confirmation : (fichier, resume, contenus).
+    restauration: Option<(std::path::PathBuf, String, Vec<String>)>,
+    /// Compte rendu de la derniere restauration, a annoncer au premier battement (la barre
+    /// n'existe pas encore quand les donnees sont lues).
+    message_restauration: Option<String>,
+    /// Trame doit se fermer : une restauration s'applique au demarrage suivant.
+    quitter: bool,
 }
 
 mod fenetre;
@@ -675,6 +686,9 @@ impl App {
                 .and_then(|s| serde_json::from_str::<Vec<Value>>(&s).ok())
                 .map(|v| v.into_iter().map(|m| m.to_string()).collect())
                 .unwrap_or_default(),
+            restauration: None,
+            message_restauration: None,
+            quitter: false,
         };
         {
             use tao::platform::windows::WindowExtWindows;
@@ -808,19 +822,39 @@ impl App {
 
     fn charger_donnees(&mut self) {
         self.session = self.profil.charger_session();        self.historique = self.profil.charger_historique();
+        // Une restauration a-t-elle eu lieu au demarrage ? (elle s'applique avant la lecture,
+        // cf. `sauvegarde::appliquer_restauration_en_attente`) Le compte rendu s'annonce au
+        // premier battement, quand la barre existe.
+        self.message_restauration = crate::sauvegarde::message_de_restauration(self.profil.racine());
         self.ext_storage = self.profil.charger_ext_storage();
         self.reglages = self.profil.charger_reglages();
         self.appliquer_nettoyage();
         // Telechargements : la liste, et ceux qu'une fermeture a coupes en route.
         *self.dossier_dl.borrow_mut() = self.dossier_telechargements();
         self.telechargements = self.profil.charger_telechargements();
+        let mut repris = 0;
         let mut coupes = 0;
         for t in self.telechargements.iter_mut().filter(|t| t.actif()) {
-            t.etat = "interrompu".into();
-            t.raison = crate::telechargements::raison_lisible(41);
-            coupes += 1;
+            // Fichier complet sur le disque : le moteur a omis de le dire (WebView2 #5638), et
+            // la liste n'a jamais recu son evenement de fin. Ce n'est pas une coupure, et il
+            // serait faux de proposer de le retelecharger : on le reconnait termine.
+            if crate::telechargements::fichier_complet(&t.chemin, t.total) {
+                t.etat = "termine".into();
+                t.fin = if t.fin > 0 { t.fin } else { t.debut };
+                if let Some(total) = t.total {
+                    t.recu = t.recu.max(total);
+                }
+                repris += 1;
+            } else {
+                t.etat = "interrompu".into();
+                t.raison = crate::telechargements::raison_lisible(41);
+                coupes += 1;
+            }
         }
-        if coupes > 0 {
+        if repris > 0 {
+            info!("telechargements : {repris} termine(s) reconnu(s) a la relecture (le moteur ne l'avait pas dit)");
+        }
+        if repris + coupes > 0 {
             self.profil.sauver_telechargements(&self.telechargements);
         }
         self.extensions_chrome = self.profil.racine().join("extensions-chrome");
@@ -2753,6 +2787,25 @@ impl App {
             "version": env!("CARGO_PKG_VERSION"),
             "fenetre": { "style": self.reglages.barre_fenetre(), "agrandie": self.window.is_maximized() },
             "carnet": self.carnet_json(),
+            "sauvegarde": {
+                // Le catalogue des contenus vient d'ici, pas du HTML : deux listes ecrites a
+                // deux endroits finissent toujours par diverger, et l'interface proposerait
+                // alors une case qui ne sauvegarde rien.
+                "contenus": crate::sauvegarde::CONTENUS
+                    .iter()
+                    .map(|c| json!({
+                        "cle": c.cle,
+                        "libelle": c.libelle,
+                        "detail": c.detail,
+                        "defaut": c.defaut,
+                    }))
+                    .collect::<Vec<_>>(),
+                "restauration": self.restauration.as_ref().map(|(chemin, resume, contenus)| json!({
+                    "fichier": chemin.display().to_string(),
+                    "resume": resume,
+                    "contenus": contenus,
+                })),
+            },
             "historique": self.historique.len(),
             "telechargements": self.telechargements_json(),
             "zap": {
@@ -2905,6 +2958,11 @@ impl App {
                 self.tick();
                 self.suivre_le_son();
                 self.suivre_telechargements();
+                // Compte rendu d'une restauration faite au demarrage : la barre existe
+                // desormais, donc le message peut s'afficher autrement que dans le journal.
+                if let Some(message) = self.message_restauration.take() {
+                    self.signaler(&message);
+                }
                 // Sonde de diagnostic : `TRAME_EXT_ETAT=<id>` (ou `<id>=off`) allume ou coupe une
                 // extension au premier battement. Elle sert a verifier que le choix part bien
                 // dans `reglages.json` et se relit au demarrage suivant.
@@ -3071,6 +3129,7 @@ impl App {
             }
             UserEvent::Log(ligne) => info!("{ligne}"),
             UserEvent::Installation { libelle, issue } => self.fin_installation(libelle, issue),
+            UserEvent::Sauvegarde(issue) => self.fin_sauvegarde(issue),
             UserEvent::TaillePopup { largeur, hauteur } => {
                 // Bornes d'une fenetre d'action de Chrome : 25 a 800 px de large, 25 a 600 de haut.
                 let taille = (largeur.clamp(120.0, 800.0), hauteur.clamp(80.0, 600.0));
@@ -4183,6 +4242,59 @@ impl App {
                 let _ = std::process::Command::new("explorer").arg(&dossier).spawn();
                 self.signaler(&format!("Profil : {}", dossier.display()));
             }
+            // ---- sauvegarde et restauration du profil (voir `sauvegarde.rs`)
+            "sauvegardeEnregistrer" => {
+                let contenus: Vec<String> = v["contenus"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|c| c.as_str().map(str::to_string))
+                            .filter(|c| crate::sauvegarde::contenu(c).is_some())
+                            .collect()
+                    })
+                    .unwrap_or_else(crate::sauvegarde::cles_par_defaut);
+                self.lancer_sauvegarde(crate::sauvegarde::Demande::Sauver {
+                    chemin: None,
+                    contenus,
+                });
+            }
+            "sauvegardeRestaurer" => {
+                self.lancer_sauvegarde(crate::sauvegarde::Demande::Restaurer);
+            }
+            "sauvegardeRestaurerConfirmer" => {
+                let Some((archive, _, contenus)) = self.restauration.clone() else { return };
+                match crate::sauvegarde::demander(self.profil.racine(), &archive, &contenus) {
+                    Ok(()) => {
+                        // On ne restaure pas sous les pieds du moteur : la commande ecrit la
+                        // demande, Trame se ferme, et le demarrage suivant applique l'archive
+                        // avant de lire la session. Sans cela, la sauvegarde de sortie
+                        // reecrirait `session.json` par-dessus la restauration.
+                        info!(
+                            "restauration demandee ({} contenus) : Trame se ferme, l'archive \
+                             s'appliquera au prochain demarrage",
+                            contenus.len()
+                        );
+                        self.quitter = true;
+                    }
+                    Err(e) => {
+                        alerte!("restauration : demande impossible ({e})");
+                        self.signaler(&format!("Restauration impossible : {e}"));
+                    }
+                }
+            }
+            "sauvegardeRestaurerAnnuler" => {
+                self.restauration = None;
+                self.pousser_etat();
+            }
+            "favorisExporterHtml" => {
+                self.lancer_sauvegarde(crate::sauvegarde::Demande::ExporterFavoris {
+                    chemin: None,
+                    favoris: self.favoris.clone(),
+                });
+            }
+            "favorisImporterHtml" => {
+                self.lancer_sauvegarde(crate::sauvegarde::Demande::ImporterFavoris { chemin: None });
+            }
             "extensionReinitialiser" => {
                 let id = v["id"].as_str().unwrap_or("").to_string();
                 if !id.is_empty() {
@@ -4763,6 +4875,12 @@ impl App {
     /// Le moteur signale un changement d'etat (fin, echec, annulation, pause).
     fn telechargement_etat(&mut self, id: u64, termine: bool, interrompu: bool, reprenable: bool, raison: i32, recu: u64) {
         let Some(t) = self.telechargements.iter_mut().find(|t| t.id == id) else { return };
+        // Deja clos : le moteur emet parfois un second evenement apres notre propre deduction
+        // (voir `suivre_telechargements`). Il ne doit ni rejouer le toast, ni reinstaller un
+        // paquet du Chrome Web Store, ni redater la fin.
+        if termine && t.etat == "termine" {
+            return;
+        }
         t.recu = recu.max(t.recu);
         if termine {
             t.etat = "termine".into();
@@ -4813,6 +4931,7 @@ impl App {
     /// Chaque seconde, la progression des telechargements en cours.
     fn suivre_telechargements(&mut self) {
         let mut change = false;
+        let mut clos: Vec<(u64, u64)> = Vec::new();
         for t in self.telechargements.iter_mut().filter(|t| t.etat == "en_cours") {
             if let Some((recu, total)) = crate::telechargements::progression(t.id) {
                 if recu != t.recu || (total.is_some() && total != t.total) {
@@ -4823,9 +4942,22 @@ impl App {
                     change = true;
                 }
             }
+            // Le moteur oublie parfois de dire qu'il a fini (WebView2 #5638) : l'operation reste
+            // « en cours » alors que tous les octets sont arrives. L'interroger n'aide pas, son
+            // `State` reste bloque — mais le fichier, lui, porte la taille annoncee. Cela vaut
+            // preuve : `BytesReceived` compte les octets ecrits, pas ceux en vol.
+            if t.total.map_or(false, |total| total > 0 && t.recu >= total)
+                && crate::telechargements::fichier_complet(&t.chemin, t.total)
+            {
+                clos.push((t.id, t.recu));
+            }
         }
         if change {
             self.pousser_etat();
+        }
+        for (id, recu) in clos {
+            info!("telechargement {id} : fin deduite du fichier (le moteur n'a rien signale)");
+            self.telechargement_etat(id, true, false, false, 0, recu);
         }
     }
 
@@ -5169,6 +5301,91 @@ impl App {
             id,
             source: "magasin".into(),
         });
+    }
+
+    // ---------------------------------------------------------------- sauvegarde du profil
+
+    /// Lance une sauvegarde, une restauration ou un echange de favoris dans un fil annexe.
+    ///
+    /// Pourquoi un fil : les trois passent par le selecteur de Windows, qui **bloque** le fil
+    /// appelant. Sur la boucle d'evenements, la fenetre entiere se figerait — c'est la lecon
+    /// des 24 s d'installation d'uBlock Origin Lite (voir `installation.rs`).
+    fn lancer_sauvegarde(&mut self, demande: crate::sauvegarde::Demande) {
+        // Une sauvegarde doit refleter le moment du clic. La session n'est ecrite qu'a l'arret,
+        // ou toutes les 8 s par le battement (voir `tick`) : sans cette materialisation, une
+        // sauvegarde faite juste apres avoir ouvert trois onglets les aurait ignores, sans que
+        // rien ne le dise.
+        if matches!(demande, crate::sauvegarde::Demande::Sauver { .. }) {
+            self.sauver();
+        }
+        let racine = self.profil.racine().to_path_buf();
+        let proxy = self.proxy.clone();
+        std::thread::spawn(move || {
+            let issue = crate::sauvegarde::executer(&racine, demande);
+            let _ = proxy.send_event(UserEvent::Sauvegarde(issue));
+        });
+    }
+
+    /// Une sauvegarde, une restauration ou un import de favoris vient de se terminer.
+    fn fin_sauvegarde(&mut self, issue: crate::sauvegarde::Issue) {
+        use crate::sauvegarde::Issue;
+        match issue {
+            Issue::Sauvegardee {
+                chemin,
+                octets,
+                contenus,
+            } => {
+                info!(
+                    "sauvegarde terminee : {contenus} contenu(s), {octets} octets -> {}",
+                    chemin.display()
+                );
+                self.signaler(&format!(
+                    "Sauvegarde de {contenus} contenu(s) — {:.0} Ko : {}",
+                    octets as f64 / 1024.0,
+                    chemin.display()
+                ));
+            }
+            Issue::AConfirmer {
+                chemin,
+                resume,
+                contenus,
+            } => {
+                // Rien n'est applique ici : c'est le demarrage suivant qui le fera, une fois
+                // Trame ferme (sinon la sauvegarde de sortie ecraserait `session.json`).
+                self.restauration = Some((chemin, resume, contenus));
+                self.pousser_etat();
+            }
+            Issue::FavorisExportes { chemin, nombre } => {
+                self.signaler(&format!(
+                    "{nombre} favori(s) exporté(s) — {}. Ce fichier s'importe dans Chrome, Edge ou Firefox.",
+                    chemin.display()
+                ));
+            }
+            Issue::FavorisImportes(favoris) => {
+                let (ajoutes, doublons) = crate::sauvegarde::fusionner_favoris(&mut self.favoris, favoris);
+                if ajoutes > 0 {
+                    self.profil
+                        .sauver_liste(&self.profil.fichier_favoris(), &self.favoris);
+                }
+                let reste = if doublons > 0 {
+                    format!(" ({doublons} déjà présent(s))")
+                } else {
+                    String::new()
+                };
+                self.signaler(&format!("{ajoutes} favori(s) importé(s){reste}."));
+                self.pousser_etat();
+            }
+            Issue::Annulee => info!("sauvegarde : choix annule"),
+            Issue::Echec(e) => {
+                alerte!("sauvegarde : echec ({e})");
+                self.signaler(&format!("Sauvegarde : {e}"));
+            }
+        }
+    }
+
+    /// Trame doit-il se fermer ? (une restauration attend le prochain demarrage)
+    pub fn a_quitter(&self) -> bool {
+        self.quitter
     }
 
     /// Lance une installation dans un fil annexe : la fenetre reste vivante pendant le

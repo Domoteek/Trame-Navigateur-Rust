@@ -2084,6 +2084,96 @@ async function suite() {
     await p.close();
   });
 
+  // ---------------------------------------------------------------- sauvegarde du profil
+
+  await cas("reglages : sauvegarde — le catalogue vient de l'hote, et Sauvegarder envoie les cases", async () => {
+    const p = await page("reglages.html");
+    const etat = etatDeBase();
+    etat.sauvegarde = {
+      contenus: [
+        { cle: "reglages", libelle: "Réglages", detail: "moteur, veille", defaut: true },
+        { cle: "session", libelle: "Fils et onglets", detail: "les fils", defaut: true },
+        { cle: "ext-storage", libelle: "Stockage des extensions", detail: "mémoire", defaut: false },
+      ],
+      restauration: null,
+    };
+    await pousser(p, etat);
+    egal(await p.$$eval("#sauvegarde-contenus label", (n) => n.length), 3, "une case par contenu");
+    egal(
+      await p.$$eval("#sauvegarde-contenus input:checked", (n) => n.map((i) => i.value)),
+      ["reglages", "session"],
+      "les cases cochees sont celles que l'hote annonce par defaut"
+    );
+    // Une poussee de l'hote ne doit pas reconstruire les cases (cela decocherait un choix).
+    await p.click("#sauvegarde-contenus input[value=session]");
+    await pousser(p, etat);
+    egal(await p.$$eval("#sauvegarde-contenus label", (n) => n.length), 3, "pas de doublon apres une poussee");
+    egal(
+      await p.$$eval("#sauvegarde-contenus input:checked", (n) => n.map((i) => i.value)),
+      ["reglages"],
+      "un choix decoche survit a une poussee"
+    );
+    await vider(p);
+    await p.click("#btn-sauvegarder");
+    const recus = await messages(p);
+    const envoi = recus.find((m) => m.m === "sauvegardeEnregistrer");
+    verifier(!!envoi, `aucun envoi : ${JSON.stringify(recus)}`);
+    egal(envoi.contenus, ["reglages"], "les contenus coches partent avec la commande");
+    await p.close();
+  });
+
+  await cas("reglages : restauration — le resume s'affiche, rien ne s'applique sans confirmation", async () => {
+    const p = await page("reglages.html");
+    const etat = etatDeBase();
+    etat.sauvegarde = { contenus: [], restauration: null };
+    await pousser(p, etat);
+    egal(await p.$eval("#resume-restauration", (n) => n.hidden), true, "pas de resume sans archive");
+    egal(await p.$eval("#ligne-confirmer", (n) => n.hidden), true, "pas de bouton Appliquer sans archive");
+    etat.sauvegarde.restauration = {
+      fichier: "C:\\Temp\\trame-2026-11-22-2140.trame",
+      resume:
+        "Sauvegarde du 2026-11-22 21:40.\n\n• Favoris — 4 favori(s) (actuellement 2) — 2 ajouté(s)" +
+        "\n\nJamais dans une sauvegarde : les connexions et les cookies.",
+      contenus: ["favoris"],
+    };
+    await vider(p);
+    await pousser(p, etat);
+    egal(await p.$eval("#resume-restauration", (n) => n.hidden), false, "le resume s'affiche");
+    verifier(
+      (await p.$eval("#resume-restauration", (n) => n.textContent)).includes("2 ajouté(s)"),
+      "le resume est lisible"
+    );
+    verifier(
+      (await p.$eval("#c-restauration", (n) => n.textContent)).includes("trame-2026-11-22-2140"),
+      "le fichier est nomme"
+    );
+    egal((await messages(p)).length, 0, "afficher un resume n'applique rien de lui-meme");
+    await p.click("#btn-restaurer-confirmer");
+    verifier(
+      (await messages(p)).some((m) => m.m === "sauvegardeRestaurerConfirmer"),
+      "Appliquer envoie la confirmation"
+    );
+    await vider(p);
+    await p.click("#btn-restaurer-annuler");
+    verifier(
+      (await messages(p)).some((m) => m.m === "sauvegardeRestaurerAnnuler"),
+      "Annuler envoie l'annulation"
+    );
+    await p.close();
+  });
+
+  await cas("reglages : favoris — exporter et importer envoient leur commande", async () => {
+    const p = await page("reglages.html");
+    await pousser(p, etatDeBase());
+    await vider(p);
+    await p.click("#btn-favoris-exporter");
+    await p.click("#btn-favoris-importer");
+    const recus = (await messages(p)).map((m) => m.m);
+    verifier(recus.includes("favorisExporterHtml"), `export : ${JSON.stringify(recus)}`);
+    verifier(recus.includes("favorisImporterHtml"), `import : ${JSON.stringify(recus)}`);
+    await p.close();
+  });
+
   // ---------------------------------------------------------------- contrat UI <-> hôte
 
   await cas("contrat : tout message envoye par l'interface est traite par l'hote", async () => {

@@ -117,6 +117,44 @@ function inscriptionNavigateur() {
   };
 }
 
+/**
+ * Une VRAIE installation de Trame existe-t-elle sur ce poste ?
+ *
+ * Pourquoi cette garde. Ce contrôle installe puis **désinstalle** une copie avec le même
+ * identifiant d'application que la vraie (le script Inno n'en a qu'un). Son désinstalleur
+ * supprime donc les clés partagées : raccourci du menu Démarrer, entrée « Applications »,
+ * inscription navigateur, dossier d'installation mémorisé. Mesure du 2026-11-22 : rejoué alors
+ * qu'une 0.4.10 était installée, il a laissé le poste avec un exe orphelin, plus de raccourci,
+ * plus d'entrée « Applications » et plus d'inscription navigateur — et le dossier d'installation
+ * mémorisé a continué de pointer vers le dossier jetable, si bien que les installations suivantes
+ * n'atteignaient plus le vrai.
+ */
+function installationReelle() {
+  const raccourci = path.join(MENU_DEMARRER, "Trame", "Trame.lnk");
+  const dossierDefaut = path.join(process.env.LOCALAPPDATA, "Programs", "Trame", "trame.exe");
+  const entrees = spawnSync(
+    "powershell",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `Get-ChildItem 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' |
+         ForEach-Object { $p = Get-ItemProperty $_.PSPath; if ($p.DisplayName -eq 'Trame') { Write-Output $p.InstallLocation } }`,
+    ],
+    { encoding: "utf8", windowsHide: true }
+  );
+  const emplacements = `${entrees.stdout || ""}`
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const horsAterlier = emplacements.filter((e) => !e.toLowerCase().includes("\\temp\\"));
+  return {
+    raccourci: fs.existsSync(raccourci),
+    dossier: fs.existsSync(dossierDefaut),
+    emplacement: horsAterlier[0] || "",
+  };
+}
+
 async function main() {
   const v = version();
   const setup = path.join(DIST, `Trame-${v}-setup.exe`);
@@ -124,6 +162,26 @@ async function main() {
   if (!fs.existsSync(setup)) {
     console.error(`Installation absente : ${setup}\nLancer d'abord : node outils/faire-setup.mjs`);
     process.exit(2);
+  }
+
+  // Jamais pendant qu'une vraie installation existe : le désinstalleur d'essai emporterait son
+  // raccourci, son entrée « Applications » et son inscription navigateur (voir plus haut).
+  const reelle = installationReelle();
+  if ((reelle.raccourci || reelle.dossier || reelle.emplacement) && !process.argv.includes("--force")) {
+    console.error(
+      "Une installation de Trame existe sur ce poste :\n" +
+        (reelle.emplacement ? `  dossier enregistre : ${reelle.emplacement}\n` : "") +
+        (reelle.dossier
+          ? `  executable installe : ${path.join(process.env.LOCALAPPDATA, "Programs", "Trame", "trame.exe")}\n`
+          : "") +
+        (reelle.raccourci ? "  raccourci du menu Demarrer present\n" : "") +
+        "\nCe controle installe puis desinstalle une copie sous le MEME identifiant d'application :\n" +
+        "sa desinstallation retirerait le raccourci, l'entree « Applications » et l'inscription\n" +
+        "navigateur de la vraie installation (constate le 2026-11-22).\n\n" +
+        "Deux issues : desinstaller Trame d'abord (Parametres > Applications), ou lancer avec --force\n" +
+        "en sachant que l'installation reelle devra etre reinstallee juste apres."
+    );
+    process.exit(3);
   }
 
   const atelier = fs.mkdtempSync(path.join(os.tmpdir(), "trame-setup-"));

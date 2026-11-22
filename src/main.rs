@@ -27,6 +27,7 @@ mod probe;
 mod profile;
 mod protocol;
 mod ressources;
+mod sauvegarde;
 mod search;
 mod shell;
 mod systeme;
@@ -97,6 +98,12 @@ fn main() {
         // restauree, dans un onglet a elle.
         let _ = externe::deposer(profil.racine(), Some(a));
     }
+
+    // Une restauration demandee depuis la session precedente s'applique ICI : avant que la
+    // session ne soit lue, avant que le moteur WebView2 ne soit cree, et une fois le verrou
+    // pris (donc sans autre Trame en train d'ecrire le meme profil). L'ancien profil part dans
+    // `avant-restauration-<date>\` : on archive, on ne detruit pas.
+    sauvegarde::appliquer_restauration_en_attente(profil.racine());
 
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
@@ -210,6 +217,13 @@ fn main() {
                     std::thread::sleep(Duration::from_secs(60));
                 }
                 application.traiter(evenement);
+                // Une restauration a ete confirmee : elle s'applique au demarrage suivant, donc
+                // on ferme proprement (la session est ecrite a la sortie, comme d'habitude).
+                if application.a_quitter() {
+                    info!("arret demande : la restauration s'appliquera au prochain demarrage");
+                    *controle = ControlFlow::Exit;
+                    return;
+                }
                 // Une page a demande sa mini-fenetre : seule la boucle peut la creer.
                 if let Some(onglet) = application.prendre_demande_flottant() {
                     application.ouvrir_flottant(onglet, _cible);

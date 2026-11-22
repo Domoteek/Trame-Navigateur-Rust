@@ -207,6 +207,36 @@ Toute l'interface est donc servie par `trame:`, jamais par `file://`.
 « Atomique » = fichier `.tmp`, `sync_all`, puis `rename`. Une coupure de courant ne doit jamais
 laisser un `session.json` tronqué : c'est précisément le moment où l'on a besoin de la session.
 
+### 6 bis. Sauvegarde et restauration : pourquoi au démarrage
+
+`src/sauvegarde.rs` exporte le profil dans un fichier `.trame` (du JSON lisible) et le réapplique.
+Trois points d'architecture, chacun imposé par une contrainte réelle :
+
+1. **La restauration ne s'applique pas depuis la fenêtre ouverte.** Trame réécrit
+   `session.json` à son arrêt (`App::sauver`, appelé sur `CloseRequested` et `LoopDestroyed`) :
+   restaurer à chaud serait donc écrasé à la fermeture. La commande `sauvegardeRestaurerConfirmer`
+   écrit `restauration-en-attente.json`, met `App::quitter` à vrai ; la boucle d'événements
+   (`main.rs`) pose `ControlFlow::Exit` ; et le **démarrage suivant** appelle
+   `sauvegarde::appliquer_restauration_en_attente` juste après la prise du verrou et **avant**
+   `App::nouveau` — donc avant la lecture de la session et avant la création du contexte WebView2.
+2. **Le disque n'est jamais écrasé sans copie.** `archiver_avant` copie les fichiers concernés
+   dans `avant-restauration-<date>\` avant d'écrire. Même règle que `.migre` et
+   `extensions-chrome-archives\` : on archive, on ne détruit pas. Si la copie échoue, la
+   restauration est annulée — rien n'a été touché.
+3. **Une archive venue d'ailleurs ne peut écrire que des contenus connus.** `appliquer` filtre les
+   clés contre `CONTENUS`, ignore `webview2\`, et refuse un nom de capsule contenant `/`, `\` ou
+   `..`. Une archive est un fichier qu'on peut recevoir de quelqu'un.
+
+L'empreinte (`empreinte` de l'en-tête) est le SHA-256 du bloc `donnees` **sérialisé par
+`serde_json`**, dont la `Map` est une `BTreeMap` : les clés sont donc triées à tous les niveaux.
+Un recalcul qui ne trie pas les clés imbriquées trouve une empreinte différente — c'est un
+avertissement au journal, pas un refus (mesuré le 2026-11-22 : le banc d'essai `z` a échoué
+exactement là avant correction du calcul côté test).
+
+Le dialogue de fichier de Windows **bloque** le fil appelant : enregistrement, choix de l'archive
+et échange des favoris passent donc par un fil annexe, comme l'installation d'une extension
+(`installation.rs`), et le résultat revient par `UserEvent::Sauvegarde`.
+
 ## 7. Géométrie
 
 Les tailles de conception sont **logiques** (292, 46, 420) et converties en **physique** par le

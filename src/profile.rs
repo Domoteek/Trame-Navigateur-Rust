@@ -785,7 +785,7 @@ fn copier_dossier(source: &Path, destination: &Path) -> std::io::Result<()> {
 }
 
 /// Ecrit un fichier par remplacement atomique.
-fn ecrire_atomique(chemin: &Path, contenu: &str) -> std::io::Result<()> {
+pub(crate) fn ecrire_atomique(chemin: &Path, contenu: &str) -> std::io::Result<()> {
     ecrire_atomique_brut(chemin, contenu)
 }
 

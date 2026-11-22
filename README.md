@@ -80,6 +80,8 @@ zéro mémoire tant qu'on n'en ouvre pas un. Un fil de même nom déjà présent
 | **Le guetteur** (menu de la page → « Guetter un élément ») | On désigne un prix, un stock, un résultat : Trame relit la page **toutes les 30 min dans une page cachée et muette**, détruite aussitôt la lecture faite, jamais quand le PC manque de mémoire. Si le texte change : message « 39,90 € → 34,90 € », clignotement dans la barre des tâches, pastille sur `⋯`. Stocké dans `guets.json`. |
 | **La mémoire de lecture** (`?` dans la barre) | Une page restée affichée 8 s est gardée **sur ce PC** (texte seul, 12 000 caractères au plus, 1 500 pages au plus). `? électrolyte solide` retrouve la page où vous l'avez lu, avec le passage. Jamais les pages qui ont un champ de mot de passe ; un site peut être exclu (et ce qui en avait été gardé est effacé) ; tout s'efface depuis les réglages. Le fichier (`lectures.jsonl`) n'est relu que pendant une recherche, par un fil à part : rien en mémoire vive. |
 | **Le zappeur** (icône œil barré) | Panneau de droite : on désigne un élément dans la page (ou l'on colle un sélecteur CSS) et il disparaît. Règles **par domaine**, relisibles, coupables, supprimables, stockées dans `zap.json`. Livré avec 9 règles YouTube (Shorts, annonces) et 3 règles génériques. |
+| **La sauvegarde** (`Ctrl+,` → Sauvegarde du profil) | Un fichier JSON d'une vingtaine de kilo-octets qui emporte ce que vous cochez (réglages, fils, favoris, accès, zappeur, guets, capsules) et **ne prend jamais** les connexions, la mémoire de lecture ni les téléchargements — le fichier écrit pourquoi. La restauration simule d'abord ce qu'elle changerait, garde l'ancien profil dans `avant-restauration-…\`, et s'applique au démarrage suivant. |
+| **Les favoris en HTML** | Export et **import** au format Netscape : celui que lisent Chrome, Edge et Firefox. Sans l'import, un export ne servirait qu'à partir. |
 
 ### Moteur de recherche
 
@@ -115,6 +117,59 @@ banque en ligne, et la barre de recherche se referme sur `Échap` en rendant le 
 (jamais écrasé — `rapport (2).pdf` au besoin), et l'application l'annonce. Sans ce branchement,
 WebView2 ouvrait son propre panneau, invisible ici : le clic ne produisait rien.
 
+## Sauvegarde, restauration, échange de favoris
+
+![Sauvegarde du profil](docs/captures/sauvegarde.png)
+
+**Un fait commande tout le reste.** Mesure du 2026-11-22 sur le profil de Clément :
+**1 217 Mo et 10 204 fichiers**. Dedans, ce qui fait que Trame est *ce* navigateur pèse **19 Ko** :
+
+| Ce qui définit le navigateur | Poids | Ce qui pèse | Poids |
+|---|---|---|---|
+| `session.json` (fils, onglets, positions) | 6,2 Ko | `webview2\EBWebView` (cookies, connexions) | **854,6 Mo** |
+| `zap.json` | 4,7 Ko | `telechargements\` | 283,8 Mo |
+| `favoris.json` | 3,3 Ko | `extensions-chrome\` | 77,6 Mo |
+| `capsules\` (2 fils scellés) | 2,4 Ko | `lectures.jsonl` (texte des pages lues) | 489,9 Ko |
+| `acces.json` | 1,3 Ko | `trame.log` | 415,6 Ko |
+| `ext-storage.json` | 0,7 Ko | `history.jsonl` | 16,6 Ko |
+| `reglages.json` | 0,6 Ko | | |
+
+**Le rapport est de 1 à 64 000.** Une sauvegarde utile emporte donc la colonne de gauche — un
+fichier qu'on s'envoie par mail — et laisse la droite dehors **en le disant** : le fichier
+contient la liste de ce qu'il n'a pas pris, avec la raison (clé `exclus`). Une sauvegarde qui ne
+dit pas ce qu'elle a omis fait croire qu'elle protège ce qu'elle n'a pas pris.
+
+![Favoris — échange avec les autres navigateurs](docs/captures/favoris-html.png)
+
+| Ce qu'elle fait | Ce qu'elle ne fait pas |
+|---|---|
+| Un fichier `.trame` : du **JSON lisible**, avec sa `version`, sa date **locale**, la version de Trame, la machine et une **empreinte SHA-256** du bloc de données | Emporter les connexions et les cookies : une session ouverte est un secret |
+| Une case par contenu : réglages · fils et onglets · favoris · accès rapides · zappeur · guets · capsules · stockage des extensions (décochée par défaut) | Emporter la mémoire de lecture (le texte de ce que vous avez lu), ni les téléchargements, ni le journal |
+| **Restaurer en simulant d'abord** : ce qui change, ce qui est ajouté, ce qui manque à l'archive | Écrire quoi que ce soit avant votre confirmation |
+| **Garder l'ancien profil** dans `avant-restauration-<date>\` avant d'écrire | Effacer quoi que ce soit — jamais |
+| S'appliquer **au démarrage suivant** : Trame se ferme, et une ligne du journal le dit | Restaurer `webview2\`, même si une archive le contient : refusé, avec le motif |
+| **Exporter et importer les favoris en HTML** (format Netscape, celui de Chrome, Edge, Firefox) | Importer les *dossiers* de favoris de Chrome : tout arrive dans une seule liste |
+
+**Pourquoi la restauration passe par un redémarrage.** Trame réécrit `session.json` à son arrêt.
+Restaurer depuis la fenêtre ouverte serait effacé quelques secondes plus tard par la sauvegarde de
+sortie. La commande écrit `restauration-en-attente.json`, ferme Trame, et c'est le démarrage
+suivant qui applique l'archive — **avant** que la session ne soit lue et avant que le moteur
+WebView2 ne soit créé. Rien n'est appliqué à moitié, et l'ancien profil reste sur le disque.
+
+Deux pièges rencontrés, et ce qu'ils ont appris :
+
+- **`serde_json` trie les clés de tous les objets**, imbriqués compris (sa `Map` est une
+  `BTreeMap`). L'empreinte se calcule donc sur une forme canonique ; un outil qui la recalcule
+  sans trier les clés imbriquées trouve une empreinte différente. Ce n'est qu'un
+  **avertissement** au journal, jamais un refus : le fichier reste du JSON qu'on peut corriger à
+  la main.
+- **Sauvegarder sans avoir écrit la session** aurait ignoré les onglets ouverts dans les
+  dernières secondes — `session.json` n'est réécrit qu'à l'arrêt, ou toutes les 8 s. La commande
+  matérialise l'état avant de lire le disque.
+
+**Ce qui reste ouvert, dit franchement** : il n'y a pas de sauvegarde **automatique** (à date
+fixe, dans un dossier choisi) ; et l'export HTML aplatit les dossiers de favoris.
+
 ## Où vit quoi
 
 Tout ce dont le navigateur a besoin vit sous **`%LOCALAPPDATA%\Trame\`** (le profil). Rien ne dépend
@@ -133,11 +188,26 @@ de l'endroit où se trouve l'exécutable, et un `cargo clean` ne peut plus effac
 ├── session.json               onglets, fils, position
 ├── history.jsonl              historique (5000 entrées max)
 ├── reglages.json              moteur, veille, budget, état des extensions, épinglages
+├── favoris.json               favoris (Ctrl+D) — une page, pas un site
+├── acces.json                 accès rapides (sites, groupes, bande du rail)
+├── guets.json                 éléments surveillés (prix, stocks)
+├── lectures.jsonl             mémoire de lecture : le texte des pages lues
+├── telechargements.json       liste des téléchargements
 ├── zap.json                   règles de masquage
 ├── ext-storage.json           stockage des extensions Trame
 ├── extensions-chrome-sources.json   d'où vient chaque extension
-└── trame.log                  journal
+├── extensions-livrees.json    quelles extensions livrées ce profil a déjà reçues
+├── trame.log                  journal
+├── trame.lock                 verrou de profil (un seul Trame par dossier)
+├── avant-restauration-<date>\ copie de ce qui allait être écrasé par une restauration
+├── restauration-en-attente.json     archive confirmée, à appliquer au démarrage suivant
+└── derniere-restauration.json       compte rendu, lu une fois par l'interface
 ```
+
+Six de ces fichiers ne figuraient pas dans cette arborescence avant le 2026-11-22, alors qu'ils
+existent bel et bien : c'est exactement ce qui rendait impossible la réponse à « qu'est-ce que je
+dois sauvegarder ? ». La liste des contenus d'une sauvegarde vit maintenant dans
+`src/sauvegarde.rs` (`CONTENUS`), et un test la compare aux chemins du profil.
 
 **Pourquoi Local et pas Roaming.** Un profil de navigateur est une donnée de machine, pas de
 compte : 355 Mo de caches, de cookies et de profils WebView2 n'ont rien à faire dans un dossier
@@ -173,12 +243,29 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
-> Les fichiers de `dist\` ont été refaits et **signés** le 2026-11-22 (0.4.10) : exe et setup
-> `Valid`, horodatés (DigiCert), signataire `CN=CAHAGNE CLEMENT` ; empreintes dans
-> `dist\SHA256SUMS.txt`. **`node outils/verifier-setup.mjs` n'a pas été rejoué** pour cette
-> version : l'installation de Clément tournait pendant la fabrication, et ce contrôle
-> installe puis désinstalle une copie (il écrit dans HKCU). À lancer juste avant ou juste après
-> l'installation de la 0.4.10.
+> **0.4.11, signée et installée le 2026-11-22.** `dist\trame.exe` et `dist\Trame-0.4.11-setup.exe`
+> sont `Valid`, horodatés (DigiCert), signataire `CN=CAHAGNE CLEMENT` ; empreintes dans
+> `dist\SHA256SUMS.txt`. Cette version **contient la sauvegarde du profil**, et c'est prouvé, pas
+> supposé : le `trame.exe` que le setup installe est **octet pour octet** celui qui a été signé
+> (même empreinte que `dist\trame.exe`), et l'`ui\reglages.html` livré contient bien la section.
+> Elle est **installée sur le poste de Clément** (dossier `%LOCALAPPDATA%\Programs\Trame`,
+> raccourci, entrée « Applications », inscription navigateur et désinstalleur vérifiés après coup).
+>
+> ⚠️ **`node outils/verifier-setup.mjs` refuse de tourner quand une vraie installation existe**
+> (code 3, avec le motif) : son désinstalleur d'essai partage l'identifiant d'application et
+> retirerait le raccourci, l'entrée « Applications » et l'inscription navigateur de la vraie
+> installation — c'est arrivé le 2026-11-22. Le lancer **avant** d'installer, ou avec `--force` en
+> sachant qu'il faudra réinstaller ensuite.
+>
+> Pour installer en silence dans le bon dossier — Inno Setup **reprend le dossier de l'installation
+> précédente** (`UsePreviousAppDir`), donc un essai dans `%TEMP%` détourne les installations
+> suivantes :
+>
+> ```powershell
+> dist\Trame-0.4.11-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+>   "/DIR=%LOCALAPPDATA%\Programs\Trame"
+> ```
+
 
 **Ce que l'installation ne fait pas** : ni elle ni la désinstallation ne touchent au profil
 `%LOCALAPPDATA%\Trame`. Désinstaller Trame ne supprime pas les onglets, les réglages ni les
@@ -198,10 +285,10 @@ Trois étages, trois commandes. Aucune ne touche au profil réel.
 
 | Étage | Commande | Ce qui est vérifié | Mesure |
 |---|---|---|---|
-| Logique | `cargo test --release` | **177 tests** : ombre portée (opacité, coins, barre épargnée), une adresse unique dans la Couture, budget selon la mémoire libre, reconnaissance d'un processus d'extension, mémoire disponible mesurée, la cloison d'un fil sur le disque, l'ordre des fils (`deplacer_fil`, et sa relecture depuis le disque), icône d'extension et son confinement, réglages avec BOM, URL, géométrie, vitalité, tissage, protocole, persistance, modèle, CRX et identifiant d'extension, gestion et mémorisation des extensions, sort d'un téléchargement | ~0,3 s |
-| Interface | `node outils/tester-ui.mjs` | **73 cas** : le coût des extensions dans le puzzle, la mémoire juste au pied du rail, l'interrupteur du budget automatique, le rail et le puzzle d'un fil cloisonné, l'interrupteur de mémoire basse, le menu puzzle (épingler, basculer, ouvrir, aucune reconstruction inutile), les icônes épinglées, le rangement des groupes au pointeur (le trait, le message unique, l'appui qui ne range rien, le rail replié, le gel du redessin), le DOM rendu par `ui/` à partir d'un état poussé, les messages envoyés à l'hôte, une injection XSS neutralisée, les 17 raccourcis clavier, et le contrat « tout message de l'interface est traité par l'hôte » | ~5 s |
+| Logique | `cargo test --release` | **187 tests** : ombre portée (opacité, coins, barre épargnée), une adresse unique dans la Couture, budget selon la mémoire libre, reconnaissance d'un processus d'extension, mémoire disponible mesurée, la cloison d'un fil sur le disque, l'ordre des fils (`deplacer_fil`, et sa relecture depuis le disque), icône d'extension et son confinement, réglages avec BOM, URL, géométrie, vitalité, tissage, protocole, persistance, modèle, CRX et identifiant d'extension, gestion et mémorisation des extensions, sort d'un téléchargement, **sauvegarde et restauration** (aller-retour, archive qui tente d'écrire `webview2\`, version inconnue, résumé des changements, favoris HTML) | ~0,3 s |
+| Interface | `node outils/tester-ui.mjs` | **76 cas** : le coût des extensions dans le puzzle, la mémoire juste au pied du rail, l'interrupteur du budget automatique, le rail et le puzzle d'un fil cloisonné, l'interrupteur de mémoire basse, le menu puzzle (épingler, basculer, ouvrir, aucune reconstruction inutile), les icônes épinglées, le rangement des groupes au pointeur (le trait, le message unique, l'appui qui ne range rien, le rail replié, le gel du redessin), le DOM rendu par `ui/` à partir d'un état poussé, les messages envoyés à l'hôte, une injection XSS neutralisée, les 17 raccourcis clavier, **la sauvegarde** (catalogue venu de l'hôte, case décochée qui survit à une poussée, résumé affiché sans rien appliquer), et le contrat « tout message de l'interface est traité par l'hôte » | ~5 s |
 | Installation | `node outils/verifier-setup.mjs` | **24 contrôles** : installation silencieuse, fichiers, signature `Valid`, raccourci, entrée « Applications », lancement, désinstallation, profil réel intact | ~40 s |
-| Application | `node outils/verifier-app.mjs` | **19 scénarios** sur le binaire (22 avec `--reseau`) : mémoire libre faible (`u`), coût d'une extension mesuré (`v`, réseau), fils cloisonnés (`t`), mémoire basse des onglets cachés (`s`), chargement **à chaud** d'un CRX confirmé par le moteur, extinction puis rallumage à chaud (`r`), profil neuf, fichiers corrompus, adresse interne refusée, 30 onglets et budget, verrou de profil, zoom, téléchargement réel, zappeur appliqué par une page qui le rapporte, installation d'un CRX fabriqué, activation d'une extension mémorisée d'un démarrage à l'autre, `.crx` d'un autre site **non** installé — plus **2 en réseau** (`--reseau`) : installation depuis le magasin et clic « Ajouter à Chrome » | ~2 min |
+| Application | `node outils/verifier-app.mjs` | **24 scénarios** sur le binaire, sans réseau (`--reseau` en ajoute) : mémoire libre faible (`u`), coût d'une extension mesuré (`v`, réseau), fils cloisonnés (`t`), mémoire basse des onglets cachés (`s`), chargement **à chaud** d'un CRX confirmé par le moteur, extinction puis rallumage à chaud (`r`), profil neuf, fichiers corrompus, adresse interne refusée, 30 onglets et budget, verrou de profil, zoom, téléchargement réel, zappeur appliqué par une page qui le rapporte, installation d'un CRX fabriqué, activation d'une extension mémorisée d'un démarrage à l'autre, `.crx` d'un autre site **non** installé, **sauvegarde restaurée au démarrage** (`z`) et **archive d'une autre version refusée sans rien toucher** (`z2`) — plus, en réseau (`--reseau`) : installation depuis le magasin et clic « Ajouter à Chrome » | ~2 min |
 
 Un geste a son propre banc d'essai, parce qu'un test d'interface ne prouve pas qu'un vrai geste
 arrive jusqu'à l'hôte : **`node outils/eprouver-rangement.mjs`** envoie un vrai glissement de

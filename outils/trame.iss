@@ -1,4 +1,4 @@
-﻿; Trame — script d'installation Inno Setup 6
+; Trame — script d'installation Inno Setup 6
 ;
 ; Installation PAR UTILISATEUR (aucun droit administrateur) : tout va sous
 ; %LOCALAPPDATA%\Programs\Trame, et la desinstallation passe par « Applications ».
@@ -55,7 +55,12 @@ Name: "desktopicon"; Description: "Raccourci sur le Bureau"; GroupDescription: "
 Name: "lancement"; Description: "Lancer {#AppName} a la fin de l'installation"; GroupDescription: "Fin de l'installation :"
 
 [Files]
-Source: "..\target\release\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; L'executable EMBARQUE est celui de `dist\`, c'est-a-dire la copie SIGNEE que
+; `faire-setup.mjs` a faite a l'etape 3 — pas `target\release\trame.exe`, que le script relirait
+; une seconde fois. Mesure du 2026-11-22 : une compilation concurrente a remplace
+; `target\release\trame.exe` entre la signature et Inno Setup, et l'installation a embarque un
+; executable NON SIGNE sous un setup signe. En lisant la copie signee, cet intervalle disparait.
+Source: "..\dist\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\ui\*"; DestDir: "{app}\ui"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\extensions\*"; DestDir: "{app}\extensions"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\docs\CONCEPT.md"; DestDir: "{app}\docs"; Flags: ignoreversion

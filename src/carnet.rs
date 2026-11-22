@@ -31,6 +31,11 @@ pub struct Favori {
     pub icone: Option<String>,
 }
 
+/// Le nom du fichier des acces rapides, ecrit ici et non a la main a chaque appel : la
+/// sauvegarde (`sauvegarde.rs`) doit emporter le meme fichier que l'application ecrit, sinon
+/// elle sauvegarde une liste vide sans que rien ne le signale.
+pub const NOM_FICHIER_ACCES: &str = "acces.json";
+
 /// Un acces rapide : un bouton qui mene **a un site** (`acces.json`), sur la page « Nouvel
 /// onglet » et, pour au plus [`RAIL_MAX`] d'entre eux, dans la bande sous le logo du rail.
 /// Une seule liste, dans l'ordre choisi par l'utilisateur.

@@ -136,6 +136,19 @@ pub fn raison_lisible(code: i32) -> String {
     }
 }
 
+/// Le fichier de destination porte-t-il exactement la taille annoncee par le serveur ?
+///
+/// Filet de securite quand le moteur oublie de dire qu'il a fini : WebView2 laisse alors
+/// l'operation « en cours » alors que tous les octets sont arrives (defaut #5638, ouvert le
+/// 2026-07-06, regression depuis le runtime 144, toujours sans correctif publie). Interroger le
+/// moteur n'aide pas — `State` reste « en cours » : le fichier, lui, ne ment pas.
+pub fn fichier_complet(chemin: &str, total: Option<u64>) -> bool {
+    let Some(total) = total.filter(|t| *t > 0) else { return false };
+    std::fs::metadata(chemin)
+        .map(|m| m.is_file() && m.len() == total)
+        .unwrap_or(false)
+}
+
 /// Branche le suivi des telechargements sur une webview d'onglet. `dossier` est lu a chaque
 /// telechargement (le reglage peut changer en cours de session).
 pub fn brancher(
@@ -302,6 +315,23 @@ mod tests {
         let a = nouvel_id();
         let b = nouvel_id();
         assert!(b > a);
+    }
+
+    #[test]
+    fn un_fichier_de_la_taille_annoncee_est_complet() {
+        let d = std::env::temp_dir().join(format!("trame-dl-taille-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let f = d.join("paquet.exe");
+        std::fs::write(&f, vec![0u8; 64]).unwrap();
+        let chemin = f.to_string_lossy().to_string();
+        assert!(fichier_complet(&chemin, Some(64)), "tous les octets sont la");
+        assert!(!fichier_complet(&chemin, Some(128)), "le fichier n'a pas la taille annoncee");
+        assert!(!fichier_complet(&chemin, None), "taille inconnue : on ne conclut pas");
+        assert!(!fichier_complet(&chemin, Some(0)), "taille nulle : aucune preuve");
+        let absent = d.join("absent.exe").to_string_lossy().to_string();
+        assert!(!fichier_complet(&absent, Some(64)), "fichier absent : rien n'est prouve");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

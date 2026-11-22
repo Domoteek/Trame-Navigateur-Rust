@@ -57,7 +57,7 @@ impl App {
     }
 
     fn fichier_acces(&self) -> std::path::PathBuf {
-        self.profil.racine().join("acces.json")
+        self.profil.racine().join(crate::carnet::NOM_FICHIER_ACCES)
     }
 
     fn sauver_acces(&self) {

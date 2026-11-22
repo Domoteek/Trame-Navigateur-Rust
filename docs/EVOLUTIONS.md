@@ -841,13 +841,97 @@ lecture. Le geste réel de Clément (bouton « retour à l'onglet » de la fenê
 pas cliquable depuis CDP : c'est `exitPictureInPicture()`, qui produit le même événement, qui est
 employé.
 
+## 10 terdecies. 2026-11-22, 22 h — la sauvegarde du profil, et ce qu'elle refuse d'emporter
+
+Demande de Clément, mot pour mot : « je voudrais pouvoir sauvegarder la configuration, et
+pourquoi pas exporter les favoris — ou sans garder les favoris ».
+
+**La mesure qui a commandé la conception**, prise sur le profil réel avant d'écrire une ligne :
+**1 217 Mo, 10 204 fichiers**. Et dedans, ce qui fait que Trame est *ce* navigateur pèse
+**19 Ko** (session 6,2 · zap 4,7 · favoris 3,3 · capsules 2,4 · accès 1,3 · ext-storage 0,7 ·
+réglages 0,6). Le reste est du WebView2 (854,6 Mo de cookies et de connexions), des
+téléchargements (283,8), des extensions Chrome (77,6) et la mémoire de lecture (489,9 Ko).
+
+**Un rapport de 1 à 64 000, et une conclusion de conception** : une sauvegarde utile emporte la
+petite colonne et **laisse la grosse dehors en le disant**. Le fichier porte donc la liste de ce
+qu'il n'a pas pris, avec la raison (`exclus`) — sinon il fait croire qu'il protège ce qu'il n'a
+pas pris.
+
+| Ce qui a été ajouté | Où |
+|---|---|
+| Module de sauvegarde : contenus, archive `.trame` (JSON lisible, en-tête versionné, empreinte SHA-256), lecture, restauration, résumé de ce qui change | `src/sauvegarde.rs` |
+| Restauration **appliquée au démarrage suivant**, après la prise du verrou et avant la lecture de la session ; ancien profil copié dans `avant-restauration-<date>\` | `src/main.rs`, `src/sauvegarde.rs` |
+| Six commandes : sauvegarder, choisir une archive, confirmer, annuler, exporter les favoris, les importer | `src/app.rs` |
+| Dialogue de fichier en fil annexe (il bloque la boucle : même leçon que l'installation d'extension) ; `UserEvent::Sauvegarde` | `src/app.rs`, `src/systeme.rs` |
+| Section « Sauvegarde du profil » et « Favoris — échange avec les autres navigateurs » ; le catalogue des contenus vient de l'hôte, pas du HTML | `ui/reglages.html`, `etat.sauvegarde` |
+| Export **et** import au format Netscape (Chrome, Edge, Firefox) : entités décodées, doublons écartés, `javascript:` refusé | `src/sauvegarde.rs` |
+| Nom de fichier des accès rapides ramené à une seule constante, pour que la sauvegarde et l'application ne divergent pas | `src/carnet.rs`, `src/app/outils.rs` |
+
+**Deux pièges, tous les deux trouvés par les bancs d'essai, pas par la lecture :**
+
+1. **`serde_json` trie les clés de tous les objets**, imbriqués compris (sa `Map` est une
+   `BTreeMap`). Le banc qui écrivait une archive à la main calculait l'empreinte en ne triant que
+   le premier niveau : Trame a répondu « l'empreinte ne correspond pas ». Le calcul côté banc
+   trie désormais **à tous les niveaux**. Conséquence pour le format : il est canonique, et un
+   outil qui ne trie pas obtient une autre empreinte — ce n'est qu'un avertissement au journal,
+   jamais un refus, parce que le fichier reste du JSON qu'on peut corriger à la main.
+2. **Sauvegarder sans avoir écrit la session** aurait ignoré les onglets ouverts dans les
+   dernières secondes : `session.json` n'est réécrit qu'à l'arrêt, ou toutes les 8 s par le
+   battement. La commande appelle donc `App::sauver` avant de lire le disque.
+
+**Trois défauts des bancs d'essai, révélés en les rejouant** (aucun n'était causé par ce
+chantier, tous étaient rouges avant lui) :
+
+| Scénario | Ce qui échouait | Pourquoi | Correctif |
+|---|---|---|---|
+| `j`, `p` | le dossier `telechargements` du profil n'existe pas | Trame télécharge dans le dossier « Téléchargements » de Windows quand aucun dossier n'est choisi — comportement changé, bancs pas mis à jour. Ils **écrivaient dans les vrais téléchargements de Clément** (`preuve-trame.pdf`, `essai.crx`). | les deux scénarios fixent le dossier **dans le profil jetable** |
+| `o` | « 1 active(s) » puis « 0 active(s) » | `saute-pub`, livrée allumée le 2026-11-22, fait compter une active de plus | le compte est désormais **relatif** (une active de moins après la coupure), et le fait précis — `essai` activée, puis réellement injectée — reste vérifié |
+
+Preuves : `cargo test --release` **186/186** (huit cas neufs : aller-retour complet, archive qui
+tente d'écrire `webview2\` ou de sortir du dossier des capsules, version inconnue refusée,
+résumé qui compte les ajouts et les pertes, aller-retour HTML avec entités et sans titre,
+import tolérant et sans doublon, sauvegarde vide refusée, noms de fichiers comparés à ceux du
+profil) ; `node outils/tester-ui.mjs` **76/76** (le catalogue vient de l'hôte, une case décochée
+survit à une poussée d'état, le résumé s'affiche sans rien appliquer, les six commandes
+partent) ; `node outils/verifier-app.mjs` **`z`** (une archive écrite par le banc est appliquée
+au démarrage : 3 onglets, 2 favoris, le moteur de l'archive ; l'ancien profil est gardé tel quel
+et le compte rendu s'affiche) et **`z2`** (une archive en version 99 est refusée, rien n'est
+touché, la demande est gardée sous `.echec.json`).
+
+Ce qui n'est pas fait, dit franchement : pas de sauvegarde **automatique** (à date fixe, dans un
+dossier choisi) ; l'import HTML **aplatit** les dossiers de favoris de Chrome (un favori n'a pas
+de groupe dans le modèle — seuls les accès rapides en ont).
+
+### Suite, 22 h 40 → 23 h 10 — la 0.4.11 signée, et trois pièges de fabrication
+
+Clément a demandé que la version livrée contienne le module (« 1 » dans la liste des décisions).
+La fabrication a révélé trois défauts qui n'ont rien à voir avec la sauvegarde, mais qui auraient
+livré un mauvais binaire — tous les trois corrigés et consignés ici parce qu'ils reviendront.
+
+| Défaut | Mesure | Correctif |
+|---|---|---|
+| **Inno Setup relisait `target\release\trame.exe`** après la signature, au lieu de la copie signée de `dist\` | un `cargo build` concurrent a remplacé l'exe **entre** la signature et la compilation du setup : l'installation a embarqué un exe **non signé** sous un setup signé (constaté : 3 123 712 o / `NotSigned` installés contre 3 138 232 o / `Valid` dans `dist\`) | `trame.iss` empaquette `..\dist\trame.exe` — la copie signée, celle qui ne peut plus changer. Prouvé par une installation jetable : le exe installé est **octet pour octet** `dist\trame.exe`, `Valid` |
+| **Inno reprend le dossier de l'installation précédente** (`UsePreviousAppDir`) | après un contrôle dans `%TEMP%`, les installations « réelles » allaient dans `%TEMP%\trame-controle3\…` sans toucher `%LOCALAPPDATA%\Programs\Trame` — l'exe du poste restait l'ancien, et rien ne le disait | l'installation impose `"/DIR=%LOCALAPPDATA%\Programs\Trame"`, et la recette est écrite dans le README |
+| **`verifier-setup.mjs` partage l'identifiant d'application de la vraie installation** | rejoué alors qu'une 0.4.10 était installée, son désinstalleur a retiré le raccourci, l'entrée « Applications », l'inscription navigateur et le dossier mémorisé de la vraie installation : le poste est resté avec un exe orphelin | le contrôle **refuse** de tourner si une installation réelle existe (code 3, motif affiché), `--force` pour passer outre. Réparé sur le poste en réinstallant |
+
+> Ce qui est **vérifié** sur le poste de Clément après installation : `trame.exe` 0.4.11
+> `Valid` (horodaté, `CN=CAHAGNE CLEMENT`) et de même empreinte que `dist\trame.exe` ; raccourci
+> du menu Démarrer, entrée « Applications » (`RegisteredApplications\Trame`), inscription
+> navigateur, désinstalleur 0.4.11 pointant sur `%LOCALAPPDATA%\Programs\Trame\` ; interface
+> livrée contenant la section « Sauvegarde du profil » ; démarrage réel sur un profil jetable
+> (une ligne « Trame demarre », aucune panique) ; profil réel `%LOCALAPPDATA%\Trame` intact.
+
+Une autre session travaillait dans ce dossier **pendant** la fabrication (`src/app.rs` 22 h 52,
+`src/telechargements.rs` 22 h 52, un test de plus : 187 au lieu de 186). Le livrable est donc
+construit sur l'arbre **testé à cet instant** — 187/187, 76/76 — et non sur l'état de 22 h.
+
 ## 11. L'état aujourd'hui
 
 ```
-cargo test --release            177/177
-node outils/tester-ui.mjs        73/73
-node outils/verifier-app.mjs     --reseau : 25/25 (dont magasin, « Ajouter a Chrome », liens externes, outils)
-node outils/verifier-setup.mjs   tout vert, inscription navigateur posee puis retiree   (2026-11-22)
+cargo test --release            187/187
+node outils/tester-ui.mjs        76/76
+node outils/verifier-app.mjs     sans reseau : 24/24 (dont les scenarios `z` et `z2`, sauvegarde)
+node outils/verifier-setup.mjs   refuse (code 3) tant qu'une vraie installation existe — par conception
 ```
 
 **Ce qui reste ouvert, dit franchement :**
@@ -869,6 +953,10 @@ node outils/verifier-setup.mjs   tout vert, inscription navigateur posee puis re
 - Le **clavier** est testé dans Chromium (17 combinaisons), mais pas dans la fenêtre : piloter le
   clavier depuis un autre processus perd des frappes.
 - Le dossier n'est **pas un dépôt git** : aucune histoire versionnée, aucun `git log`.
+- La **sauvegarde du profil est manuelle** : rien ne la planifie (pas de copie à date fixe dans
+  un dossier choisi).
+- L'**import** de favoris HTML aplatit les dossiers de Chrome : un favori n'a pas de groupe dans
+  le modèle, seuls les accès rapides en ont.
 
 ## 12. Où lire quoi
 

@@ -244,6 +244,28 @@
       .vide { color: var(--texte-3); font-size: 12px; }
       .exclus { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 6px; }
       .exclus .exclu { font-size: 11.5px; padding: 4px 10px; border-radius: 999px; }
+
+      /* sauvegarde du profil */
+      .cases { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 9px 18px; margin: 2px 0 14px; }
+      .cases label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+      .cases input { margin: 2px 0 0; accent-color: var(--accent); flex: 0 0 auto; }
+      .cases .quoi { min-width: 0; }
+      .cases .quoi b { display: block; font-weight: 600; font-size: 12.5px; }
+      .cases .quoi span { display: block; color: var(--texte-3); font-size: 10.5px; line-height: 1.4; }
+      .resume {
+        white-space: pre-wrap;
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 11.5px;
+        line-height: 1.55;
+        color: var(--texte-2);
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--bord);
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin: 10px 0 12px;
+        max-height: 260px;
+        overflow: auto;
+      }
     </style>
   </head>
   <body>
@@ -484,6 +506,60 @@
             <option value="ecran">Tout l'écran</option>
             <option value="page">La zone de la page seulement</option>
           </select>
+        </div>
+      </section>
+
+      <section>
+        <h2>Sauvegarde du profil</h2>
+        <p class="note" style="margin: 0 0 12px">
+          Un seul fichier, JSON lisible, d'une vingtaine de kilo-octets : ce qui fait de Trame
+          <em>votre</em> navigateur tient dedans. Les connexions et les cookies, la mémoire de
+          lecture et les téléchargements n'en font jamais partie — le fichier le dit lui-même,
+          pour qu'une sauvegarde ne fasse pas croire qu'elle protège ce qu'elle a laissé dehors.
+        </p>
+        <div class="cases" id="sauvegarde-contenus"></div>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Sauvegarder</b>
+            <span id="c-sauvegarde">Choisissez où enregistrer le fichier <code>.trame</code>.</span>
+          </div>
+          <button id="btn-sauvegarder">Sauvegarder…</button>
+        </div>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Restaurer</b>
+            <span id="c-restauration">Rien en attente.</span>
+          </div>
+          <button id="btn-restaurer">Restaurer…</button>
+        </div>
+        <pre class="resume" id="resume-restauration" hidden></pre>
+        <div class="ligne" id="ligne-confirmer" hidden>
+          <div class="libelle">
+            <b>Appliquer cette sauvegarde ?</b>
+            <span>Trame va se fermer, et l'archive s'appliquera au démarrage suivant. L'ancien profil est gardé dans <code>avant-restauration-…\</code> — rien n'est effacé.</span>
+          </div>
+          <span>
+            <button id="btn-restaurer-annuler">Annuler</button>
+            <button class="danger" id="btn-restaurer-confirmer">Appliquer</button>
+          </span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Favoris — échange avec les autres navigateurs</h2>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Exporter</b>
+            <span>Format HTML Netscape, celui que lisent Chrome, Edge et Firefox.</span>
+          </div>
+          <button id="btn-favoris-exporter">Exporter…</button>
+        </div>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Importer</b>
+            <span>Un fichier de favoris de Chrome, Edge ou Firefox : rien n'est remplacé, les doublons sont ignorés.</span>
+          </div>
+          <button id="btn-favoris-importer">Importer…</button>
         </div>
       </section>
 
@@ -819,6 +895,7 @@
           rendreChromeDisponibles(etat);
           rendreCompteurs();
           rendreBudgetSelect(etat);
+          rendreSauvegarde(etat);
 
           const r = etat.reglages || {};
           document.getElementById("bascule-veille").className =
@@ -859,6 +936,45 @@
           document.getElementById("txt-nettoyage").textContent =
             "Retire les paramètres de pistage (utm, fbclid, campagnes Amazon…) avant d'ouvrir une page." +
             (n ? ` ${n} adresse(s) nettoyée(s) depuis le démarrage.` : "");
+        }
+
+        /* La liste des contenus vient de l'hote (`etat.sauvegarde.contenus`), pas d'ici : une
+           case cochée qui ne sauvegarde rien serait pire que pas de case du tout. Les cases
+           sont construites une fois, puis laissées telles quelles — un redessin à chaque état
+           décocherait ce que l'utilisateur vient de cocher. */
+        function rendreSauvegarde(etat) {
+          const s = etat.sauvegarde || {};
+          const zone = document.getElementById("sauvegarde-contenus");
+          if (!zone.dataset.pret && (s.contenus || []).length) {
+            zone.dataset.pret = "1";
+            for (const c of s.contenus) {
+              const ligne = elem("label");
+              const case_ = elem("input");
+              case_.type = "checkbox";
+              case_.value = c.cle;
+              case_.checked = !!c.defaut;
+              const quoi = elem("div", "quoi");
+              quoi.appendChild(elem("b", "", c.libelle));
+              quoi.appendChild(elem("span", "", c.detail));
+              ligne.appendChild(case_);
+              ligne.appendChild(quoi);
+              zone.appendChild(ligne);
+            }
+          }
+          const r = s.restauration;
+          const resume = document.getElementById("resume-restauration");
+          const confirmer = document.getElementById("ligne-confirmer");
+          if (r) {
+            resume.hidden = false;
+            resume.textContent = r.resume || "";
+            confirmer.hidden = false;
+            document.getElementById("c-restauration").textContent = r.fichier || "";
+          } else {
+            resume.hidden = true;
+            resume.textContent = "";
+            confirmer.hidden = true;
+            document.getElementById("c-restauration").textContent = "Rien en attente.";
+          }
         }
 
         const confid = (champ, valeur) => ipc({ m: "confidentialite", [champ]: valeur });
@@ -922,6 +1038,27 @@
         document.getElementById("btn-relire-chrome").onclick = () => ipc({ m: "pret", surface: "reglages" });
         document.getElementById("btn-profil").onclick = () => ipc({ m: "profilDossier" });
         document.getElementById("btn-vider-historique").onclick = () => ipc({ m: "historiqueVider" });
+
+        // ---- sauvegarde du profil et favoris HTML
+        document.getElementById("btn-sauvegarder").onclick = () => {
+          const contenus = [];
+          for (const c of document.querySelectorAll("#sauvegarde-contenus input:checked")) {
+            contenus.push(c.value);
+          }
+          if (!contenus.length) {
+            document.getElementById("c-sauvegarde").textContent =
+              "Cochez au moins un contenu : une sauvegarde vide ne sauvegarde rien.";
+            return;
+          }
+          ipc({ m: "sauvegardeEnregistrer", contenus });
+        };
+        document.getElementById("btn-restaurer").onclick = () => ipc({ m: "sauvegardeRestaurer" });
+        document.getElementById("btn-restaurer-confirmer").onclick = () =>
+          ipc({ m: "sauvegardeRestaurerConfirmer" });
+        document.getElementById("btn-restaurer-annuler").onclick = () =>
+          ipc({ m: "sauvegardeRestaurerAnnuler" });
+        document.getElementById("btn-favoris-exporter").onclick = () => ipc({ m: "favorisExporterHtml" });
+        document.getElementById("btn-favoris-importer").onclick = () => ipc({ m: "favorisImporterHtml" });
 
         ipc({ m: "pret", surface: "reglages" });
         setInterval(() => { if (!etat) ipc({ m: "pret", surface: "reglages" }); }, 900);

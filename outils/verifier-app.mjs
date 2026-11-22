@@ -19,6 +19,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import os from "node:os";
+import crypto from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -56,6 +57,32 @@ function supprimer(dossier) {
   } catch (e) {
     console.warn(`        (dossier de test garde : ${dossier} — ${e.code || e.message})`);
   }
+}
+
+/**
+ * Fixe le dossier des telechargements DANS le profil jetable.
+ *
+ * Trame telecharge dans le dossier « Telechargements » de Windows quand le reglage
+ * `dossier_telechargements` est vide (comportement de la 0.4.10). Un banc d'essai ne doit
+ * jamais ecrire dans le dossier de Clement : sans cet appel, les scenarios `j` et `p`
+ * cherchaient un dossier que Trame ne cree plus dans le profil, et laissaient
+ * `preuve-trame.pdf` et `essai.crx` dans les vrais telechargements (constate le 2026-11-22).
+ * Rend le dossier ou les fichiers doivent arriver.
+ */
+function telechargementsDansLeProfil(profil) {
+  const chemin = path.join(profil, "reglages.json");
+  let reglages = {};
+  if (fs.existsSync(chemin)) {
+    try {
+      reglages = JSON.parse(fs.readFileSync(chemin, "utf8"));
+    } catch {
+      reglages = {};
+    }
+  }
+  const dossier = path.join(profil, "telechargements");
+  reglages.dossier_telechargements = dossier;
+  fs.writeFileSync(chemin, JSON.stringify(reglages, null, 2));
+  return dossier;
 }
 
 function sessionExemple(nbOnglets) {
@@ -283,11 +310,11 @@ async function suite() {
     await new Promise((r) => serveur.listen(0, "127.0.0.1", r));
     const url = `http://127.0.0.1:${serveur.address().port}/preuve-trame.pdf`;
     const profil = dossierJetable("telechargement");
+    const dossier = telechargementsDansLeProfil(profil);
     const { journal } = await lancer(profil, { TRAME_NAV: url });
     serveur.close();
     verifier(journal.includes("telechargement :"), `journal: ${journal.slice(0, 800)}`);
     verifier(journal.includes("telechargement termine"), `journal: ${journal.slice(0, 800)}`);
-    const dossier = path.join(profil, "telechargements");
     verifier(fs.existsSync(dossier), "le dossier telechargements doit exister");
     const fichiers = fs.readdirSync(dossier);
     verifier(fichiers.length >= 1, `un fichier attendu, ${fichiers.length} trouve(s)`);
@@ -931,9 +958,15 @@ async function suite() {
         /extension essai : activee \(choix memorise\)/.test(j2),
         `le choix doit etre relu au demarrage. journal: ${j2.slice(0, 900)}`
       );
+      // Le resume doit compter `essai` parmi les actives. On n'exige pas « 1 » en dur : ce
+      // profil en compte au moins deux (essai, forcee allumee, et les extensions livrees
+      // allumees par defaut — `saute-pub` depuis le 2026-11-22). Le fait précis (essai
+      // activee, puis injectée) est vérifié juste après, et la coupure plus bas exige une
+      // active de MOINS : le nombre absolu n'a pas à être figé.
+      const resumeAllume = j2.match(/extensions : (\d+) active/);
       verifier(
-        /extensions : 1 active\(s\)/.test(j2),
-        `elle doit compter parmi les actives. journal: ${j2.slice(0, 900)}`
+        resumeAllume && Number(resumeAllume[1]) >= 2,
+        `essai doit compter parmi les actives. journal: ${j2.slice(0, 900)}`
       );
       verifier(
         vu() === `${base}/page-2`,
@@ -959,9 +992,13 @@ async function suite() {
         /extension essai : coupee \(choix memorise\)/.test(j4),
         `la coupure doit etre relue au demarrage. journal: ${j4.slice(0, 900)}`
       );
+      // Une active de moins qu'avant la coupure : `essai` n'y est plus. Exiger « 0 active »
+      // supposait qu'aucune extension livree ne s'allume d'elle-meme — faux depuis
+      // `saute-pub` (mesure du 2026-11-22 : ce test echouait alors que la coupure marchait).
+      const resumeCoupe = j4.match(/extensions : (\d+) active/);
       verifier(
-        /extensions : 0 active\(s\)/.test(j4),
-        `aucune extension ne doit etre active. journal: ${j4.slice(0, 900)}`
+        resumeCoupe && Number(resumeCoupe[1]) === Number(resumeAllume[1]) - 1,
+        `une active de moins après la coupure (${resumeAllume[1]} → ${resumeCoupe && resumeCoupe[1]}). journal: ${j4.slice(0, 900)}`
       );
       verifier(vu() === `${base}/page-2`, `toujours pas d'injection apres redemarrage (vu = ${vu()})`);
     } finally {
@@ -998,12 +1035,13 @@ async function suite() {
     await new Promise((r) => serveur.listen(0, "127.0.0.1", r));
     const url = `http://127.0.0.1:${serveur.address().port}/page.html`;
     const profil = dossierJetable("crx-hors-magasin");
+    const dossier = telechargementsDansLeProfil(profil);
     const { journal } = await lancer(profil, { TRAME_NAV: url });
     serveur.close();
     verifier(telecharge, `la page n'a pas declenche de telechargement. journal: ${journal.slice(0, 600)}`);
     // Le fichier est la preuve du telechargement (sur un paquet minuscule, l'evenement de fin
     // peut arriver avant que le gestionnaire soit branche : on ne juge pas sur le journal).
-    const fichiers = fs.readdirSync(path.join(profil, "telechargements"));
+    const fichiers = fs.readdirSync(dossier);
     verifier(
       fichiers.some((f) => f.endsWith(".crx")),
       `le paquet doit rester telecharge : ${JSON.stringify(fichiers)}`
@@ -1050,6 +1088,134 @@ async function suite() {
       supprimer(profil);
     });
   }
+
+  await scenario("z. sauvegarde : restauration appliquee au demarrage, ancien profil garde", async () => {
+    // Le seul chemin qui n'existe qu'ENTRE deux processus : la commande ecrit
+    // `restauration-en-attente.json`, Trame se ferme, et le demarrage suivant applique
+    // l'archive avant de lire la session (`sauvegarde::appliquer_restauration_en_attente`).
+    // L'archive est ecrite ici a la main : c'est le contrat de format, vu de l'exterieur.
+    const profil = dossierJetable("restauration");
+    const avant = sessionExemple(2);
+    avant.fils[0].nom = "Avant";
+    fs.writeFileSync(path.join(profil, "session.json"), JSON.stringify(avant));
+    fs.writeFileSync(
+      path.join(profil, "favoris.json"),
+      JSON.stringify([{ url: "https://avant.fr/", titre: "Avant", ajoute_le: 1000 }])
+    );
+    fs.writeFileSync(path.join(profil, "reglages.json"), JSON.stringify({ moteur: "qwant" }));
+
+    const apres = sessionExemple(3);
+    apres.fils[0].nom = "Apres";
+    const donnees = {
+      favoris: [
+        { url: "https://apres.fr/1", titre: "Apres 1", ajoute_le: 2000 },
+        { url: "https://apres.fr/2", titre: "Apres 2", ajoute_le: 3000 },
+      ],
+      reglages: { moteur: "google" },
+      session: apres,
+    };
+    // `empreinte` = SHA-256 du bloc `donnees` serialise en JSON compact, cles triees **a tous
+    // les niveaux** : `serde_json::Map` est une BTreeMap, donc Trame trie les cles de chaque
+    // objet en reecrivant le JSON. Un tri du seul premier niveau ne suffisait pas (mesure :
+    // le journal signalait « l'empreinte ne correspond pas »).
+    const trier = (v) =>
+      Array.isArray(v)
+        ? v.map(trier)
+        : v && typeof v === "object"
+          ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, trier(v[k])]))
+          : v;
+    const canonique = trier(donnees);
+    const empreinte = crypto.createHash("sha256").update(JSON.stringify(canonique)).digest("hex");
+    const archive = path.join(profil, "essai.trame");
+    fs.writeFileSync(
+      archive,
+      JSON.stringify(
+        {
+          format: "trame-sauvegarde",
+          version: 1,
+          cree_le: Date.now(),
+          date: "2026-11-22 21:40",
+          trame: "0.4.10",
+          machine: "banc",
+          contenus: ["favoris", "reglages", "session"],
+          exclus: [{ quoi: "les connexions", pourquoi: "un secret ne voyage pas" }],
+          non_coches: [],
+          empreinte,
+          donnees: canonique,
+        },
+        null,
+        2
+      )
+    );
+    fs.writeFileSync(
+      path.join(profil, "restauration-en-attente.json"),
+      JSON.stringify({
+        archive,
+        contenus: ["favoris", "reglages", "session"],
+        quand: Date.now(),
+      })
+    );
+
+    const { journal } = await lancer(profil);
+    verifier(journal.includes("restauration : restauré"), `journal: ${journal.slice(-1200)}`);
+    verifier(
+      !journal.includes("empreinte ne correspond pas"),
+      `l'empreinte ecrite par le banc doit correspondre a celle de Trame : ${journal.slice(-1200)}`
+    );
+    const session = JSON.parse(fs.readFileSync(path.join(profil, "session.json"), "utf8"));
+    verifier(session.onglets.length === 3, `3 onglets attendus, ${session.onglets.length}`);
+    verifier(session.fils[0].nom === "Apres", `fil attendu « Apres », vu « ${session.fils[0].nom} »`);
+    const favoris = JSON.parse(fs.readFileSync(path.join(profil, "favoris.json"), "utf8"));
+    verifier(favoris.length === 2, `2 favoris attendus, ${favoris.length}`);
+    const reglages = JSON.parse(fs.readFileSync(path.join(profil, "reglages.json"), "utf8"));
+    verifier(reglages.moteur === "google", `moteur attendu google, vu ${reglages.moteur}`);
+    // L'ancien profil n'est pas efface : il est range a cote.
+    const gardes = fs.readdirSync(profil).filter((n) => n.startsWith("avant-restauration-"));
+    verifier(gardes.length === 1, `un dossier d'archive attendu : ${JSON.stringify(gardes)}`);
+    verifier(
+      fs.readFileSync(path.join(profil, gardes[0], "session.json"), "utf8").includes("Avant"),
+      "l'ancien session.json est garde tel quel"
+    );
+    verifier(!fs.existsSync(path.join(profil, "restauration-en-attente.json")), "la demande est consommee");
+    // Le compte rendu est annonce a l'interface (une seule fois).
+    verifier(/toast : Sauvegarde appliqu/.test(journal), `compte rendu attendu : ${journal.slice(-1200)}`);
+    supprimer(profil);
+  });
+
+  await scenario("z2. sauvegarde : une archive d'une autre version est refusee sans rien toucher", async () => {
+    const profil = dossierJetable("restauration-refus");
+    const avant = sessionExemple(2);
+    avant.fils[0].nom = "Intact";
+    fs.writeFileSync(path.join(profil, "session.json"), JSON.stringify(avant));
+    const archive = path.join(profil, "futur.trame");
+    fs.writeFileSync(
+      archive,
+      JSON.stringify({
+        format: "trame-sauvegarde",
+        version: 99,
+        donnees: { session: sessionExemple(5) },
+      })
+    );
+    fs.writeFileSync(
+      path.join(profil, "restauration-en-attente.json"),
+      JSON.stringify({ archive, contenus: ["session"], quand: Date.now() })
+    );
+    const { journal } = await lancer(profil);
+    verifier(journal.includes("restauration : refusée"), `journal: ${journal.slice(-1200)}`);
+    verifier(journal.includes("99"), `le motif doit citer le numero de version : ${journal.slice(-1200)}`);
+    const session = JSON.parse(fs.readFileSync(path.join(profil, "session.json"), "utf8"));
+    verifier(session.onglets.length === 2, `rien ne doit avoir ete touche : ${session.onglets.length} onglet(s)`);
+    verifier(session.fils[0].nom === "Intact", "le fil d'origine doit rester");
+    verifier(
+      fs.existsSync(path.join(profil, "restauration-en-attente.echec.json")),
+      "la demande refusee doit etre gardee sous un autre nom, pas rejouee"
+    );
+    verifier(
+      fs.readdirSync(profil).filter((n) => n.startsWith("avant-restauration-")).length === 0,
+      "un refus ne doit rien archiver : rien n'a ete touche"
+    );
+    supprimer(profil);
+  });
 
   // Balayage final : un dossier qui resiste juste apres le `taskkill` est repris ici, une fois
   // les processus WebView2 vraiment morts — sinon `%TEMP%` se remplirait d'un profil par run.

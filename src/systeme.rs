@@ -157,6 +157,35 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ Write-Output
     }
 }
 
+/// Ouvre le selecteur « enregistrer sous » de Windows et rend le chemin choisi.
+///
+/// `nom_defaut` est propose dans la case, extension comprise ; l'utilisateur peut le changer.
+/// `None` = annule (comme `choisir_fichier`), ce qui n'est pas une erreur.
+pub fn choisir_enregistrement(
+    titre: &str,
+    filtre: &str,
+    nom_defaut: &str,
+) -> Result<Option<String>, String> {
+    let script = format!(
+        r#"Add-Type -AssemblyName System.Windows.Forms
+$d = New-Object System.Windows.Forms.SaveFileDialog
+$d.Title = '{titre}'
+$d.Filter = '{filtre}'
+$d.FileName = '{nom}'
+$d.OverwritePrompt = $true
+if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ Write-Output $d.FileName }}"#,
+        titre = echapper(titre),
+        filtre = echapper(filtre),
+        nom = echapper(nom_defaut)
+    );
+    let (code, sortie) = powershell(&script)?;
+    if code != 0 {
+        return Err(format!("sélecteur d'enregistrement indisponible : {sortie}"));
+    }
+    let chemin = sortie.lines().last().unwrap_or("").trim().to_string();
+    Ok(if chemin.is_empty() { None } else { Some(chemin) })
+}
+
 /// Ouvre le selecteur de dossier de Windows et rend le dossier choisi (`None` : annule).
 pub fn choisir_dossier(titre: &str) -> Result<Option<String>, String> {
     let script = format!(
