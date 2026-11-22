@@ -1,0 +1,17 @@
+# Cible de compilation
+/target
+
+# Journaux d'execution locaux
+*.log
+
+# Profil de demonstration (regenerable : node outils/graine-session.mjs .profil-demo)
+/.profil-demo
+
+# Captures de diagnostic ponctuelles
+/_diag-*.png
+
+# Artefacts de livraison (regenerables : node outils/faire-setup.mjs)
+/dist
+
+# Etat local de Ruflo
+/.claude-flow

@@ -1,0 +1,11 @@
+{
+  "name": "Compteur de visites",
+  "version": "1.0.0",
+  "description": "Compte combien de fois tu es venu sur ce site, et l'affiche discrètement. Démonstration du stockage persistant par extension.",
+  "author": "Trame",
+  "matches": ["*://*/*"],
+  "js": ["contenu.js"],
+  "css": ["style.css"],
+  "run_at": "document_end",
+  "accent": "#60a5fa"
+}

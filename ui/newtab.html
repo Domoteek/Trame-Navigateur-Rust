@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Nouvel onglet</title>
+    <style>
+      :root {
+        --fond: #080b11;
+        --surface: #101521;
+        --bord: rgba(255, 255, 255, 0.08);
+        --texte: #e9eefa;
+        --texte-2: #97a4bb;
+        --texte-3: #616e85;
+        --vif: #5eead4;
+        --tiede: #fbbf24;
+        --froid: #7c8aa3;
+        --dormant: #8b7cf6;
+        --accent: #60a5fa;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background:
+          radial-gradient(60% 45% at 18% 0%, rgba(96, 165, 250, 0.13), transparent 60%),
+          radial-gradient(50% 40% at 90% 10%, rgba(167, 139, 250, 0.11), transparent 60%),
+          radial-gradient(70% 50% at 50% 110%, rgba(94, 234, 212, 0.07), transparent 60%),
+          var(--fond);
+        color: var(--texte);
+        font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+        padding: 54px 46px 40px;
+      }
+      .enveloppe { max-width: 1020px; margin: 0 auto; }
+      .entete { display: flex; align-items: baseline; gap: 14px; margin-bottom: 26px; }
+      .marque { font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--texte-3); }
+      .salut { font-size: 30px; font-weight: 600; letter-spacing: -0.015em; }
+      .date { color: var(--texte-3); font-size: 13px; margin-top: 4px; }
+
+      .recherche {
+        display: flex; align-items: center; gap: 10px;
+        height: 46px; padding: 0 18px; margin: 22px 0 34px;
+        border-radius: 23px; border: 1px solid var(--bord);
+        background: rgba(255, 255, 255, 0.04);
+        transition: border-color .18s, box-shadow .18s;
+      }
+      .recherche:focus-within { border-color: rgba(96, 165, 250, .55); box-shadow: 0 0 0 4px rgba(96, 165, 250, .09); }
+      .recherche input { flex: 1; background: transparent; border: 0; outline: none; color: var(--texte); font: inherit; font-size: 14px; }
+      .recherche input::placeholder { color: var(--texte-3); }
+      .touche { font-size: 10.5px; color: var(--texte-3); border: 1px solid var(--bord); border-radius: 6px; padding: 2px 7px; }
+
+      h2 { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--texte-3); margin: 0 0 14px; font-weight: 600; }
+      .grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+      .carte {
+        border: 1px solid var(--bord); border-radius: 14px; padding: 14px 15px;
+        background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.012));
+        display: flex; flex-direction: column; gap: 10px;
+        transition: border-color .18s, transform .18s;
+      }
+      .carte:hover { border-color: rgba(255,255,255,.16); transform: translateY(-1px); }
+      .carte-tete { display: flex; align-items: center; gap: 9px; }
+      .carte-nom { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .carte-compte { font-size: 10.5px; color: var(--texte-3); background: rgba(255,255,255,.06); padding: 2px 7px; border-radius: 20px; }
+      .chips { display: flex; flex-direction: column; gap: 3px; }
+      .chip {
+        display: flex; align-items: center; gap: 8px; padding: 5px 7px; border-radius: 8px;
+        cursor: pointer; font-size: 12px; color: #cfd9ea;
+      }
+      .chip:hover { background: rgba(255,255,255,.06); }
+      .chip .pt { width: 6px; height: 6px; border-radius: 50%; background: var(--froid); flex: 0 0 auto; }
+      .chip[data-p="vif"] .pt { background: var(--vif); }
+      .chip[data-p="tiede"] .pt { background: var(--tiede); }
+      .chip[data-p="dormant"] .pt { background: var(--dormant); }
+      .chip .tt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .chip.endormi .tt { color: #7e8ba1; font-style: italic; }
+      .pied { margin-top: 40px; display: flex; gap: 22px; align-items: center; color: var(--texte-3); font-size: 11.5px; flex-wrap: wrap; }
+      .pied b { color: var(--texte-2); font-weight: 600; }
+      .vide { color: var(--texte-3); font-size: 13px; line-height: 1.6; }
+      .aide { margin-top: 8px; color: var(--texte-3); font-size: 11.5px; }
+      /* ---- acces rapides ---- */
+      .ar-tete { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+      .ar-tete h2 { margin: 0; }
+      .groupes { display: flex; gap: 6px; flex-wrap: wrap; }
+      .g {
+        font: inherit; font-size: 11.5px; color: var(--texte-2); padding: 4px 11px; border-radius: 20px;
+        border: 1px solid var(--bord); background: transparent; cursor: pointer;
+      }
+      .g:hover { border-color: rgba(255,255,255,.16); color: var(--texte); }
+      .g.on { color: var(--texte); border-color: rgba(94,234,212,.45); background: rgba(94,234,212,.08); }
+      .g.plus { border-style: dashed; color: var(--texte-3); }
+      .g.survol-depot { border-color: var(--vif); color: var(--vif); }
+      .ar-outils { margin-left: auto; }
+      .lien {
+        font: inherit; font-size: 11.5px; color: var(--texte-3); background: transparent; cursor: pointer;
+        padding: 4px 10px; border-radius: 8px; border: 1px solid transparent;
+      }
+      .lien:hover { color: var(--texte); }
+      .lien.on { color: var(--texte); border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.04); }
+      .tuiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; margin-bottom: 34px; }
+      .tuile {
+        position: relative; border: 1px solid var(--bord); border-radius: 14px; padding: 14px 6px 10px;
+        background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.012));
+        display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; min-width: 0;
+        transition: border-color .18s, transform .18s; user-select: none;
+      }
+      .tuile:hover { border-color: rgba(255,255,255,.16); transform: translateY(-1px); }
+      .tuile .ico {
+        width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+        font-weight: 700; color: #fff; font-size: 16px; overflow: hidden;
+      }
+      .tuile .ico img { width: 24px; height: 24px; }
+      .tuile .ico.image { background: rgba(255,255,255,.07) !important; }
+      .tuile .n { font-size: 12px; color: #dbe4f5; max-width: 100%; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tuile .ouvert {
+        position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 50%;
+        background: var(--vif); box-shadow: 0 0 0 3px rgba(94,234,212,.15);
+      }
+      .tuile .rail { position: absolute; top: 7px; left: 8px; font-size: 9px; color: var(--texte-3); }
+      .tuile.ajout { border-style: dashed; background: transparent; color: var(--texte-3); justify-content: center; font-size: 12px; }
+      .tuile.ajout b { font-size: 22px; font-weight: 400; display: block; text-align: center; line-height: 1.1; }
+      .tuiles.reorg .tuile:not(.ajout) { cursor: grab; animation: tremble .5s ease-in-out infinite alternate; }
+      .tuile.glisse { opacity: .35; }
+      .tuile.cible { border-color: var(--vif); }
+      @keyframes tremble { from { transform: rotate(-.6deg); } to { transform: rotate(.6deg); } }
+      .ar-vide { color: var(--texte-3); font-size: 12.5px; grid-column: 1 / -1; padding: 4px 2px; }
+
+      .menu {
+        position: fixed; z-index: 20; min-width: 210px; background: #151c2a; border: 1px solid rgba(255,255,255,.16);
+        border-radius: 10px; padding: 5px; box-shadow: 0 14px 34px rgba(0,0,0,.5); font-size: 12.5px;
+      }
+      .menu button {
+        display: block; width: 100%; text-align: left; font: inherit; color: var(--texte-2); background: transparent;
+        border: 0; padding: 7px 10px; border-radius: 7px; cursor: pointer;
+      }
+      .menu button:hover { background: rgba(255,255,255,.06); color: var(--texte); }
+      .menu hr { border: 0; border-top: 1px solid var(--bord); margin: 4px 2px; }
+      .menu .rouge { color: #f87171; }
+      .menu .titre { padding: 6px 10px 4px; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--texte-3); }
+
+      .voile { position: fixed; inset: 0; z-index: 30; background: rgba(4,6,10,.55); display: grid; place-items: center; }
+      .dialogue {
+        width: 360px; max-width: calc(100vw - 32px); background: #101521; border: 1px solid rgba(255,255,255,.16);
+        border-radius: 14px; padding: 18px; box-shadow: 0 16px 40px rgba(0,0,0,.5);
+      }
+      .dialogue h3 { margin: 0 0 14px; font-size: 14px; font-weight: 600; }
+      .champ { margin-bottom: 11px; }
+      .champ label { display: block; color: var(--texte-2); font-size: 11px; margin-bottom: 5px; }
+      .champ input {
+        width: 100%; background: #0b0f17; border: 1px solid var(--bord); border-radius: 8px; padding: 8px 10px;
+        color: var(--texte); font: inherit; font-size: 13px; outline: none;
+      }
+      .champ input:focus { border-color: rgba(96,165,250,.55); }
+      .coche { display: flex; align-items: center; gap: 8px; color: var(--texte-2); font-size: 12.5px; margin: 12px 0 16px; cursor: pointer; }
+      .coche input { accent-color: var(--vif); }
+      .boutons { display: flex; justify-content: flex-end; gap: 8px; }
+      .boutons button {
+        font: inherit; border-radius: 9px; padding: 7px 14px; border: 1px solid rgba(255,255,255,.16);
+        background: transparent; color: var(--texte); cursor: pointer;
+      }
+      .boutons .ok { background: var(--vif); color: #04231e; border-color: var(--vif); font-weight: 600; }
+      .boutons .gauche { margin-right: auto; color: #f87171; border-color: transparent; }
+      kbd { font: inherit; font-size: 10.5px; background: rgba(255,255,255,.07); border: 1px solid var(--bord); border-radius: 5px; padding: 1px 6px; color: var(--texte-2); }
+    </style>
+  </head>
+  <body>
+    <div class="enveloppe">
+      <div class="entete">
+        <div>
+          <div class="marque">Trame</div>
+          <div class="salut" id="salut">Bonjour.</div>
+          <div class="date" id="date"></div>
+        </div>
+      </div>
+
+      <div class="recherche">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.7" stroke-linecap="round" style="color: var(--texte-3); flex: 0 0 auto">
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <path d="M20 20l-4.6-4.6" />
+        </svg>
+        <input id="q" type="text" spellcheck="false" placeholder="Saisir une adresse ou une recherche" />
+        <span class="touche">Entrée</span>
+      </div>
+
+      <div id="bloc-acces">
+        <div class="ar-tete">
+          <h2>Accès rapides</h2>
+          <div class="groupes" id="groupes"></div>
+          <div class="ar-outils"><button class="lien" id="btn-reorg" title="Déplacer les tuiles à la souris">Réorganiser</button></div>
+        </div>
+        <div class="tuiles" id="tuiles"></div>
+      </div>
+      <h2>Tes fils</h2>
+      <div class="grille" id="grille"></div>
+
+      <div class="pied" id="pied"></div>
+      <div class="aide">
+        <kbd>Ctrl</kbd>+<kbd>K</kbd> ouvre la Couture · <kbd>Ctrl</kbd>+<kbd>Espace</kbd> affiche la trame ·
+        un onglet laissé de côté refroidit puis passe en veille : rien n'est jamais fermé.
+      </div>
+    </div>
+
+    <script>
+      /* Portee fermee : wry definit `window.ipc` en propriete NON configurable. Un `const ipc`
+         de premier niveau jetterait donc une SyntaxError (« Identifier 'ipc' has already been
+         declared ») et tuerait tout le script. Mesure du 2026-11-20. */
+      (function () {
+        const ipc = (o) => {
+          try { window.ipc.postMessage(JSON.stringify(o)); } catch (e) {}
+        };
+        let etat = null;
+
+        function elem(tag, classe, texte) {
+          const d = document.createElement(tag);
+          if (classe) d.className = classe;
+          if (texte !== undefined && texte !== null) d.textContent = String(texte);
+          return d;
+        }
+
+        window.trame = {
+          etat(s) { etat = s; rendre(); },
+          budget() {},
+          resultats() {},
+          toast() {},
+          focusCouture() {},
+        };
+
+        function salutation() {
+          const h = new Date().getHours();
+          if (h < 6) return "Encore debout.";
+          if (h < 12) return "Bonjour.";
+          if (h < 18) return "Bon après-midi.";
+          return "Bonsoir.";
+        }
+
+        function rendre() {
+          if (!etat) return;
+          document.getElementById("salut").textContent = salutation();
+          document.getElementById("date").textContent = new Date().toLocaleDateString("fr-FR", {
+            weekday: "long", day: "numeric", month: "long",
+          });
+
+          rendreAcces();
+
+          const grille = document.getElementById("grille");
+          grille.textContent = "";
+
+          const actifs = (etat.fils || []).filter((f) => (f.onglets || []).length > 0);
+          if (!actifs.length) {
+            grille.appendChild(elem("div", "vide", "Aucun fil pour l'instant. Saisis une adresse ci-dessus."));
+          }
+
+          for (const f of actifs) {
+            const carte = elem("div", "carte");
+            const tete = elem("div", "carte-tete");
+            tete.appendChild(elem("div", "carte-nom", f.nom));
+            tete.appendChild(elem("div", "carte-compte", String(f.onglets.length)));
+            carte.appendChild(tete);
+
+            const chips = elem("div", "chips");
+            const membres = (etat.onglets || []).filter((o) => o.fil === f.id && !o.rdv).slice(0, 6);
+            for (const o of membres) {
+              const chip = elem("div", "chip" + (o.eveille ? "" : " endormi"));
+              chip.dataset.p = o.palier;
+              chip.appendChild(elem("span", "pt"));
+              chip.appendChild(elem("span", "tt", o.titre || o.urlCourte));
+              chip.title = `${o.titre || o.urlCourte}\n${o.eveille ? "éveillé" : "en veille"}`;
+              chip.onclick = () => ipc({ m: "activer", id: o.id });
+              chips.appendChild(chip);
+            }
+            if (f.onglets.length > 6) {
+              chips.appendChild(elem("div", "aide", `+ ${f.onglets.length - 6} autre(s)`));
+            }
+            carte.appendChild(chips);
+            grille.appendChild(carte);
+          }
+
+          const pied = document.getElementById("pied");
+          pied.textContent = "";
+          if (etat.budget) {
+            pied.appendChild(elem("span", null, `Budget : ${Math.round(etat.budget.mo)} Mo · ${etat.budget.processus} processus`));
+            pied.appendChild(elem("span", null, `${etat.budget.reveilles} éveillé(s) · ${etat.budget.endormis} en veille`));
+          }
+          pied.appendChild(elem("span", null, `${etat.historique || 0} page(s) en historique`));
+          pied.appendChild(elem("span", null, `${(etat.extensions || []).length} extension(s)`));
+        }
+
+        /* ------------------------------------------------------------ acces rapides */
+
+        const TOUS = "";
+        let filtre = TOUS;
+        try { filtre = localStorage.getItem("trame.acces.groupe") || TOUS; } catch (e) {}
+        let reorg = false;
+        let glisse = null; // url de la tuile deplacee
+        let signatureAcces = "";
+        let groupeAttendu = null;
+
+        const TEINTES = ["#ef4444", "#f59e0b", "#18bcf2", "#0f766e", "#3b82f6", "#22c55e", "#8b5cf6", "#e11d48", "#c2410c", "#0ea5e9", "#a855f7", "#14b8a6"];
+        function teinte(texte) {
+          let h = 0;
+          for (const c of texte || "") h = (h * 31 + c.charCodeAt(0)) >>> 0;
+          return TEINTES[h % TEINTES.length];
+        }
+
+        function acces() { return (etat && etat.carnet && etat.carnet.acces) || []; }
+        function groupes() { return (etat && etat.carnet && etat.carnet.accesGroupes) || []; }
+
+        function choisirFiltre(g) {
+          filtre = g;
+          try { localStorage.setItem("trame.acces.groupe", g); } catch (e) {}
+          signatureAcces = "";
+          rendreAcces();
+        }
+
+        function rendreAcces() {
+          const liste = acces();
+          const gs = groupes();
+          // Un groupe disparu (supprime, renomme ailleurs) ramene sur « Tous » ; un groupe que l'on
+          // vient de creer n'est pas encore dans l'etat : on l'attend.
+          if (gs.includes(groupeAttendu)) groupeAttendu = null;
+          if (filtre !== TOUS && !gs.includes(filtre) && filtre !== groupeAttendu) filtre = TOUS;
+          const signature = JSON.stringify([liste, gs, filtre, reorg]);
+          if (signature === signatureAcces || glisse) return;
+          signatureAcces = signature;
+
+          // Groupes
+          const zoneG = document.getElementById("groupes");
+          zoneG.textContent = "";
+          const boutonGroupe = (nom, libelle) => {
+            const b = elem("button", "g" + (filtre === nom ? " on" : ""), libelle);
+            b.onclick = () => choisirFiltre(nom);
+            if (nom !== TOUS) {
+              b.oncontextmenu = (e) => { e.preventDefault(); menuGroupe(nom, e.clientX, e.clientY); };
+              b.title = "Clic droit : renommer ou supprimer le groupe\nDéposer une tuile ici : la ranger dans ce groupe";
+              // Deposer une tuile (mode Reorganiser) sur un groupe : l'y ranger.
+              b.addEventListener("dragover", (e) => { if (glisse) { e.preventDefault(); b.classList.add("survol-depot"); } });
+              b.addEventListener("dragleave", () => b.classList.remove("survol-depot"));
+              b.addEventListener("drop", (e) => {
+                e.preventDefault();
+                b.classList.remove("survol-depot");
+                if (glisse) ipc({ m: "accesGroupeDe", url: glisse, groupe: nom });
+              });
+            }
+            zoneG.appendChild(b);
+          };
+          if (gs.length) {
+            boutonGroupe(TOUS, "Tous");
+            for (const g of gs) boutonGroupe(g, g);
+          }
+          const plus = elem("button", "g plus", "＋ groupe");
+          plus.onclick = () => dialogueGroupe(null);
+          zoneG.appendChild(plus);
+
+          document.getElementById("btn-reorg").classList.toggle("on", reorg);
+          document.getElementById("btn-reorg").textContent = reorg ? "Terminé" : "Réorganiser";
+          document.getElementById("btn-reorg").hidden = liste.length < 2 && !reorg;
+
+          // Tuiles
+          const zone = document.getElementById("tuiles");
+          zone.classList.toggle("reorg", reorg);
+          zone.textContent = "";
+          const visibles = liste.filter((a) => filtre === TOUS || a.groupe === filtre);
+          for (const a of visibles) zone.appendChild(tuileAcces(a, liste));
+          if (!liste.length) {
+            zone.appendChild(elem("div", "ar-vide", "Aucun accès rapide pour l'instant : « ＋ Ajouter », ou Ctrl+D sur une page."));
+          }
+          const ajout = elem("div", "tuile ajout");
+          const t = elem("div");
+          t.appendChild(elem("b", null, "＋"));
+          t.appendChild(document.createTextNode("Ajouter"));
+          ajout.appendChild(t);
+          ajout.title = "Ajouter un accès rapide";
+          ajout.onclick = () => dialogueAcces(null);
+          zone.appendChild(ajout);
+        }
+
+        function tuileAcces(a, liste) {
+          const d = elem("div", "tuile");
+          d.title = `${a.titre}\n${a.url}` + (a.ouvert ? "\nDéjà ouvert : un clic y va" : "") + "\nClic droit : modifier, groupe, rail…";
+          if (a.ouvert) d.appendChild(elem("i", "ouvert"));
+          if (a.rail) {
+            const r = elem("span", "rail", "▌");
+            r.title = "Aussi dans le rail";
+            d.appendChild(r);
+          }
+          const ico = elem("div", "ico");
+          const lettre = (a.titre || a.domaine || "?").trim().charAt(0).toUpperCase();
+          ico.style.background = teinte(a.domaine || a.url);
+          if (a.icone) {
+            const img = document.createElement("img");
+            img.alt = "";
+            img.draggable = false;
+            img.referrerPolicy = "no-referrer";
+            img.onload = () => ico.classList.add("image");
+            img.onerror = () => { img.remove(); ico.classList.remove("image"); ico.textContent = lettre; };
+            img.src = a.icone;
+            ico.appendChild(img);
+          } else {
+            ico.textContent = lettre;
+          }
+          d.appendChild(ico);
+          d.appendChild(elem("div", "n", a.titre));
+
+          d.onclick = (e) => {
+            if (reorg) return;
+            ipc({ m: "accesOuvrir", url: a.url, nouveau: e.ctrlKey || e.shiftKey });
+          };
+          d.onauxclick = (e) => {
+            if (e.button === 1 && !reorg) { e.preventDefault(); ipc({ m: "accesOuvrir", url: a.url, nouveau: true }); }
+          };
+          d.oncontextmenu = (e) => { e.preventDefault(); menuAcces(a, e.clientX, e.clientY); };
+
+          // Reorganiser : glisser une tuile sur une autre la place devant elle.
+          d.draggable = reorg;
+          d.addEventListener("dragstart", (e) => {
+            if (!reorg) return e.preventDefault();
+            glisse = a.url;
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", a.url);
+            setTimeout(() => d.classList.add("glisse"), 0);
+          });
+          d.addEventListener("dragend", () => {
+            glisse = null;
+            d.classList.remove("glisse");
+            signatureAcces = "";
+            rendreAcces();
+          });
+          d.addEventListener("dragover", (e) => {
+            if (!glisse || glisse === a.url) return;
+            e.preventDefault();
+            d.classList.add("cible");
+          });
+          d.addEventListener("dragleave", () => d.classList.remove("cible"));
+          d.addEventListener("drop", (e) => {
+            e.preventDefault();
+            d.classList.remove("cible");
+            if (!glisse || glisse === a.url) return;
+            const ordre = liste.map((x) => x.url).filter((u) => u !== glisse);
+            ordre.splice(ordre.indexOf(a.url), 0, glisse);
+            ipc({ m: "accesOrdre", urls: ordre });
+          });
+          return d;
+        }
+
+        /* ---- menu contextuel ---- */
+        let menuOuvert = null;
+        function fermerMenu() { if (menuOuvert) { menuOuvert.remove(); menuOuvert = null; } }
+        document.addEventListener("click", fermerMenu);
+        document.addEventListener("keydown", (e) => { if (e.key === "Escape") { fermerMenu(); fermerDialogue(); } });
+        window.addEventListener("blur", fermerMenu);
+
+        function ouvrirMenu(lignes, x, y) {
+          fermerMenu();
+          const m = elem("div", "menu");
+          for (const l of lignes) {
+            if (l === "-") { m.appendChild(elem("hr")); continue; }
+            if (l.titre) { m.appendChild(elem("div", "titre", l.titre)); continue; }
+            const b = elem("button", l.classe || "", l.texte);
+            b.onclick = (e) => { e.stopPropagation(); fermerMenu(); l.faire(); };
+            m.appendChild(b);
+          }
+          document.body.appendChild(m);
+          const r = m.getBoundingClientRect();
+          m.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
+          m.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
+          menuOuvert = m;
+        }
+
+        function menuAcces(a, x, y) {
+          const lignes = [
+            { texte: a.ouvert ? "Aller sur l'onglet ouvert" : "Ouvrir ici", faire: () => ipc({ m: "accesOuvrir", url: a.url }) },
+            { texte: "Ouvrir dans un nouvel onglet", faire: () => ipc({ m: "accesOuvrir", url: a.url, nouveau: true }) },
+            "-",
+            { texte: "Modifier…", faire: () => dialogueAcces(a) },
+            { texte: a.rail ? "Retirer du rail" : "Afficher aussi dans le rail", faire: () => ipc({ m: "accesRail", url: a.url, rail: !a.rail }) },
+          ];
+          const gs = groupes();
+          if (gs.length) {
+            lignes.push("-", { titre: "Groupe" });
+            for (const g of gs) {
+              lignes.push({ texte: (a.groupe === g ? "✓ " : "   ") + g, faire: () => ipc({ m: "accesGroupeDe", url: a.url, groupe: g }) });
+            }
+            if (a.groupe) lignes.push({ texte: "   Sans groupe", faire: () => ipc({ m: "accesGroupeDe", url: a.url, groupe: "" }) });
+          }
+          lignes.push("-", { texte: "Retirer des accès rapides", classe: "rouge", faire: () => ipc({ m: "favoriRetirer", url: a.url }) });
+          ouvrirMenu(lignes, x, y);
+        }
+
+        function menuGroupe(nom, x, y) {
+          ouvrirMenu([
+            { texte: "Renommer…", faire: () => dialogueGroupe(nom) },
+            { texte: "Supprimer le groupe (les tuiles restent)", classe: "rouge", faire: () => ipc({ m: "accesGroupeRetirer", nom }) },
+          ], x, y);
+        }
+
+        /* ---- fenetres ---- */
+        let voile = null;
+        function fermerDialogue() { if (voile) { voile.remove(); voile = null; champ.focus(); } }
+
+        function ouvrirDialogue(titre, construire, valider, retirer) {
+          fermerDialogue();
+          voile = elem("div", "voile");
+          voile.onmousedown = (e) => { if (e.target === voile) fermerDialogue(); };
+          const d = elem("form", "dialogue");
+          d.appendChild(elem("h3", null, titre));
+          construire(d);
+          const boutons = elem("div", "boutons");
+          if (retirer) {
+            const r = elem("button", "gauche", "Retirer");
+            r.type = "button";
+            r.onclick = () => { retirer(); fermerDialogue(); };
+            boutons.appendChild(r);
+          }
+          const annuler = elem("button", null, "Annuler");
+          annuler.type = "button";
+          annuler.onclick = fermerDialogue;
+          const ok = elem("button", "ok", retirer ? "Enregistrer" : "Ajouter");
+          ok.type = "submit";
+          boutons.appendChild(annuler);
+          boutons.appendChild(ok);
+          d.appendChild(boutons);
+          d.onsubmit = (e) => { e.preventDefault(); if (valider() !== false) fermerDialogue(); };
+          voile.appendChild(d);
+          document.body.appendChild(voile);
+          const premier = d.querySelector("input");
+          if (premier) premier.focus();
+        }
+
+        function champTexte(parent, libelle, valeur, indice) {
+          const c = elem("div", "champ");
+          c.appendChild(elem("label", null, libelle));
+          const i = document.createElement("input");
+          i.type = "text";
+          i.spellcheck = false;
+          i.value = valeur || "";
+          if (indice) i.placeholder = indice;
+          c.appendChild(i);
+          parent.appendChild(c);
+          return i;
+        }
+
+        function dialogueAcces(a) {
+          let iNom, iUrl, iGroupe, iRail;
+          ouvrirDialogue(a ? "Modifier l'accès rapide" : "Nouvel accès rapide", (d) => {
+            iUrl = champTexte(d, "Adresse", a ? a.url : "", "ex. amazon.fr ou http://192.168.1.23:8720");
+            iNom = champTexte(d, "Nom", a ? a.titre : "", "Laissé vide : l'adresse");
+            iGroupe = champTexte(d, "Groupe", a ? a.groupe : (filtre !== TOUS ? filtre : ""), "Aucun, ou un nom (créé s'il n'existe pas)");
+            const gs = groupes();
+            if (gs.length) {
+              const dl = document.createElement("datalist");
+              dl.id = "liste-groupes";
+              for (const g of gs) { const o = document.createElement("option"); o.value = g; dl.appendChild(o); }
+              d.appendChild(dl);
+              iGroupe.setAttribute("list", "liste-groupes");
+            }
+            const lab = elem("label", "coche");
+            iRail = document.createElement("input");
+            iRail.type = "checkbox";
+            iRail.checked = !!(a && a.rail);
+            lab.appendChild(iRail);
+            lab.appendChild(document.createTextNode("Afficher aussi dans le rail"));
+            d.appendChild(lab);
+          }, () => {
+            const url = iUrl.value.trim();
+            if (!url) { iUrl.focus(); return false; }
+            ipc({
+              m: "accesEnregistrer", url, titre: iNom.value.trim(), groupe: iGroupe.value.trim(),
+              rail: iRail.checked, ancienne: a ? a.url : "",
+            });
+          }, a ? () => ipc({ m: "favoriRetirer", url: a.url }) : null);
+        }
+
+        function dialogueGroupe(nom) {
+          let iNom;
+          ouvrirDialogue(nom ? "Renommer le groupe" : "Nouveau groupe", (d) => {
+            iNom = champTexte(d, "Nom du groupe", nom || "", "ex. Maison, Loisirs, Courses…");
+          }, () => {
+            const v = iNom.value.trim();
+            if (!v) { iNom.focus(); return false; }
+            if (nom) {
+              if (v !== nom) {
+                ipc({ m: "accesGroupeRenommer", nom, nouveau: v });
+                if (filtre === nom) { groupeAttendu = v; choisirFiltre(v); }
+              }
+            } else {
+              ipc({ m: "accesGroupeAjouter", nom: v });
+              groupeAttendu = v;
+              choisirFiltre(v);
+            }
+          });
+        }
+
+        // Un onglet glisse depuis le rail (son numero en texte) : il devient un acces rapide.
+        const blocAcces = document.getElementById("bloc-acces");
+        blocAcces.addEventListener("dragover", (e) => { if (!glisse) e.preventDefault(); });
+        blocAcces.addEventListener("drop", (e) => {
+          if (glisse) return;
+          e.preventDefault();
+          const id = Number(e.dataTransfer.getData("text/plain"));
+          if (id) ipc({ m: "accesDepuisOnglet", onglet: id, groupe: filtre });
+        });
+
+        document.getElementById("btn-reorg").onclick = () => {
+          reorg = !reorg;
+          signatureAcces = "";
+          rendreAcces();
+        };
+
+        const champ = document.getElementById("q");
+        champ.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            const v = champ.value.trim();
+            if (v) ipc({ m: "naviguer", url: v });
+          }
+        });
+        champ.focus();
+
+        ipc({ m: "pret", surface: "newtab" });
+        setInterval(() => { if (!etat) ipc({ m: "pret", surface: "newtab" }); }, 900);
+      })();
+    </script>
+  </body>
+</html>

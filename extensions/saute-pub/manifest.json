@@ -1,0 +1,11 @@
+{
+  "name": "Saute-pub YouTube",
+  "version": "1.0.0",
+  "description": "Quand une publicité démarre dans le lecteur YouTube : la coupe, la fait défiler jusqu'au bout et clique « Passer » dès que possible. Les encarts publicitaires du lecteur et de la page sont masqués.",
+  "author": "Trame",
+  "matches": ["*://www.youtube.com/*", "*://m.youtube.com/*", "*://youtube.com/*"],
+  "js": ["contenu.js"],
+  "css": ["style.css"],
+  "run_at": "document_end",
+  "accent": "#f87171"
+}

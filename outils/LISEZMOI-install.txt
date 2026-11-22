@@ -1,0 +1,34 @@
+﻿Trame — navigateur a onglets tisses
+===================================
+
+Merci d'installer Trame.
+
+Ce que fait l'installation
+--------------------------
+  - copie Trame dans : %LOCALAPPDATA%\Programs\Trame
+  - cree un raccourci dans le menu Demarrer
+  - propose (facultatif) un raccourci sur le Bureau
+  - ajoute une entree de desinstallation dans « Applications »
+
+Aucun droit administrateur n'est demande : tout reste dans votre dossier utilisateur.
+
+Vos donnees ne sont pas dans le programme
+-----------------------------------------
+Le profil du navigateur (onglets, reglages, extensions, connexions, telechargements) vit dans :
+
+  %LOCALAPPDATA%\Trame
+
+Il est SEPARE du programme : desinstaller Trame ne supprime pas vos onglets, vos reglages ni vos
+connexions. Pour repartir de zero, fermez Trame puis supprimez ce dossier vous-meme.
+
+Premier demarrage
+-----------------
+  - l'interface s'installe dans le profil, le profil WebView2 aussi ;
+  - les trois extensions livrees sont copiees (activables dans Ctrl+, -> Extensions) ;
+  - Ctrl+, ouvre les reglages, Ctrl+K la recherche, Ctrl+F la recherche dans la page.
+
+Signature
+---------
+L'executable et l'installation sont signes. Si vous voyez « editeur inconnu », c'est normal sur
+une machine qui n'a pas encore approuve le certificat : la signature prouve que le fichier n'a
+pas ete modifie, elle n'a pas ete delivree par une autorite de certification commerciale.

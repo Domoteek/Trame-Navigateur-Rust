@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Preuve Chrome",
+  "version": "1.0.0",
+  "description": "Extension Chrome de test : prouve que le moteur d'extensions de WebView2 execute bien du code d'extension.",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["contenu.js"],
+      "css": ["style.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

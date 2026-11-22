@@ -1,0 +1,12 @@
+{
+  "name": "Nuit douce",
+  "version": "1.1.0",
+  "description": "Adoucit les pages claires pour lire le soir. Ne touche pas à la mise en page du site : fond, texte et liens seulement, et ne s'applique jamais à une page déjà sombre.",
+  "author": "Trame",
+  "matches": ["*://*/*"],
+  "css": ["style.css"],
+  "js": ["contenu.js"],
+  "run_at": "document_end",
+  "accent": "#8b7cf6",
+  "enabled_by_default": false
+}

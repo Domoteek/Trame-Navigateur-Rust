@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>La trame</title>
+    <style>
+      :root {
+        --fond: #080b11;
+        --bord: rgba(255, 255, 255, 0.08);
+        --texte: #e9eefa;
+        --texte-2: #97a4bb;
+        --texte-3: #616e85;
+        --vif: #5eead4;
+        --tiede: #fbbf24;
+        --froid: #7c8aa3;
+        --dormant: #8b7cf6;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; }
+      body {
+        background:
+          radial-gradient(70% 50% at 15% 0%, rgba(96, 165, 250, 0.10), transparent 62%),
+          radial-gradient(60% 45% at 88% 6%, rgba(167, 139, 250, 0.10), transparent 60%),
+          var(--fond);
+        color: var(--texte);
+        font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 18px 26px 12px;
+        flex: 0 0 auto;
+      }
+      .titre { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+      .sous { font-size: 11.5px; color: var(--texte-3); }
+      .legende { display: flex; gap: 12px; margin-left: auto; font-size: 10.5px; color: var(--texte-3); align-items: center; }
+      .legende span { display: flex; align-items: center; gap: 5px; }
+      .pt { width: 7px; height: 7px; border-radius: 50%; }
+      .actions { display: flex; gap: 7px; }
+      button {
+        font: inherit; font-size: 11.5px; color: var(--texte-2);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--bord);
+        border-radius: 8px;
+        padding: 6px 11px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      button:hover { background: rgba(255, 255, 255, 0.09); color: var(--texte); }
+      #scenes { flex: 1 1 auto; overflow: auto; padding: 0 20px 26px; }
+      svg { display: block; }
+      .bande { cursor: default; }
+      .bande.survol { filter: brightness(1.5); }
+      .noeud { cursor: pointer; transition: r 0.2s; }
+      .noeud:hover { filter: brightness(1.35); }
+      .nom-fil { font-size: 12px; font-weight: 600; fill: #cfd9ea; }
+      .meta-fil { font-size: 10px; fill: #616e85; }
+      .axe { font-size: 10px; fill: #4b5769; }
+      .vide { color: var(--texte-3); font-size: 13px; padding: 40px 26px; }
+      #infobulle {
+        position: fixed; padding: 7px 10px; border-radius: 8px;
+        background: rgba(18, 24, 36, 0.97); border: 1px solid var(--bord);
+        font-size: 11.5px; color: var(--texte); pointer-events: none;
+        opacity: 0; transition: opacity 0.12s; max-width: 380px; z-index: 10;
+        box-shadow: 0 12px 26px rgba(0, 0, 0, 0.5);
+      }
+      #infobulle .d { color: var(--texte-3); font-size: 10.5px; margin-top: 2px; }
+      .pied { padding: 0 26px 16px; color: var(--texte-3); font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <div class="titre">La trame</div>
+        <div class="sous">Chaque fil, ses onglets dans le temps, et ce qui les relie</div>
+      </div>
+      <div class="legende">
+        <span><i class="pt" style="background: var(--vif)"></i>vif</span>
+        <span><i class="pt" style="background: var(--tiede)"></i>tiède</span>
+        <span><i class="pt" style="background: var(--froid)"></i>froid</span>
+        <span><i class="pt" style="background: var(--dormant)"></i>dormant</span>
+      </div>
+      <div class="actions">
+        <button id="reveiller">Réveiller tout</button>
+        <button id="veille">Endormir les froids</button>
+        <button id="retour">Revenir à la page</button>
+      </div>
+    </header>
+    <div id="scenes"></div>
+    <div class="pied" id="pied"></div>
+    <div id="infobulle"></div>
+
+    <script>
+      /* Portee fermee : `window.ipc` est une propriete NON configurable posee par wry.
+         Un `const ipc` de premier niveau provoquerait une SyntaxError fatale (mesure du
+         2026-11-20 : ecran noir, aucune erreur visible). */
+      (function () {
+        const ipc = (o) => {
+          try { window.ipc.postMessage(JSON.stringify(o)); } catch (e) {}
+        };
+        const NS = "http://www.w3.org/2000/svg";
+        let etat = null;
+        let glisse = null;
+
+        const COULEURS = {
+          vif: "#5eead4",
+          tiede: "#fbbf24",
+          froid: "#7c8aa3",
+          dormant: "#8b7cf6",
+        };
+        const TEINTES = ["#60a5fa", "#a78bfa", "#5eead4", "#fbbf24", "#f472b6", "#38bdf8"];
+
+        window.trame = {
+          etat(s) { etat = s; rendre(); },
+          budget() {},
+          resultats() {},
+          toast() {},
+          focusCouture() {},
+        };
+
+        function balise(nom, attrs) {
+          const e = document.createElementNS(NS, nom);
+          for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+          return e;
+        }
+
+        function heure(ts) {
+          const d = new Date(ts);
+          return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        }
+
+        function rendre() {
+          const hote = document.getElementById("scenes");
+          hote.textContent = "";
+          if (!etat || !(etat.onglets || []).length) {
+            const vide = document.createElement("div");
+            vide.className = "vide";
+            vide.textContent = "Rien à tisser : aucun onglet ouvert.";
+            hote.appendChild(vide);
+            return;
+          }
+
+          const maintenant = Date.now();
+          const fils = (etat.fils || []).filter((f) => (f.onglets || []).length > 0);
+          const margeG = 172;
+          const largeur = Math.max(640, hote.clientWidth - 12);
+          const hauteurBande = 78;
+          const hauteur = fils.length * hauteurBande + 46;
+          const largeurUtile = largeur - margeG - 40;
+
+          const ages = etat.onglets.map((o) => o.age);
+          const ageMax = Math.max(...ages, 60);
+          const ageMin = Math.min(...ages, 0);
+          const etendue = Math.max(120, ageMax - ageMin);
+          const xDe = (age) => margeG + ((ageMax - age) / etendue) * largeurUtile;
+
+          const svg = balise("svg", { width: largeur, height: hauteur, viewBox: `0 0 ${largeur} ${hauteur}` });
+
+          for (let i = 0; i <= 4; i += 1) {
+            const ratio = i / 4;
+            const x = margeG + ratio * largeurUtile;
+            const age = ageMax - ratio * etendue;
+            svg.appendChild(balise("line", {
+              x1: x, y1: 30, x2: x, y2: hauteur - 10,
+              stroke: "rgba(255,255,255,0.045)", "stroke-width": 1,
+            }));
+            const texte = balise("text", { x: x, y: 20, class: "axe", "text-anchor": i === 0 ? "start" : i === 4 ? "end" : "middle" });
+            texte.textContent = heure(maintenant - age * 1000);
+            svg.appendChild(texte);
+          }
+
+          // Positions de TOUS les onglets, calculees avant le dessin.
+          //
+          // Sans cette passe, un lien de provenance n'etait trace que si le parent se trouvait
+          // deja dessine : un parent plus recent que son enfant (horodatage restaure) perdait
+          // silencieusement son lien, et un parent d'un autre fil n'en avait jamais.
+          const position = new Map();
+          fils.forEach((f, index) => {
+            const cy = 34 + index * hauteurBande + 31;
+            for (const o of etat.onglets) {
+              if (o.fil === f.id) position.set(o.id, { x: xDe(o.age), y: cy });
+            }
+          });
+
+          fils.forEach((f, index) => {
+            const y = 34 + index * hauteurBande;
+            const teinte = TEINTES[index % TEINTES.length];
+
+            const bande = balise("rect", {
+              x: margeG - 10, y: y, width: largeurUtile + 30, height: 62,
+              rx: 12, ry: 12, fill: "rgba(255,255,255,0.028)",
+              stroke: "rgba(255,255,255,0.05)", "stroke-width": 1,
+              class: "bande",
+            });
+            bande.dataset.fil = f.id;
+            svg.appendChild(bande);
+
+            svg.appendChild(balise("line", {
+              x1: 152, y1: y + 31, x2: margeG - 12, y2: y + 31,
+              stroke: teinte, "stroke-width": 1, opacity: 0.45,
+            }));
+
+            const nom = balise("text", { x: 26, y: y + 28, class: "nom-fil" });
+            nom.textContent = f.nom.length > 18 ? `${f.nom.slice(0, 17)}…` : f.nom;
+            svg.appendChild(nom);
+            const meta = balise("text", { x: 26, y: y + 45, class: "meta-fil" });
+            meta.textContent = `${f.onglets.length} onglet(s)${f.domaine ? ` · ${f.domaine}` : ""}`;
+            svg.appendChild(meta);
+
+            const membres = etat.onglets
+              .filter((o) => o.fil === f.id)
+              .sort((a, b) => b.age - a.age);
+
+            for (const o of membres) {
+              if (!o.parent) continue;
+              const p = position.get(o.parent);
+              if (!p) continue;
+              const x2 = xDe(o.age);
+              const y2 = y + 31;
+              const mx = (p.x + x2) / 2;
+              svg.appendChild(balise("path", {
+                d: `M ${p.x} ${p.y} C ${mx} ${p.y}, ${mx} ${y2}, ${x2} ${y2}`,
+                fill: "none", stroke: teinte, "stroke-width": 1, opacity: 0.28,
+              }));
+            }
+
+            for (const o of membres) {
+              const ou = position.get(o.id);
+              const x = ou ? ou.x : xDe(o.age);
+              const cy = ou ? ou.y : y + 31;
+              const r = 5 + o.vitalite * 7;
+
+              if (o.actif) {
+                svg.appendChild(balise("circle", {
+                  cx: x, cy, r: r + 6, fill: "none",
+                  stroke: COULEURS[o.palier] || "#7c8aa3", "stroke-width": 1, opacity: 0.35,
+                }));
+              }
+              const noeud = balise("circle", {
+                cx: x, cy, r,
+                fill: COULEURS[o.palier] || "#7c8aa3",
+                opacity: o.eveille ? 0.95 : 0.45,
+                stroke: o.ancre ? "#e9eefa" : "rgba(0,0,0,0.35)",
+                "stroke-width": o.ancre ? 1.5 : 0.5,
+                class: "noeud",
+              });
+              noeud.dataset.id = o.id;
+              noeud.addEventListener("pointerenter", (e) => infobulle(e, o));
+              noeud.addEventListener("pointerleave", cacherInfobulle);
+              noeud.addEventListener("pointerdown", (e) => {
+                // On ne decide qu'au relachement : un clic simple active, un deplacement
+                // tisse. Reconstruire le SVG ici avalerait le clic (constate a l'usage).
+                glisse = { id: o.id, x: e.clientX, y: e.clientY };
+                e.preventDefault();
+              });
+              svg.appendChild(noeud);
+            }
+          });
+
+          hote.appendChild(svg);
+
+          const pied = document.getElementById("pied");
+          pied.textContent = `${etat.onglets.length} onglet(s) · ${fils.length} fil(s) · ${
+            etat.budget ? Math.round(etat.budget.mo) + " Mo" : ""
+          } — glisser un nœud sur une bande le tisse dans ce fil`;
+        }
+
+        function infobulle(evenement, o) {
+          const t = document.getElementById("infobulle");
+          t.textContent = "";
+          const titre = document.createElement("div");
+          titre.textContent = o.titre || o.urlCourte;
+          const d1 = document.createElement("div");
+          d1.className = "d";
+          d1.textContent = `${o.domaine || "page interne"} · vitalité ${Math.round(o.vitalite * 100)}% (${o.palier})`;
+          const d2 = document.createElement("div");
+          d2.className = "d";
+          d2.textContent = `${o.eveille ? "éveillé" : "en veille"} · ${o.declencheur}${o.ancre ? " · ancré" : ""}`;
+          t.append(titre, d1, d2);
+          t.style.opacity = "1";
+          const x = Math.min(window.innerWidth - 400, evenement.clientX + 14);
+          t.style.left = `${x}px`;
+          t.style.top = `${evenement.clientY + 14}px`;
+        }
+
+        function cacherInfobulle() {
+          document.getElementById("infobulle").style.opacity = "0";
+        }
+
+        document.addEventListener("pointerup", (evenement) => {
+          if (!glisse) return;
+          const depart = glisse;
+          glisse = null;
+          cacherInfobulle();
+          const deplace = Math.hypot(evenement.clientX - depart.x, evenement.clientY - depart.y) > 5;
+          if (!deplace) {
+            // Clic simple : on active l'onglet, sans redessiner (sinon le clic est perdu).
+            ipc({ m: "activer", id: depart.id });
+            return;
+          }
+          const cible = document.elementFromPoint(evenement.clientX, evenement.clientY);
+          const bande = cible && cible.closest ? cible.closest("[data-fil]") : null;
+          if (bande) ipc({ m: "tisser", onglet: depart.id, fil: Number(bande.dataset.fil) });
+          else rendre();
+        });
+
+        document.getElementById("reveiller").onclick = () => ipc({ m: "reveiller", id: 0 });
+        document.getElementById("veille").onclick = () => ipc({ m: "endormirFroids" });
+        document.getElementById("retour").onclick = () => ipc({ m: "trame" });
+
+        window.addEventListener("resize", rendre);
+        ipc({ m: "pret", surface: "trame" });
+        setInterval(() => { if (!etat) ipc({ m: "pret", surface: "trame" }); }, 900);
+      })();
+    </script>
+  </body>
+</html>

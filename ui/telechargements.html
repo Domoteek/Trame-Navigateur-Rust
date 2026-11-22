@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Téléchargements</title>
+    <style>
+      :root {
+        --fond: #080b11;
+        --bord: rgba(255, 255, 255, 0.08);
+        --bord-fort: rgba(255, 255, 255, 0.16);
+        --texte: #e9eefa;
+        --texte-2: #97a4bb;
+        --texte-3: #616e85;
+        --vif: #5eead4;
+        --accent: #60a5fa;
+        --accent-2: #a78bfa;
+        --danger: #f87171;
+        --ok: #86efac;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background:
+          radial-gradient(55% 40% at 12% 0%, rgba(96, 165, 250, 0.10), transparent 62%),
+          radial-gradient(50% 35% at 92% 4%, rgba(167, 139, 250, 0.09), transparent 60%),
+          var(--fond);
+        color: var(--texte);
+        font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+        padding: 44px 40px 60px;
+      }
+      .enveloppe { max-width: 900px; margin: 0 auto; }
+      header.entete { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 6px; }
+      h1 { font-size: 26px; margin: 0; font-weight: 600; letter-spacing: -0.015em; }
+      .compte { color: var(--texte-3); font-size: 12.5px; padding-bottom: 5px; }
+      .outils { display: flex; gap: 10px; align-items: center; margin: 18px 0 14px; flex-wrap: wrap; }
+      .recherche { flex: 1; min-width: 220px; position: relative; }
+      .recherche input {
+        width: 100%; font: inherit; color: var(--texte); background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--bord); border-radius: 9px; padding: 8px 11px 8px 32px; outline: none;
+      }
+      .recherche input:focus { border-color: rgba(96, 165, 250, 0.5); }
+      .recherche svg { position: absolute; left: 10px; top: 9px; width: 15px; height: 15px; color: var(--texte-3); }
+      button {
+        font: inherit; font-size: 12px; color: var(--texte); background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--bord); border-radius: 8px; padding: 6px 11px; cursor: pointer; transition: all 0.15s;
+      }
+      button:hover { background: rgba(255, 255, 255, 0.10); border-color: var(--bord-fort); }
+      button.lien { background: none; border: 0; padding: 2px 4px; color: var(--accent); }
+      button.lien:hover { text-decoration: underline; background: none; }
+      button.danger:hover { color: #fecaca; border-color: rgba(248, 113, 113, 0.45); background: rgba(248, 113, 113, 0.12); }
+      .dossier {
+        display: flex; align-items: center; gap: 10px; padding: 11px 14px; border: 1px solid var(--bord);
+        border-radius: 12px; background: rgba(255, 255, 255, 0.02); margin-bottom: 22px; flex-wrap: wrap;
+      }
+      .dossier .chemin { flex: 1; min-width: 200px; font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--texte-2); word-break: break-all; }
+      .dossier .etiquette { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--texte-3); }
+      .jour { font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--texte-3); margin: 22px 2px 8px; font-weight: 600; }
+      .dl {
+        display: flex; gap: 14px; align-items: flex-start; padding: 13px 14px; border: 1px solid var(--bord);
+        border-radius: 12px; margin-bottom: 8px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01));
+      }
+      .dl.actif { border-color: rgba(96, 165, 250, 0.35); }
+      .dl.rate { border-color: rgba(248, 113, 113, 0.25); }
+      .dl.absent .nom { color: var(--texte-3); text-decoration: line-through; }
+      .type {
+        flex: 0 0 auto; width: 42px; height: 48px; border-radius: 8px; display: grid; place-items: center;
+        font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: #0b1020; text-transform: uppercase;
+      }
+      .corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+      .nom { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+      .dl.fini .nom { cursor: pointer; }
+      .dl.fini .nom:hover { color: var(--accent); }
+      .meta { color: var(--texte-3); font-size: 11.5px; display: flex; gap: 8px; flex-wrap: wrap; }
+      .meta .etat-ok { color: var(--ok); }
+      .meta .etat-ko { color: #fca5a5; }
+      .meta .etat-pause { color: #fcd34d; }
+      .jauge { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; margin-top: 3px; }
+      .jauge > span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 0.6s; }
+      .jauge.indetermine > span { width: 30% !important; animation: glisse 1.3s ease-in-out infinite; }
+      .dl.pause .jauge > span { background: #fcd34d; }
+      @keyframes glisse { 0% { transform: translateX(-100%); } 100% { transform: translateX(330%); } }
+      .actions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+      .retirer { flex: 0 0 auto; background: none; border: 0; color: var(--texte-3); padding: 2px 6px; font-size: 15px; line-height: 1; }
+      .retirer:hover { color: var(--texte); background: rgba(255, 255, 255, 0.06); }
+      .vide { text-align: center; color: var(--texte-3); padding: 60px 20px; line-height: 1.7; }
+      .vide b { color: var(--texte-2); font-weight: 600; display: block; font-size: 15px; margin-bottom: 4px; }
+      .pied { display: flex; justify-content: flex-end; margin-top: 18px; }
+      .copie { color: var(--ok); font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <div class="enveloppe">
+      <header class="entete">
+        <h1>Téléchargements</h1>
+        <span class="compte" id="compte"></span>
+      </header>
+
+      <div class="outils">
+        <label class="recherche">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+          <input id="filtre" type="search" placeholder="Chercher un fichier ou un site" autocomplete="off" />
+        </label>
+      </div>
+
+      <div class="dossier">
+        <span class="etiquette">Dossier</span>
+        <span class="chemin" id="chemin">—</span>
+        <button id="ouvrir-dossier">Ouvrir le dossier</button>
+        <button id="changer-dossier">Changer…</button>
+        <button class="lien" id="dossier-windows" title="Revenir au dossier « Téléchargements » de Windows">Par défaut</button>
+      </div>
+
+      <div id="liste"></div>
+      <div class="pied"><button class="danger" id="effacer" title="Retire de la liste les téléchargements terminés. Les fichiers restent sur le disque.">Effacer la liste</button></div>
+    </div>
+
+    <script>
+      (function () {
+        const ipc = (o) => { try { window.ipc.postMessage(JSON.stringify(o)); } catch (e) {} };
+        let etat = null;
+        let filtre = "";
+        // Vitesse : a partir des octets recus d'un etat a l'autre (moyenne glissante).
+        const vitesses = new Map();
+        const precedents = new Map();
+
+        const elem = (tag, classe, texte) => {
+          const d = document.createElement(tag);
+          if (classe) d.className = classe;
+          if (texte !== undefined && texte !== null) d.textContent = String(texte);
+          return d;
+        };
+        const taille = (o) => {
+          if (o == null) return "";
+          if (o >= 1073741824) return (o / 1073741824).toFixed(1).replace(".", ",") + " Go";
+          if (o >= 1048576) return (o / 1048576).toFixed(1).replace(".", ",") + " Mo";
+          if (o >= 1024) return Math.round(o / 1024) + " Ko";
+          return o + " o";
+        };
+        const duree = (s) => {
+          if (!isFinite(s) || s <= 0) return "";
+          if (s < 60) return Math.ceil(s) + " s";
+          if (s < 3600) return Math.ceil(s / 60) + " min";
+          return Math.floor(s / 3600) + " h " + Math.round((s % 3600) / 60) + " min";
+        };
+        const heure = (ms) => new Date(ms).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+        const jourDe = (ms) => {
+          const d = new Date(ms), a = new Date();
+          const hier = new Date(); hier.setDate(a.getDate() - 1);
+          if (d.toDateString() === a.toDateString()) return "Aujourd'hui";
+          if (d.toDateString() === hier.toDateString()) return "Hier";
+          return d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+        };
+        // Couleur et sigle par type de fichier.
+        const TYPES = [
+          [/^(exe|msi|msix|appx)$/, "#f9a8d4"], [/^(zip|rar|7z|tar|gz|xz)$/, "#fcd34d"],
+          [/^(pdf)$/, "#fca5a5"], [/^(png|jpe?g|gif|webp|svg|bmp|heic)$/, "#86efac"],
+          [/^(mp4|mkv|avi|mov|webm)$/, "#c4b5fd"], [/^(mp3|flac|wav|ogg|m4a)$/, "#5eead4"],
+          [/^(docx?|odt|rtf|txt|md)$/, "#93c5fd"], [/^(xlsx?|ods|csv)$/, "#6ee7b7"],
+        ];
+        const typeDe = (nom) => {
+          const ext = (nom.match(/\.([a-z0-9]{1,5})$/i) || [, ""])[1].toLowerCase();
+          const couleur = (TYPES.find(([re]) => re.test(ext)) || [, "#cbd5e1"])[1];
+          return { ext: ext || "?", couleur };
+        };
+
+        window.trame = {
+          etat(s) { etat = s; rendre(); },
+          budget() {}, resultats() {}, toast() {}, focusCouture() {},
+        };
+
+        // Deux etats peuvent arriver a quelques millisecondes d'intervalle (« pret » puis le
+        // releve de la seconde) : un ecart si court donnait des vitesses absurdes (3,6 Go/s).
+        // On ne mesure que sur au moins 0,8 s.
+        function mesurerVitesse(d) {
+          const maintenant = Date.now();
+          const p = precedents.get(d.id);
+          if (d.etat !== "en_cours") { precedents.delete(d.id); vitesses.delete(d.id); return; }
+          if (p && maintenant - p.t < 800) return;
+          if (p && d.recu >= p.recu) {
+            const instant = ((d.recu - p.recu) * 1000) / (maintenant - p.t);
+            const v = vitesses.get(d.id);
+            vitesses.set(d.id, v == null ? instant : v * 0.7 + instant * 0.3);
+          }
+          precedents.set(d.id, { recu: d.recu, t: maintenant });
+        }
+
+        function ligne(d) {
+          const actif = d.etat === "en_cours" || d.etat === "en_pause";
+          const rate = ["echoue", "annule", "interrompu"].includes(d.etat);
+          const fini = d.etat === "termine";
+          const absent = fini && !d.existe;
+          const bloc = elem("div", "dl" + (actif ? " actif" : "") + (d.etat === "en_pause" ? " pause" : "") + (rate ? " rate" : "") + (fini && !absent ? " fini" : "") + (absent ? " absent" : ""));
+          const t = typeDe(d.fichier);
+          const type = elem("div", "type", t.ext.slice(0, 4));
+          type.style.background = t.couleur;
+          bloc.appendChild(type);
+
+          const corps = elem("div", "corps");
+          const nom = elem("div", "nom", d.fichier);
+          nom.title = d.chemin;
+          if (fini && !absent) nom.onclick = () => ipc({ m: "telechargementOuvrir", id: d.id });
+          corps.appendChild(nom);
+
+          const meta = elem("div", "meta");
+          if (actif) {
+            const v = vitesses.get(d.id);
+            const reste = d.total && v ? (d.total - d.recu) / v : NaN;
+            meta.appendChild(elem("span", d.etat === "en_pause" ? "etat-pause" : "", d.etat === "en_pause" ? "En pause" : "En cours"));
+            meta.appendChild(elem("span", null, d.total ? `${taille(d.recu)} sur ${taille(d.total)}` : taille(d.recu)));
+            if (d.etat === "en_cours" && v) meta.appendChild(elem("span", null, `${taille(v)}/s`));
+            if (d.etat === "en_cours" && duree(reste)) meta.appendChild(elem("span", null, `encore ${duree(reste)}`));
+          } else if (fini) {
+            meta.appendChild(elem("span", absent ? "etat-ko" : "etat-ok", absent ? "Fichier déplacé ou supprimé" : "Terminé"));
+            if (d.total) meta.appendChild(elem("span", null, taille(d.total)));
+          } else {
+            const libelle = { echoue: "Échec", annule: "Annulé", interrompu: "Interrompu" }[d.etat] || d.etat;
+            meta.appendChild(elem("span", "etat-ko", d.raison && d.etat !== "annule" ? `${libelle} — ${d.raison}` : libelle));
+          }
+          if (d.site) meta.appendChild(elem("span", null, d.site));
+          meta.appendChild(elem("span", null, heure(d.debut)));
+          corps.appendChild(meta);
+
+          if (actif) {
+            const jauge = elem("div", "jauge" + (d.total ? "" : " indetermine"));
+            const barre = elem("span");
+            barre.style.width = d.total ? Math.min(100, (d.recu / d.total) * 100).toFixed(1) + "%" : "30%";
+            jauge.appendChild(barre);
+            corps.appendChild(jauge);
+          }
+
+          const actions = elem("div", "actions");
+          const bouton = (texte, m, classe) => {
+            const b = elem("button", classe || "lien", texte);
+            b.onclick = () => ipc({ m, id: d.id });
+            actions.appendChild(b);
+          };
+          if (fini && !absent) {
+            bouton("Ouvrir", "telechargementOuvrir");
+            bouton("Afficher dans le dossier", "telechargementDossier");
+          }
+          if (d.etat === "en_cours") bouton("Pause", "telechargementPause");
+          if (d.etat === "en_pause") bouton("Reprendre", "telechargementReprendre");
+          if (actif) bouton("Annuler", "telechargementAnnuler");
+          if (rate || absent) bouton("Recommencer", "telechargementRelancer");
+          const copier = elem("button", "lien", "Copier le lien");
+          copier.onclick = async () => {
+            try { await navigator.clipboard.writeText(d.url); } catch (e) {}
+            copier.textContent = "Lien copié ✓";
+            setTimeout(() => (copier.textContent = "Copier le lien"), 1500);
+          };
+          actions.appendChild(copier);
+          corps.appendChild(actions);
+          bloc.appendChild(corps);
+
+          if (!actif) {
+            const retirer = elem("button", "retirer", "×");
+            retirer.title = "Retirer de la liste (le fichier reste sur le disque)";
+            retirer.onclick = () => ipc({ m: "telechargementRetirer", id: d.id });
+            bloc.appendChild(retirer);
+          }
+          return bloc;
+        }
+
+        function rendre() {
+          const t = etat && etat.telechargements;
+          if (!t) return;
+          document.getElementById("chemin").textContent = t.dossier || "—";
+          const liste = t.liste || [];
+          liste.forEach(mesurerVitesse);
+          const n = liste.length;
+          document.getElementById("compte").textContent = n
+            ? `${n} téléchargement${n > 1 ? "s" : ""}${t.actifs ? ` · ${t.actifs} en cours` : ""}`
+            : "";
+          const zone = document.getElementById("liste");
+          zone.textContent = "";
+          const f = filtre.trim().toLowerCase();
+          const vus = liste.filter((d) => !f || (d.fichier + " " + d.site + " " + d.url).toLowerCase().includes(f));
+          if (!vus.length) {
+            const vide = elem("div", "vide");
+            vide.appendChild(elem("b", null, n ? "Aucun téléchargement ne correspond" : "Aucun téléchargement pour l'instant"));
+            vide.appendChild(elem("span", null, n ? "Essayez un autre mot." : "Les fichiers que vous téléchargez apparaîtront ici, avec leur progression."));
+            zone.appendChild(vide);
+          }
+          let jourCourant = null;
+          for (const d of vus) {
+            const j = jourDe(d.debut);
+            if (j !== jourCourant) {
+              zone.appendChild(elem("div", "jour", j));
+              jourCourant = j;
+            }
+            zone.appendChild(ligne(d));
+          }
+          document.getElementById("effacer").hidden = !liste.some((d) => d.etat !== "en_cours" && d.etat !== "en_pause");
+        }
+
+        document.getElementById("filtre").addEventListener("input", (e) => { filtre = e.target.value; rendre(); });
+        document.getElementById("ouvrir-dossier").onclick = () => ipc({ m: "telechargementsDossier" });
+        document.getElementById("changer-dossier").onclick = () => ipc({ m: "telechargementsChoisirDossier" });
+        document.getElementById("dossier-windows").onclick = () => ipc({ m: "telechargementsDossierWindows" });
+        document.getElementById("effacer").onclick = () => ipc({ m: "telechargementsEffacer" });
+
+        ipc({ m: "pret", surface: "telechargements" });
+        setInterval(() => { if (!etat) ipc({ m: "pret", surface: "telechargements" }); }, 900);
+      })();
+    </script>
+  </body>
+</html>

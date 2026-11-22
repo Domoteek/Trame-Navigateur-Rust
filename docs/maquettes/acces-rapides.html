@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accès rapides de Trame</title>
+<style>
+:root {
+  --fond:#080b11; --surface:#101521; --surface-2:#151c2a; --surface-3:#1b2434;
+  --bord:rgba(255,255,255,.08); --bord-fort:rgba(255,255,255,.16);
+  --texte:#e9eefa; --texte-2:#97a4bb; --texte-3:#616e85;
+  --vif:#5eead4; --tiede:#fbbf24; --froid:#7c8aa3; --dormant:#8b7cf6; --accent:#60a5fa;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:#05070b; color:var(--texte);
+  font-family:"Segoe UI Variable Text","Segoe UI",Inter,system-ui,sans-serif; font-size:12.5px;
+  font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased; }
+.page { padding:24px 20px 40px; max-width:1180px; margin:0 auto; }
+h1 { font-size:20px; font-weight:600; margin:0 0 6px; }
+.intro { color:var(--texte-2); margin:0 0 20px; line-height:1.55; font-size:13.5px; max-width:900px; }
+.etiquette { display:flex; gap:8px; align-items:center; font-size:13px; font-weight:600; margin:26px 0 10px; }
+.num { width:22px; height:22px; border-radius:50%; background:var(--vif); color:#04231e;
+  display:grid; place-items:center; font-size:12px; font-weight:700; flex:0 0 auto; }
+.notes { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px 22px; margin-top:12px;
+  color:var(--texte-2); line-height:1.5; }
+.notes b { color:var(--texte); font-weight:600; }
+
+/* ===== reproduction de ui/newtab.html ===== */
+.nto { border:1px solid var(--bord); border-radius:14px; overflow:hidden;
+  background:
+    radial-gradient(60% 45% at 18% 0%, rgba(96,165,250,.13), transparent 60%),
+    radial-gradient(50% 40% at 90% 10%, rgba(167,139,250,.11), transparent 60%),
+    radial-gradient(70% 50% at 50% 110%, rgba(94,234,212,.07), transparent 60%), var(--fond);
+  padding:44px 46px 34px; }
+.env { max-width:1020px; margin:0 auto; }
+.marque { font-size:12px; letter-spacing:.22em; text-transform:uppercase; color:var(--texte-3); }
+.salut { font-size:30px; font-weight:600; letter-spacing:-.015em; }
+.date { color:var(--texte-3); font-size:13px; margin-top:4px; }
+.recherche { display:flex; align-items:center; gap:10px; height:46px; padding:0 18px; margin:22px 0 30px;
+  border-radius:23px; border:1px solid var(--bord); background:rgba(255,255,255,.04); color:var(--texte-3); font-size:14px; }
+.recherche span:first-of-type { flex:1; }
+.touche { font-size:10.5px; border:1px solid var(--bord); border-radius:6px; padding:2px 7px; }
+h2 { font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--texte-3); margin:0; font-weight:600; }
+
+/* --- nouvelle section --- */
+.ar-tete { display:flex; align-items:center; gap:14px; margin-bottom:12px; }
+.groupes { display:flex; gap:6px; flex-wrap:wrap; }
+.g { font-size:11.5px; color:var(--texte-2); padding:4px 11px; border-radius:20px; border:1px solid var(--bord); cursor:pointer; }
+.g.on { color:var(--texte); border-color:rgba(94,234,212,.45); background:rgba(94,234,212,.08); }
+.g.plus { border-style:dashed; color:var(--texte-3); }
+.ar-outils { margin-left:auto; display:flex; gap:6px; }
+.ar-outils span { font-size:11.5px; color:var(--texte-3); padding:4px 10px; border-radius:8px; border:1px solid transparent; }
+.ar-outils span.on { color:var(--texte); border-color:var(--bord-fort); background:rgba(255,255,255,.04); }
+.tuiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:10px; margin-bottom:34px; }
+.tuile { position:relative; border:1px solid var(--bord); border-radius:14px; padding:14px 6px 10px;
+  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012));
+  display:flex; flex-direction:column; align-items:center; gap:8px; cursor:pointer; min-width:0;
+  transition:border-color .18s, transform .18s; }
+.tuile:hover { border-color:rgba(255,255,255,.16); transform:translateY(-1px); }
+.tuile .ico { width:38px; height:38px; border-radius:11px; display:grid; place-items:center;
+  font-weight:700; color:#fff; font-size:16px; }
+.tuile .n { font-size:12px; color:#dbe4f5; max-width:100%; padding:0 4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tuile .ouvert { position:absolute; top:8px; right:8px; width:7px; height:7px; border-radius:50%; background:var(--vif);
+  box-shadow:0 0 0 3px rgba(94,234,212,.15); }
+.tuile.ajout { border-style:dashed; background:transparent; color:var(--texte-3); justify-content:center; font-size:12px; }
+.tuile.ajout b { font-size:22px; font-weight:400; display:block; text-align:center; }
+.tuile.survol { border-color:rgba(94,234,212,.55); }
+.menu { position:absolute; top:calc(100% + 6px); left:0; z-index:2; width:190px; background:var(--surface-2);
+  border:1px solid var(--bord-fort); border-radius:10px; padding:5px; box-shadow:0 14px 34px rgba(0,0,0,.5); text-align:left; }
+.menu div { padding:6px 9px; border-radius:7px; color:var(--texte-2); font-size:12px; }
+.menu div:hover, .menu .sel { background:rgba(255,255,255,.06); color:var(--texte); }
+.menu hr { border:0; border-top:1px solid var(--bord); margin:4px 2px; }
+.menu .rouge { color:#f87171; }
+
+/* --- reste de la page, inchangé --- */
+.grille { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; margin-top:14px; }
+.carte { border:1px solid var(--bord); border-radius:14px; padding:14px 15px;
+  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012)); }
+.carte-tete { display:flex; justify-content:space-between; font-size:13.5px; font-weight:600; margin-bottom:8px; }
+.carte-tete span { font-size:10.5px; color:var(--texte-3); background:rgba(255,255,255,.06); padding:2px 7px; border-radius:20px; font-weight:400; }
+.chip { display:flex; gap:8px; align-items:center; padding:4px 7px; font-size:12px; color:#7e8ba1; font-style:italic; }
+.chip.v { color:#cfd9ea; font-style:normal; }
+.chip i { width:6px; height:6px; border-radius:50%; background:var(--dormant); }
+.chip.v i { background:var(--vif); }
+.estompe { opacity:.55; }
+
+/* ===== bas : rail + fenêtre ===== */
+.duo { display:flex; gap:22px; flex-wrap:wrap; align-items:flex-start; }
+.rail { width:288px; background:var(--fond); border:1px solid var(--bord); border-radius:14px; padding:12px 10px; }
+.rail-tete { display:flex; align-items:center; gap:10px; padding:2px 4px 10px; }
+.logo { width:22px; height:22px; border-radius:6px; background:linear-gradient(135deg,#60a5fa,#5eead4);
+  display:grid; place-items:center; font-weight:800; color:#06121a; font-size:13px; }
+.rail-tete b { letter-spacing:.28em; font-size:13px; flex:1; }
+.bande { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; padding:8px; border:1px solid var(--bord);
+  border-radius:12px; background:var(--surface); margin-bottom:8px; }
+.past { aspect-ratio:1; border-radius:9px; display:grid; place-items:center; font-weight:700; color:#fff; font-size:12px; }
+.fil { border:1px solid var(--bord); border-radius:12px; background:var(--surface); padding:9px 10px; margin-bottom:6px; font-weight:600; }
+.fil span { float:right; font-size:11px; color:var(--texte-3); font-weight:400; }
+.depot { border:1px dashed var(--bord-fort); border-radius:10px; padding:10px; text-align:center; color:var(--texte-3); margin-top:40px; font-size:11.5px; }
+.dialogue { width:330px; background:var(--surface); border:1px solid var(--bord-fort); border-radius:14px; padding:16px;
+  box-shadow:0 16px 40px rgba(0,0,0,.5); }
+.dialogue h3 { margin:0 0 12px; font-size:14px; font-weight:600; }
+.champ { margin-bottom:10px; }
+.champ label { display:block; color:var(--texte-2); font-size:11px; margin-bottom:4px; }
+.champ .v { background:#0b0f17; border:1px solid var(--bord); border-radius:8px; padding:8px 10px; }
+.puces { display:flex; gap:6px; flex-wrap:wrap; }
+.coche { display:flex; flex-direction:column; gap:6px; margin:12px 0 14px; color:var(--texte-2); }
+.coche span::before { content:"✓ "; color:var(--vif); }
+.boutons { display:flex; justify-content:flex-end; gap:8px; }
+.boutons span { border-radius:9px; padding:7px 14px; border:1px solid var(--bord-fort); }
+.boutons .ok { background:var(--vif); color:#04231e; border-color:var(--vif); font-weight:600; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Accès rapides — maquette, version 2</h1>
+  <p class="intro">Les accès rapides vivent sur la page « Nouvel onglet », entre la recherche et « Tes fils ».
+    Ils prennent la place de la section « Favoris » que Trame sait déjà afficher (elle est cachée tant
+    qu'elle est vide). Le reste de la page ne bouge pas.</p>
+
+  <div class="etiquette"><span class="num">1</span> La page « Nouvel onglet »</div>
+  <div class="nto">
+    <div class="env">
+      <div class="marque">Trame</div>
+      <div class="salut">Bon après-midi.</div>
+      <div class="date">dimanche 22 novembre</div>
+
+      <div class="recherche">⌕ <span>Saisir une adresse ou une recherche</span><span class="touche">Entrée</span></div>
+
+      <div class="ar-tete">
+        <h2>Accès rapides</h2>
+        <div class="groupes">
+          <span class="g on">Tous</span><span class="g">Maison</span><span class="g">Loisirs</span>
+          <span class="g">Courses et papiers</span><span class="g plus">＋ groupe</span>
+        </div>
+        <div class="ar-outils"><span>Réorganiser</span></div>
+      </div>
+
+      <div class="tuiles">
+        <div class="tuile"><i class="ouvert" title="Déjà ouvert"></i><div class="ico" style="background:#ef4444">▶</div><div class="n">YouTube</div></div>
+        <div class="tuile"><div class="ico" style="background:#f59e0b">a</div><div class="n">Amazon</div></div>
+        <div class="tuile"><i class="ouvert"></i><div class="ico" style="background:#18bcf2">H</div><div class="n">Home Assistant</div></div>
+        <div class="tuile survol"><div class="ico" style="background:#0f766e">P</div><div class="n">Proxmox</div>
+          <div class="menu">
+            <div class="sel">Ouvrir dans un nouvel onglet</div>
+            <div>Modifier…</div>
+            <div>Changer de groupe ›</div>
+            <div>Afficher dans le rail ✓</div>
+            <hr><div class="rouge">Retirer des accès rapides</div>
+          </div></div>
+        <div class="tuile"><div class="ico" style="background:#c2410c">O</div><div class="n">OPNsense</div></div>
+        <div class="tuile"><div class="ico" style="background:#3b82f6">M</div><div class="n">Gmail</div></div>
+        <div class="tuile"><div class="ico" style="background:#22c55e">P</div><div class="n">Pronote</div></div>
+        <div class="tuile"><div class="ico" style="background:#8b5cf6">D</div><div class="n">Discord</div></div>
+        <div class="tuile ajout"><div><b>＋</b>Ajouter</div></div>
+      </div>
+
+      <div class="estompe">
+        <h2>Tes fils</h2>
+        <div class="grille">
+          <div class="carte"><div class="carte-tete">Commandes Youtube <span>2</span></div>
+            <div class="chip"><i></i>Amazon.fr : livres, DVD…</div><div class="chip v"><i></i>YouTube</div></div>
+          <div class="carte"><div class="carte-tete">Home lab <span>13</span></div>
+            <div class="chip"><i></i>proxmox - Proxmox Virtual Environment</div><div class="chip"><i></i>Se connecter | OPNsense</div></div>
+          <div class="carte"><div class="carte-tete">Réglages <span>3</span></div>
+            <div class="chip"><i></i>Réglages</div><div class="chip v"><i></i>Nouvel onglet</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div><b>Clic sur une tuile</b> : si le site est déjà ouvert (point vert), Trame va sur cet onglet au lieu
+      d'en rouvrir un ; sinon il l'ouvre ici.</div>
+    <div><b>Groupes</b> : « Tous » par défaut ; un clic filtre. Trame retient le dernier groupe choisi.</div>
+    <div><b>Ajouter</b> : la tuile « ＋ », Ctrl+D sur une page, ou glisser un onglet du rail sur la section.</div>
+    <div><b>Réorganiser</b> : les tuiles se déplacent à la souris ; clic droit sur une tuile pour le reste.</div>
+  </div>
+
+  <div class="etiquette"><span class="num">2</span> En option : la même liste en haut du rail &nbsp;·&nbsp; <span class="num">3</span> La fenêtre d'ajout</div>
+  <div class="duo">
+    <div class="rail">
+      <div class="rail-tete"><div class="logo">T</div><b>TRAME</b></div>
+      <div class="bande">
+        <div class="past" style="background:#ef4444">▶</div><div class="past" style="background:#f59e0b">a</div>
+        <div class="past" style="background:#18bcf2">H</div><div class="past" style="background:#0f766e">P</div>
+        <div class="past" style="background:#3b82f6">M</div><div class="past" style="background:#8b5cf6">D</div>
+      </div>
+      <div class="fil">Commandes Youtube <span>2</span></div>
+      <div class="fil">Home lab <span>13</span></div>
+      <div class="fil">Réglages <span>3</span></div>
+      <div class="depot">Déposer ici pour ouvrir un nouveau fil</div>
+    </div>
+    <div class="dialogue">
+      <h3>Nouvel accès rapide</h3>
+      <div class="champ"><label>Nom</label><div class="v">Amazon</div></div>
+      <div class="champ"><label>Adresse</label><div class="v">https://www.amazon.fr/</div></div>
+      <div class="champ"><label>Groupe</label>
+        <div class="puces"><span class="g">Maison</span><span class="g">Loisirs</span>
+          <span class="g on">Courses et papiers</span><span class="g plus">＋ nouveau</span></div></div>
+      <div class="coche"><span>Afficher aussi dans le rail</span><span>Aller sur l'onglet s'il est déjà ouvert</span></div>
+      <div class="boutons"><span>Annuler</span><span class="ok">Ajouter</span></div>
+    </div>
+    <div class="notes" style="max-width:300px;margin-top:0;display:block">
+      <p style="margin-top:0"><b>Rail</b> : seulement les accès cochés « Afficher aussi dans le rail ».
+        Vous pouvez aussi ne rien mettre dans le rail.</p>
+      <p><b>Fenêtre</b> : nom, adresse et icône sont repris de la page affichée.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

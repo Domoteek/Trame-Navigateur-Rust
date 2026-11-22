@@ -1,0 +1,34 @@
+[package]
+name = "trame"
+version = "0.1.0"
+edition = "2021"
+description = "Trame — navigateur a onglets tisses (Rust + WebView2)"
+license = "MIT"
+default-run = "trame"
+
+[dependencies]
+wry = { version = "0.57", features = ["devtools"] }
+tao = "0.37"
+http = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "7"
+percent-encoding = "2"
+url = "2"
+sysinfo = "0.33"
+# Les memes versions que celles tirees par wry : les types COM doivent etre identiques pour
+# piloter le moteur d'extensions de WebView2 a chaud (src/moteur_ext.rs).
+webview2-com = "=0.39.1"
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+
+[build-dependencies]
+winresource = "0.1"
+
+[profile.release]
+# Taille avant vitesse : le binaire fait 2 Mo, l'interface et le moteur sont ailleurs.
+# Mesure du 2026-11-21 (docs/OPTIMISATIONS.md) : `lto = "fat"` + codegen-units = 1 donne
+# 2 000 384 octets contre 2 124 472, soit 124 Ko de moins, pour 82 s de compilation au lieu
+# de 8 s. Ce compromis n'est pas retenu : la compilation rapide sert plus que 6 % de taille.
+opt-level = "s"
+lto = "thin"
+strip = true

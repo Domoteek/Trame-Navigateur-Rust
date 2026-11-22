@@ -1,0 +1,27 @@
+/* Encarts publicitaires autour du lecteur et dans la page de la video (pas la pub video
+   elle-meme : elle passe dans le lecteur, contenu.js s'en charge). */
+.ytp-ad-overlay-container,
+.ytp-ad-overlay-slot,
+.ytp-ad-image-overlay,
+#player-ads,
+ytd-player-legacy-desktop-watch-ads-renderer,
+ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"] {
+  display: none !important;
+}
+
+/* Petit signe discret le temps qu'une pub soit sautee. */
+#trame-saute-pub {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2147483000;
+  padding: 7px 12px;
+  border-radius: 9px;
+  background: rgba(13, 16, 22, 0.88);
+  color: #fecaca;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  font: 12.5px/1.3 "Segoe UI", system-ui, sans-serif;
+  transition: opacity 0.4s;
+  pointer-events: none;
+}
+#trame-saute-pub.parti { opacity: 0; }

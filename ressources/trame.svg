@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Icone de Trame : le « T tisse » (choix de Clement, 2026-11-22). La bande horizontale
+       (bleu) passe SUR le fil vertical (vert d'eau), qui depasse au-dessus et au-dessous : les
+       deux jours sombres autour du croisement font lire le dessus-dessous du tissage. Le fil
+       violet sort de sous le pied : le fil qu'on suit. Source de toutes les tailles :
+       outils/faire-icones.mjs. -->
+  <rect x="4" y="4" width="248" height="248" rx="56" fill="#141a22"/>
+  <rect x="4.5" y="4.5" width="247" height="247" rx="55.5" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
+  <path d="M128 180 C 128 212, 162 220, 192 200" fill="none" stroke="#9b6cff" stroke-width="18" stroke-linecap="round"/>
+  <line x1="128" y1="80" x2="128" y2="184" stroke="#3fd9c0" stroke-width="44" stroke-linecap="round"/>
+  <line x1="98" y1="78" x2="158" y2="78" stroke="#141a22" stroke-width="60"/>
+  <line x1="52" y1="78" x2="204" y2="78" stroke="#5aa2ff" stroke-width="44" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,11 @@
+{
+  "name": "Temps de lecture",
+  "version": "1.0.0",
+  "description": "Affiche une pastille avec le temps de lecture estimé et le nombre de mots. Se désactive d'un clic, et le choix est retenu.",
+  "author": "Trame",
+  "matches": ["*://*/*"],
+  "js": ["contenu.js"],
+  "css": [],
+  "run_at": "document_end",
+  "accent": "#5eead4"
+}

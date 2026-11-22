@@ -1,0 +1,892 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Réglages</title>
+    <style>
+      :root {
+        --fond: #080b11;
+        --surface: #101521;
+        --bord: rgba(255, 255, 255, 0.08);
+        --bord-fort: rgba(255, 255, 255, 0.16);
+        --texte: #e9eefa;
+        --texte-2: #97a4bb;
+        --texte-3: #616e85;
+        --vif: #5eead4;
+        --accent: #60a5fa;
+        --accent-2: #a78bfa;
+        --danger: #f87171;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background:
+          radial-gradient(55% 40% at 12% 0%, rgba(96, 165, 250, 0.10), transparent 62%),
+          radial-gradient(50% 35% at 92% 4%, rgba(167, 139, 250, 0.09), transparent 60%),
+          var(--fond);
+        color: var(--texte);
+        font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+        font-size: 13px;
+        padding: 44px 40px 60px;
+      }
+      .enveloppe { max-width: 940px; margin: 0 auto; }
+
+      header.entete { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 8px; }
+      h1 { font-size: 26px; margin: 0; font-weight: 600; letter-spacing: -0.015em; }
+      .version { color: var(--texte-3); font-size: 12px; padding-bottom: 4px; }
+      .sous-titre { color: var(--texte-3); font-size: 12.5px; margin: 0 0 30px; }
+      .chemin { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--texte-3); }
+
+      section {
+        border: 1px solid var(--bord);
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.010));
+        padding: 18px 20px;
+        margin-bottom: 16px;
+      }
+      section > h2 {
+        font-size: 10.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--texte-3);
+        margin: 0 0 14px;
+        font-weight: 600;
+      }
+      .note { color: var(--texte-3); font-size: 11.5px; line-height: 1.5; margin: 10px 0 0; }
+
+      /* moteurs */
+      .moteurs { display: grid; grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 9px; }
+      .moteur {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--bord);
+        cursor: pointer;
+        background: rgba(255, 255, 255, 0.015);
+        transition: all 0.15s;
+      }
+      .moteur:hover { border-color: var(--bord-fort); background: rgba(255, 255, 255, 0.05); }
+      .moteur.choisi { border-color: rgba(96, 165, 250, 0.55); background: rgba(96, 165, 250, 0.10); }
+      .moteur .puce { width: 13px; text-align: center; color: var(--accent); font-size: 11px; }
+      .moteur .nom { flex: 1; min-width: 0; }
+      .moteur .langue {
+        font-size: 9.5px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--vif);
+        border: 1px solid rgba(94, 234, 212, 0.35);
+        border-radius: 4px;
+        padding: 1px 4px;
+      }
+
+      /* extensions */
+      .ext {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px 2px;
+        border-bottom: 1px solid var(--bord);
+      }
+      .ext:last-of-type { border-bottom: 0; }
+      .ext .puce { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; background: var(--vif); flex: 0 0 auto; }
+      .ext.off .puce { background: #46536a; }
+      .ext.off .corps { opacity: 0.55; }
+      .ext .corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+      .ext .titre { display: flex; align-items: baseline; gap: 8px; }
+      .ext .titre b { font-weight: 600; font-size: 13px; }
+      .ext .titre span { color: var(--texte-3); font-size: 10.5px; }
+      .ext .desc { color: var(--texte-2); font-size: 11.5px; line-height: 1.45; }
+      .ext .motifs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+      .ext .motif {
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 10px;
+        color: #8fa3bf;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
+      .ext .chemin { font-family: ui-monospace, Consolas, monospace; font-size: 10px; color: #4d5a6e; margin-top: 2px; word-break: break-all; }
+      .ext-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
+
+      /* installateur d'extensions */
+      .installateur {
+        margin: 4px 0 14px;
+        padding: 12px;
+        border: 1px solid var(--bord);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.022);
+      }
+      .ligne-install { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+      .ligne-install:last-of-type { margin-bottom: 0; }
+      #chrome-saisie {
+        flex: 1;
+        min-width: 0;
+        font: inherit;
+        font-size: 12px;
+        padding: 7px 10px;
+        border-radius: 7px;
+        color: var(--texte);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--bord);
+      }
+      #chrome-saisie:focus { outline: none; border-color: rgba(96, 165, 250, 0.55); }
+      #chrome-etat { color: var(--texte-2); font-size: 11px; }
+      .ext .badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+      .ext .badge-info {
+        font-size: 9.5px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 1px 6px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: #9fb0c8;
+      }
+      .ext-icone {
+        width: 28px;
+        height: 28px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .ext-icone img { width: 22px; height: 22px; object-fit: contain; }
+      .ext-icone.initiale { font-size: 12px; font-weight: 700; color: #1b1230; background: #c4b5fd; }
+      .ext.off .ext-icone { filter: grayscale(1); opacity: 0.5; }
+      .ext-icone.tourne {
+        width: 22px;
+        height: 22px;
+        margin: 3px;
+        border-radius: 50%;
+        background: none;
+        border: 2px solid rgba(96, 165, 250, 0.25);
+        border-top-color: var(--accent, #60a5fa);
+        animation: tourner 0.8s linear infinite;
+      }
+      @keyframes tourner { to { transform: rotate(360deg); } }
+      .ext .badge-info.active { color: #7fd8c7; border-color: rgba(94, 234, 212, 0.4); }
+      .ext .badge-info.coupee { color: #f0b46a; border-color: rgba(240, 180, 106, 0.4); }
+      .ext .badge-info.magasin { color: #93c5fd; border-color: rgba(96, 165, 250, 0.4); }
+      .ext .perm {
+        font-size: 10px;
+        padding: 1px 6px;
+        border-radius: 4px;
+        color: #c3cfe0;
+        background: rgba(167, 139, 250, 0.13);
+        border: 1px solid rgba(167, 139, 250, 0.26);
+      }
+      .petit-bouton {
+        font: inherit;
+        font-size: 10.5px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        color: var(--texte-2);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--bord);
+        cursor: pointer;
+      }
+      .petit-bouton:hover { background: rgba(255, 255, 255, 0.10); color: var(--texte); }
+      .petit-bouton.actif {
+        color: #e9e3ff;
+        background: rgba(167, 139, 250, 0.22);
+        border-color: rgba(167, 139, 250, 0.5);
+      }
+
+      /* interrupteurs et lignes */
+      .ligne { display: flex; align-items: center; gap: 14px; padding: 10px 2px; border-bottom: 1px solid var(--bord); }
+      .ligne:last-of-type { border-bottom: 0; }
+      .ligne .libelle { flex: 1; min-width: 0; }
+      .ligne .libelle b { display: block; font-weight: 600; font-size: 12.5px; }
+      .ligne .libelle span { color: var(--texte-3); font-size: 11px; }
+      .bascule {
+        width: 38px; height: 20px; border-radius: 11px;
+        background: rgba(255, 255, 255, 0.10);
+        position: relative; cursor: pointer; flex: 0 0 auto;
+        transition: background 0.18s;
+      }
+      .bascule::after {
+        content: ""; position: absolute; top: 2px; left: 2px;
+        width: 16px; height: 16px; border-radius: 50%;
+        background: #8c9ab1; transition: transform 0.18s, background 0.18s;
+      }
+      .bascule.on { background: rgba(94, 234, 212, 0.28); }
+      .bascule.on::after { transform: translateX(18px); background: var(--vif); }
+
+      select, button {
+        font: inherit;
+        font-size: 12px;
+        color: var(--texte);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--bord);
+        border-radius: 8px;
+        padding: 6px 10px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      select:hover, button:hover { background: rgba(255, 255, 255, 0.10); border-color: var(--bord-fort); }
+      /* La liste ouverte est dessinee par le systeme : sans fond opaque, ses options gardaient le
+         texte clair de la page sur le blanc de Windows — illisibles (vu le 2026-11-22). */
+      select option { background: #161b24; color: #e6edf6; }
+      select option:checked { background: #24456e; color: #ffffff; }
+      button.danger { color: #fca5a5; border-color: rgba(248, 113, 113, 0.35); }
+      button.danger:hover { background: rgba(248, 113, 113, 0.14); }
+      .boutons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+      .compteurs { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 14px; }
+      .compteur { display: flex; flex-direction: column; gap: 2px; }
+      .compteur .valeur { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+      .compteur .cle { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--texte-3); }
+
+      .pied { color: var(--texte-3); font-size: 11px; margin-top: 18px; line-height: 1.6; }
+      .vide { color: var(--texte-3); font-size: 12px; }
+      .exclus { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 6px; }
+      .exclus .exclu { font-size: 11.5px; padding: 4px 10px; border-radius: 999px; }
+    </style>
+  </head>
+  <body>
+    <div class="enveloppe">
+      <header class="entete">
+        <h1>Réglages</h1>
+        <span class="version" id="version">Trame</span>
+      </header>
+      <p class="sous-titre">
+        Tout est enregistré immédiatement dans <span class="chemin" id="chemin-profil">—</span>.
+      </p>
+
+      <section>
+        <h2>Navigateur par défaut</h2>
+        <div class="ligne">
+          <div class="libelle">
+            <b id="txt-par-defaut">Trame est-il votre navigateur par défaut ?</b>
+            <span>Les liens ouverts depuis vos mails, documents et autres applications s'ouvriront dans un onglet de Trame. Windows réserve ce choix à l'utilisateur : le bouton ouvre la bonne page des Paramètres, où il suffit de choisir Trame.</span>
+          </div>
+          <button id="btn-par-defaut">Choisir dans Windows</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Moteur de recherche</h2>
+        <div class="moteurs" id="moteurs"></div>
+        <p class="note">
+          Utilisé quand une saisie de la Couture n'est ni une adresse ni un onglet. Le badge
+          « fr » signale les moteurs dont l'URL force l'interface et les résultats en français
+          (<code>kl=fr-fr</code>, <code>hl=fr</code>, <code>setlang=fr</code>) — sans ce réglage,
+          un moteur peut répondre en anglais.
+        </p>
+      </section>
+
+      <section>
+        <h2>Extensions</h2>
+        <div id="extensions"></div>
+        <div class="boutons">
+          <button id="btn-recharger">Recharger les extensions</button>
+          <button id="btn-dossier-ext">Ouvrir le dossier</button>
+        </div>
+        <p class="note">
+          Une extension active peut lire toutes les pages qu'elle cible : il n'y a pas encore de
+          modèle de permissions. Désactiver prend effet au chargement suivant.
+        </p>
+      </section>
+
+      <section>
+        <h2>Extensions Chrome (moteur de WebView2)</h2>
+
+        <div class="installateur">
+          <div class="ligne-install">
+            <input
+              id="chrome-saisie"
+              type="text"
+              spellcheck="false"
+              placeholder="Identifiant (32 caractères) ou lien de la fiche Chrome Web Store"
+            />
+            <button id="btn-chrome-installer">Installer</button>
+          </div>
+          <div class="ligne-install">
+            <button id="btn-chrome-fichier">Installer un fichier .crx / .zip…</button>
+            <span class="note" id="chrome-etat">Rien en cours.</span>
+          </div>
+          <p class="note">
+            Trame télécharge le paquet depuis le magasin de Chrome, retire son en-tête de
+            signature (<code>.crx</code> v2 ou v3), le décompresse et vérifie qu'il contient un
+            manifeste. C'est exactement ce que fait « charger une extension décompressée » dans
+            Chrome. La signature n'est pas vérifiée : WebView2 charge des extensions locales, ce
+            n'est donc pas une installation « validée par le magasin » — l'interface ne le dit pas
+            autrement.
+          </p>
+        </div>
+
+        <div id="extensions-chrome"></div>
+        <div id="chrome-disponibles"></div>
+        <div class="boutons">
+          <button id="btn-dossier-chrome">Ouvrir le dossier</button>
+          <button id="btn-chercher-chrome">Chercher dans Chrome / Edge</button>
+          <button id="btn-relire-chrome">Relire la liste</button>
+        </div>
+        <p class="note">
+          Ce sont de <b>vraies extensions Chrome</b> (manifeste v2/v3), chargées par le moteur de
+          Chromium via <code>AddBrowserExtension</code> : scripts de contenu, page d'action,
+          service worker, API <code>chrome.*</code>. Un sous-dossier = une extension, et elle doit
+          être <b>décompressée</b>. Installer, désactiver, réactiver ou retirer prend effet
+          <b>tout de suite</b>, sans redémarrer : Trame pilote le moteur de WebView2 en direct,
+          puis recharge la page affichée pour que le changement se voie.
+        </p>
+        <p class="note">
+          <b>Comme dans Chrome</b> : le bouton puzzle de la barre liste toutes les extensions ;
+          l'épingle met l'icône d'une extension dans la barre d'outils, et un clic sur cette
+          icône ouvre sa fenêtre d'action dans le panneau de droite. « Interface » l'ouvre dans un
+          onglet. L'extension reste connectée dans ce profil.
+        </p>
+        <p class="note">
+          Deux limites à connaître : ces extensions s'appliquent aussi aux surfaces d'interface
+          (le rail et la barre sont des pages web), et une extension qui exige une API non
+          exposée par WebView2 peut rester inerte. Une extension retirée n'est pas effacée : son
+          dossier part dans <code>extensions-chrome-archives\</code>.
+        </p>
+      </section>
+
+      <section>
+        <h2>Confidentialité et vitesse</h2>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Protection anti-pistage</b>
+            <span>Bloque les traqueurs connus : les pages chargent moins de scripts, vont plus vite et prennent moins de mémoire. « Stricte » peut, rarement, empêcher un contenu intégré (connexion via un autre site, vidéo).</span>
+          </div>
+          <select id="anti-pistage">
+            <option value="stricte">Stricte</option>
+            <option value="equilibree">Équilibrée</option>
+            <option value="aucune">Désactivée</option>
+          </select>
+        </div>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Nettoyer les adresses</b>
+            <span id="txt-nettoyage">Retire les paramètres de pistage (utm, fbclid, campagnes Amazon…) avant d'ouvrir une page.</span>
+          </div>
+          <div class="bascule" id="bascule-nettoyer"></div>
+        </div>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Garder les identifiants d'affiliation</b>
+            <span>Le « tag= » d'Amazon et ses équivalents rémunèrent le créateur qui a partagé le lien.</span>
+          </div>
+          <div class="bascule" id="bascule-affiliation"></div>
+        </div>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Mettre en pause les onglets cachés</b>
+            <span>Après 5 minutes cachés, leurs scripts s'arrêtent (processeur presque à zéro). Jamais un onglet qui joue du son. Il reprend dès qu'on l'affiche.</span>
+          </div>
+          <div class="bascule" id="bascule-pause"></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Mémoire de lecture</h2>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Garder le texte des pages lues</b>
+            <span id="txt-lectures">Une page restée affichée 8 secondes est gardée sur ce PC (jamais envoyée ailleurs). Tapez « ? » suivi de quelques mots dans la barre pour la retrouver. Les pages avec un champ de mot de passe ne sont jamais gardées.</span>
+          </div>
+          <div class="bascule" id="bascule-lecture"></div>
+        </div>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Sites jamais gardés</b>
+            <span id="txt-exclus">Aucun. Depuis une page : bouton ⋯ → « Ne jamais garder ce site ».</span>
+          </div>
+          <button id="btn-lectures-effacer">Tout effacer</button>
+        </div>
+        <div class="exclus" id="lecture-exclus"></div>
+      </section>
+
+      <section>
+        <h2>Veille et mémoire</h2>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Endormir automatiquement les onglets froids</b>
+            <span>La webview est détruite ; l'onglet et sa position de lecture restent.</span>
+          </div>
+          <div class="bascule" id="bascule-veille"></div>
+        </div>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Mémoire basse pour les onglets cachés</b>
+            <span>Un onglet ouvert mais caché depuis 20 s rend sa mémoire au système, sans se fermer ni perdre sa place. Il revient à la normale dès qu'on l'affiche.</span>
+          </div>
+          <div class="bascule" id="bascule-memoire-basse"></div>
+        </div>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Onglets ouverts selon la mémoire libre</b>
+            <span>Le nombre choisi ci-dessous devient un plafond : quand le PC manque de mémoire (moins de 1,5 Go libre), les onglets les plus froids s'endorment, sans jamais rien fermer.</span>
+          </div>
+          <div class="bascule" id="bascule-budget-auto"></div>
+        </div>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Onglets réveillés simultanément</b>
+            <span>Au-delà, l'onglet le moins vital est endormi.</span>
+          </div>
+          <select id="budget"></select>
+        </div>
+        <div class="compteurs">
+          <div class="compteur"><span class="valeur" id="c-reveilles">—</span><span class="cle">réveillés</span></div>
+          <div class="compteur"><span class="valeur" id="c-endormis">—</span><span class="cle">en veille</span></div>
+          <div class="compteur"><span class="valeur" id="c-mo">—</span><span class="cle">Mo réels</span></div>
+          <div class="compteur"><span class="valeur" id="c-processus">—</span><span class="cle">processus</span></div>
+        </div>
+        <p class="note">
+          La mémoire affichée est celle du processus Trame et de tous ses descendants (donc de
+          WebView2). Aucune API ne donne la mémoire par onglet : WebView2 partage ses processus
+          de rendu par origine.
+        </p>
+      </section>
+
+      <section>
+        <h2>Barre d'extensions</h2>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Afficher la barre d'extensions</b>
+            <span>Sous la Couture : une pastille par extension, un clic pour activer ou désactiver, et le moteur courant.</span>
+          </div>
+          <div class="bascule" id="bascule-barre-ext"></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Système</h2>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Historique</b>
+            <span id="c-historique">—</span>
+          </div>
+          <button class="danger" id="btn-vider-historique">Vider l'historique</button>
+        </div>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Profil</b>
+            <span class="chemin" id="chemin-profil-2">—</span>
+          </div>
+          <button id="btn-profil">Ouvrir le dossier</button>
+        </div>
+      </section>
+
+      <p class="pied">
+        Trame — navigateur à onglets tissés. Les réglages vivent dans
+        <span class="chemin">reglages.json</span> ; la session, l'historique et le stockage des
+        extensions sont des fichiers séparés du même dossier.
+      </p>
+    </div>
+
+    <script>
+      /* Portee fermee : wry pose `window.ipc` en propriete non configurable, donc un
+         `const ipc` de premier niveau jetterait une SyntaxError fatale. */
+      (function () {
+        const ipc = (o) => {
+          try { window.ipc.postMessage(JSON.stringify(o)); } catch (e) {}
+        };
+        let etat = null;
+
+        function elem(tag, classe, texte) {
+          const d = document.createElement(tag);
+          if (classe) d.className = classe;
+          if (texte !== undefined && texte !== null) d.textContent = String(texte);
+          return d;
+        }
+
+        window.trame = {
+          etat(s) { etat = s; rendre(); },
+          budget(b) { if (etat) { etat.budget = b; rendreCompteurs(); } },
+          resultats() {},
+          toast(message) {
+            const t = document.getElementById("version");
+            if (t) t.title = message;
+          },
+          focusCouture() {},
+        };
+
+        function rendreMoteurs(s) {
+          const zone = document.getElementById("moteurs");
+          zone.textContent = "";
+          const courant = (s.moteur && s.moteur.id) || "";
+          for (const m of s.moteurs || []) {
+            const ligne = elem("div", "moteur" + (m.id === courant ? " choisi" : ""));
+            ligne.appendChild(elem("span", "puce", m.id === courant ? "✓" : ""));
+            ligne.appendChild(elem("span", "nom", m.nom));
+            if (m.langue) {
+              const badge = elem("span", "langue", m.langue);
+              badge.title = "Interface et résultats forcés en français";
+              ligne.appendChild(badge);
+            }
+            ligne.onclick = () => ipc({ m: "moteur", id: m.id });
+            zone.appendChild(ligne);
+          }
+        }
+
+        function rendreExtensions(s) {
+          const zone = document.getElementById("extensions");
+          zone.textContent = "";
+          const liste = s.extensions || [];
+          if (!liste.length) {
+            zone.appendChild(elem("div", "vide", "Aucune extension installée. Déposez un dossier avec un manifest.json, puis « Recharger les extensions »."));
+            return;
+          }
+          for (const e of liste) {
+            const bloc = elem("div", "ext" + (e.active ? "" : " off"));
+            const puce = elem("span", "puce");
+            if (e.accent) puce.style.background = e.active ? e.accent : "";
+            bloc.appendChild(puce);
+
+            const corps = elem("div", "corps");
+            const titre = elem("div", "titre");
+            titre.appendChild(elem("b", null, e.nom));
+            if (e.version) titre.appendChild(elem("span", null, "v" + e.version));
+            corps.appendChild(titre);
+            if (e.description) corps.appendChild(elem("div", "desc", e.description));
+
+            const motifs = elem("div", "motifs");
+            for (const m of e.motifs || []) motifs.appendChild(elem("span", "motif", m));
+            if (!(e.motifs || []).length) motifs.appendChild(elem("span", "motif", "aucun motif — ne s'applique jamais"));
+            corps.appendChild(motifs);
+            if (e.dossier) corps.appendChild(elem("div", "chemin", e.dossier));
+            bloc.appendChild(corps);
+
+            const bascule = elem("div", "bascule" + (e.active ? " on" : ""));
+            bascule.title = e.active ? "Désactiver" : "Activer";
+            bascule.onclick = () => ipc({ m: "extensionBasculer", id: e.id, actif: !e.active });
+            const reinit = elem("button", "petit-bouton", "Réinitialiser");
+            reinit.title =
+              "Effacer les données stockées par cette extension (par exemple un réglage « masquer » qu'on ne retrouve plus).";
+            reinit.onclick = () => ipc({ m: "extensionReinitialiser", id: e.id });
+            const actions = elem("div", "ext-actions");
+            actions.appendChild(reinit);
+            actions.appendChild(bascule);
+            bloc.appendChild(actions);
+
+            zone.appendChild(bloc);
+          }
+        }
+
+        let signatureChrome = "";
+
+        function rendreExtensionsChrome(s) {
+          const zone = document.getElementById("extensions-chrome");
+          const liste = s.extensionsChrome || [];
+          const installations = s.installations || [];
+          // Ne reconstruire que si quelque chose a change : l'etat est pousse plusieurs fois
+          // par seconde, et un clic tombe pendant une reconstruction etait perdu.
+          const signature = JSON.stringify([liste, s.extensionsEpinglees, installations]);
+          if (signature === signatureChrome && zone.childElementCount) return;
+          signatureChrome = signature;
+          zone.textContent = "";
+          for (const libelle of installations) {
+            const bloc = elem("div", "ext installation");
+            bloc.appendChild(elem("span", "ext-icone tourne"));
+            const corps = elem("div", "corps");
+            const titre = elem("div", "titre");
+            titre.appendChild(elem("b", null, "Installation en cours…"));
+            corps.appendChild(titre);
+            corps.appendChild(elem("div", "desc", libelle));
+            bloc.appendChild(corps);
+            zone.appendChild(bloc);
+          }
+          if (!liste.length) {
+            if (installations.length) return;
+            zone.appendChild(
+              elem(
+                "div",
+                "vide",
+                "Aucune extension Chrome pour l'instant. Collez l'identifiant d'une extension du Chrome Web Store ci-dessus, choisissez un fichier .crx, ou « Chercher dans Chrome / Edge » pour reprendre celles déjà installées sur cette machine."
+              )
+            );
+            return;
+          }
+          const epinglees = s.extensionsEpinglees || [];
+          for (const e of liste) {
+            const etat = !e.valide ? "cassée" : e.actif ? "" : "désactivée";
+            const bloc = elem("div", "ext" + (etat ? " off" : ""));
+            const icone = elem("span", "ext-icone");
+            if (e.icone) {
+              const img = document.createElement("img");
+              img.alt = "";
+              img.src = e.icone;
+              img.onerror = () => { img.remove(); icone.classList.add("initiale"); icone.textContent = (e.nom || "?").charAt(0).toUpperCase(); };
+              icone.appendChild(img);
+            } else {
+              icone.classList.add("initiale");
+              icone.textContent = (e.nom || "?").charAt(0).toUpperCase();
+            }
+            bloc.appendChild(icone);
+
+            const corps = elem("div", "corps");
+            const titre = elem("div", "titre");
+            titre.appendChild(elem("b", null, e.nom));
+            if (e.version) titre.appendChild(elem("span", null, "v" + e.version));
+            corps.appendChild(titre);
+            if (e.description) corps.appendChild(elem("div", "desc", e.description));
+
+            // permissions et provenance : ce que l'extension demande, et d'où elle vient
+            const badges = elem("div", "badges");
+            const source = e.source === "magasin" ? "magasin" : e.source === "fichier" ? "fichier" : "importée";
+            badges.appendChild(elem("span", "badge-info" + (e.source === "magasin" ? " magasin" : ""), source));
+            if (e.tailleKo) {
+              const disque = elem("span", "badge-info", Math.max(1, Math.round(e.tailleKo / 1024)) + " Mo disque");
+              disque.title = "Place occupée sur le disque";
+              badges.appendChild(disque);
+            }
+            if (typeof e.coutMo === "number") {
+              const ram = elem("span", "badge-info", Math.round(e.coutMo) + " Mo mémoire");
+              ram.title = e.coutDirect
+                ? "Mémoire de son processus, mesurée en ce moment"
+                : "Mémoire mesurée par différence quand elle s'est allumée ou éteinte";
+              badges.appendChild(ram);
+            }
+            if (!e.actif) badges.appendChild(elem("span", "badge-info coupee", "désactivée"));
+            else if (e.chargee === true) badges.appendChild(elem("span", "badge-info active", "active"));
+            else if (e.chargee === false) badges.appendChild(elem("span", "badge-info coupee", "pas chargée — redémarrer Trame"));
+            for (const p of e.permissions || []) badges.appendChild(elem("span", "perm", p));
+            if (!(e.permissions || []).length) badges.appendChild(elem("span", "badge-info", "aucune permission déclarée"));
+            corps.appendChild(badges);
+            corps.appendChild(elem("div", "chemin", e.chemin));
+            bloc.appendChild(corps);
+
+            const actions = elem("div", "ext-actions");
+            const bouton = (texte, titre, message) => {
+              const b = elem("button", "petit-bouton", texte);
+              b.title = titre;
+              b.onclick = () => ipc(message);
+              actions.appendChild(b);
+            };
+            if (e.actif) {
+              const epinglee = epinglees.includes(e.id);
+              bouton(
+                epinglee ? "Détacher" : "Épingler",
+                epinglee ? "Retirer son icône de la barre d'outils" : "Mettre son icône dans la barre d'outils, à côté du puzzle",
+                { m: "chromeEpingler", id: e.id }
+              );
+            }
+            if (e.popup && e.actif) {
+              bouton("Panneau", "Ouvrir l'extension dans le panneau de droite", { m: "chromePopup", id: e.id });
+              bouton("Interface", "Ouvrir l'interface de l'extension dans un onglet", { m: "chromeOuvrir", id: e.id, page: e.popup });
+            }
+            if (e.options && e.actif) {
+              bouton("Options", "Ouvrir la page de réglages de l'extension", { m: "chromeOuvrir", id: e.id, page: e.options });
+            }
+            if (e.source === "magasin") {
+              bouton("Mettre à jour", "Retélécharger la dernière version depuis le magasin (les données sont gardées)", { m: "chromeMettreAJour", id: e.id });
+            }
+            if (e.actif) {
+              bouton("Désactiver", "L'éteindre tout de suite, en gardant ses données (connexion, réglages)", { m: "chromeDesactiver", id: e.id });
+            } else {
+              bouton("Activer", "La rallumer tout de suite", { m: "chromeReactiver", id: e.id });
+            }
+            bouton("Retirer", "Désinstaller : son dossier part dans les archives, rien n'est effacé", { m: "chromeDesinstaller", id: e.id });
+            bloc.appendChild(actions);
+            zone.appendChild(bloc);
+          }
+        }
+
+        function rendreChromeDisponibles(s) {
+          const zone = document.getElementById("chrome-disponibles");
+          zone.textContent = "";
+          const liste = s.chromeDisponibles || [];
+          if (!liste.length) return;
+
+          const titre = elem("div", "vide", `Trouvées sur cette machine (${liste.length}) :`);
+          titre.style.marginTop = "12px";
+          zone.appendChild(titre);
+
+          for (const e of liste) {
+            const bloc = elem("div", "ext" + (e.installe ? " off" : ""));
+            const puce = elem("span", "puce");
+            puce.style.background = e.installe ? "#46536a" : "var(--accent)";
+            bloc.appendChild(puce);
+            const corps = elem("div", "corps");
+            const t = elem("div", "titre");
+            t.appendChild(elem("b", null, e.nom));
+            if (e.version) t.appendChild(elem("span", null, "v" + e.version));
+            corps.appendChild(t);
+            corps.appendChild(elem("div", "desc", `${e.navigateur} · profil ${e.profil}`));
+            corps.appendChild(elem("div", "chemin", e.chemin));
+            bloc.appendChild(corps);
+
+            const actions = elem("div", "ext-actions");
+            if (e.installe) {
+              actions.appendChild(elem("span", "petit-bouton", "importée"));
+            } else {
+              const bouton = elem("button", "petit-bouton", "Importer");
+              bouton.onclick = () => ipc({ m: "chromeInstaller", id: e.id, chemin: e.chemin });
+              actions.appendChild(bouton);
+            }
+            bloc.appendChild(actions);
+            zone.appendChild(bloc);
+          }
+          const note = elem(
+            "div",
+            "note",
+            "Une extension importée est chargée tout de suite. Une extension déjà présente dans Chrome est un dossier décompressé — c'est exactement le format qu'attend le moteur."
+          );
+          zone.appendChild(note);
+        }
+
+        function rendreCompteurs() {
+          if (!etat || !etat.budget) return;
+          const b = etat.budget;
+          document.getElementById("c-reveilles").textContent = String(b.reveilles);
+          document.getElementById("c-endormis").textContent = String(b.endormis);
+          document.getElementById("c-mo").textContent = String(Math.round(b.mo));
+          document.getElementById("c-processus").textContent = String(b.processus);
+        }
+
+        function rendreBudgetSelect(s) {
+          const sel = document.getElementById("budget");
+          if (!sel.options.length) {
+            for (let n = 2; n <= 16; n += 2) {
+              const o = document.createElement("option");
+              o.value = String(n);
+              o.textContent = n === 16 ? "16 (maximum)" : String(n);
+              sel.appendChild(o);
+            }
+            sel.addEventListener("change", () => ipc({ m: "budget", valeur: Number(sel.value) }));
+          }
+          const courant = String((s.reglages && s.reglages.budget) || 6);
+          if (sel.value !== courant) sel.value = courant;
+        }
+
+        let parDefautDemande = false;
+        let lecturesDemandees = false;
+        window.trame.lecturesCompte = (c) => {
+          const base = "Une page restée affichée 8 secondes est gardée sur ce PC (jamais envoyée ailleurs). Tapez « ? » suivi de quelques mots dans la barre pour la retrouver. Les pages avec un champ de mot de passe ne sont jamais gardées.";
+          document.getElementById("txt-lectures").textContent = c.n ? `${base} ${c.n} page(s) gardée(s), ${c.mo} Mo.` : base;
+        };
+        function rendre() {
+          if (!etat) return;
+          // L'etat « navigateur par defaut » se lit dans Windows, a l'ouverture de la page.
+          if (!parDefautDemande) {
+            parDefautDemande = true;
+            ipc({ m: "etatParDefaut" });
+          }
+          const pd = (etat.reglages || {}).parDefaut;
+          document.getElementById("txt-par-defaut").textContent =
+            pd === true ? "Trame est votre navigateur par défaut ✓"
+            : pd === false ? "Trame n'est pas votre navigateur par défaut"
+            : "Trame est-il votre navigateur par défaut ?";
+          document.getElementById("btn-par-defaut").textContent = pd === true ? "Changer dans Windows" : "Choisir dans Windows";
+          document.getElementById("version").textContent = "Trame " + (etat.version || "");
+          const profil = etat.profil || "";
+          document.getElementById("chemin-profil").textContent = profil;
+          document.getElementById("chemin-profil-2").textContent = profil;
+          document.getElementById("c-historique").textContent =
+            `${etat.historique || 0} page(s) enregistrée(s)`;
+
+          rendreMoteurs(etat);
+          rendreExtensions(etat);
+          rendreExtensionsChrome(etat);
+          rendreChromeDisponibles(etat);
+          rendreCompteurs();
+          rendreBudgetSelect(etat);
+
+          const r = etat.reglages || {};
+          document.getElementById("bascule-veille").className =
+            "bascule" + (r.veilleAuto ? " on" : "");
+          document.getElementById("bascule-barre-ext").className =
+            "bascule" + (r.barreExtensions ? " on" : "");
+          document.getElementById("bascule-memoire-basse").className =
+            "bascule" + (r.memoireBasse ? " on" : "");
+          document.getElementById("bascule-budget-auto").className =
+            "bascule" + (r.budgetAuto ? " on" : "");
+          document.getElementById("bascule-nettoyer").className = "bascule" + (r.nettoyerAdresses ? " on" : "");
+          document.getElementById("bascule-affiliation").className = "bascule" + (r.garderAffiliation ? " on" : "");
+          document.getElementById("bascule-pause").className = "bascule" + (r.pauseOnglets ? " on" : "");
+          document.getElementById("bascule-lecture").className = "bascule" + (r.memoireLecture ? " on" : "");
+          const exclus = r.lectureExclus || [];
+          document.getElementById("txt-exclus").textContent = exclus.length
+            ? `${exclus.length} site(s) — cliquer sur un site pour le garder de nouveau.`
+            : "Aucun. Depuis une page : bouton ⋯ → « Ne jamais garder ce site ».";
+          const zoneExclus = document.getElementById("lecture-exclus");
+          zoneExclus.textContent = "";
+          for (const d of exclus) {
+            const b = elem("button", "exclu", d + " ×");
+            b.title = "Garder de nouveau ce site";
+            b.onclick = () => ipc({ m: "lectureInclure", domaine: d });
+            zoneExclus.appendChild(b);
+          }
+          if (!lecturesDemandees) {
+            lecturesDemandees = true;
+            ipc({ m: "lecturesCompter" });
+          }
+          const pistage = document.getElementById("anti-pistage");
+          if (document.activeElement !== pistage) pistage.value = r.antiPistage || "stricte";
+          const n = r.adressesNettoyees || 0;
+          document.getElementById("txt-nettoyage").textContent =
+            "Retire les paramètres de pistage (utm, fbclid, campagnes Amazon…) avant d'ouvrir une page." +
+            (n ? ` ${n} adresse(s) nettoyée(s) depuis le démarrage.` : "");
+        }
+
+        const confid = (champ, valeur) => ipc({ m: "confidentialite", [champ]: valeur });
+        const reglage = (cle) => !!(etat && etat.reglages && etat.reglages[cle]);
+        document.getElementById("bascule-nettoyer").onclick = () => confid("nettoyerAdresses", !reglage("nettoyerAdresses"));
+        document.getElementById("bascule-affiliation").onclick = () => confid("garderAffiliation", !reglage("garderAffiliation"));
+        document.getElementById("bascule-pause").onclick = () => confid("pauseOnglets", !reglage("pauseOnglets"));
+        document.getElementById("anti-pistage").onchange = (e) => confid("antiPistage", e.target.value);
+        document.getElementById("bascule-lecture").onclick = () => ipc({ m: "memoireLecture", actif: !reglage("memoireLecture") });
+        document.getElementById("btn-lectures-effacer").onclick = () => {
+          if (!confirm("Effacer toute la mémoire de lecture ? Les pages gardées ne pourront plus être retrouvées par leur texte.")) return;
+          ipc({ m: "lecturesEffacer" });
+          lecturesDemandees = false;
+        };
+
+        document.getElementById("bascule-veille").onclick = () =>
+          ipc({ m: "veilleAuto", actif: !((etat && etat.reglages && etat.reglages.veilleAuto) || false) });
+        document.getElementById("btn-par-defaut").onclick = () => ipc({ m: "navigateurParDefaut" });
+        document.getElementById("bascule-budget-auto").onclick = () =>
+          ipc({ m: "budgetAuto", actif: !((etat && etat.reglages && etat.reglages.budgetAuto) || false) });
+        document.getElementById("bascule-memoire-basse").onclick = () =>
+          ipc({ m: "memoireBasse", actif: !((etat && etat.reglages && etat.reglages.memoireBasse) || false) });
+        document.getElementById("bascule-barre-ext").onclick = () =>
+          ipc({ m: "barreExtensions", visible: !((etat && etat.reglages && etat.reglages.barreExtensions) || false) });
+        document.getElementById("btn-recharger").onclick = () => ipc({ m: "extensionsRecharger" });
+        document.getElementById("btn-dossier-ext").onclick = () => ipc({ m: "dossierExtensions" });
+        document.getElementById("btn-chercher-chrome").addEventListener("click", () => ipc({ m: "chromeScan" }));
+
+        // ---- installateur d'extensions Chrome (magasin + fichier)
+        {
+          const saisie = document.getElementById("chrome-saisie");
+          const etat = document.getElementById("chrome-etat");
+          const installer = () => {
+            const texte = (saisie.value || "").trim();
+            if (!texte) {
+              saisie.focus();
+              etat.textContent = "Collez d'abord un identifiant ou un lien du magasin.";
+              return;
+            }
+            etat.textContent = "Téléchargement en cours…";
+            ipc({ m: "chromeInstallerMagasin", saisie: texte });
+          };
+          document.getElementById("btn-chrome-installer").onclick = installer;
+          saisie.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              installer();
+            }
+          });
+          document.getElementById("btn-chrome-fichier").onclick = () => {
+            etat.textContent = "Choisissez un fichier .crx ou .zip…";
+            ipc({ m: "chromeInstallerFichier" });
+          };
+        }
+        document.getElementById("btn-dossier-chrome").onclick = () =>
+          ipc({ m: "dossierExtensionsChrome" });
+        document.getElementById("btn-relire-chrome").onclick = () => ipc({ m: "pret", surface: "reglages" });
+        document.getElementById("btn-profil").onclick = () => ipc({ m: "profilDossier" });
+        document.getElementById("btn-vider-historique").onclick = () => ipc({ m: "historiqueVider" });
+
+        ipc({ m: "pret", surface: "reglages" });
+        setInterval(() => { if (!etat) ipc({ m: "pret", surface: "reglages" }); }, 900);
+      })();
+    </script>
+  </body>
+</html>

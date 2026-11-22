@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Masquer</title>
+    <style>
+      :root {
+        --fond: #0a0e15;
+        --bord: rgba(255, 255, 255, 0.08);
+        --texte: #e9eefa;
+        --texte-2: #97a4bb;
+        --texte-3: #616e85;
+        --accent: #60a5fa;
+        --danger: #f87171;
+        --vif: #5eead4;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; }
+      body {
+        background: linear-gradient(180deg, #0b1017, var(--fond));
+        color: var(--texte);
+        font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+        font-size: 12.5px;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        padding: 14px 14px 10px;
+        border-bottom: 1px solid var(--bord);
+        flex: 0 0 auto;
+      }
+      h1 {
+        margin: 0;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--texte-3);
+        font-weight: 600;
+      }
+      .domaine {
+        margin-top: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--texte);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .domaine span { color: var(--texte-3); font-size: 11px; font-weight: 400; }
+      button {
+        font: inherit;
+        color: var(--texte-2);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--bord);
+        border-radius: 8px;
+        padding: 7px 10px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      button:hover { background: rgba(255, 255, 255, 0.10); color: var(--texte); }
+      button.principal {
+        width: 100%;
+        margin-top: 10px;
+        background: rgba(96, 165, 250, 0.14);
+        border-color: rgba(96, 165, 250, 0.35);
+        color: #cfe2ff;
+        font-weight: 600;
+      }
+      button.principal:hover { background: rgba(96, 165, 250, 0.24); }
+      .liste { flex: 1 1 auto; overflow-y: auto; padding: 10px 12px 16px; scrollbar-width: thin; }
+      .groupe { margin-bottom: 14px; }
+      .groupe-titre {
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--texte-3);
+        margin: 0 2px 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .groupe-titre .ici { color: var(--vif); text-transform: none; letter-spacing: 0; font-size: 10px; }
+      .regle {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid var(--bord);
+        border-radius: 9px;
+        margin-bottom: 6px;
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .regle.coupee { opacity: 0.45; }
+      .corps { flex: 1; min-width: 0; }
+      .selecteur {
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 10.5px;
+        color: #a9c6ee;
+        word-break: break-all;
+        line-height: 1.35;
+      }
+      .libelle { font-size: 10.5px; color: var(--texte-3); margin-top: 2px; }
+      .actions { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; }
+      .actions button { padding: 3px 6px; font-size: 10px; border-radius: 6px; }
+      .actions button.suppr:hover { background: rgba(248, 113, 113, 0.18); color: #ffb4b4; border-color: rgba(248,113,113,.4); }
+      .bas { border-top: 1px solid var(--bord); padding: 10px 12px 12px; flex: 0 0 auto; }
+      .bas input {
+        width: 100%;
+        font: inherit;
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 11px;
+        color: var(--texte);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--bord);
+        border-radius: 7px;
+        padding: 7px 9px;
+        outline: none;
+      }
+      .bas input:focus { border-color: rgba(96, 165, 250, 0.5); }
+      .bas .rangee { display: flex; gap: 6px; margin-top: 7px; }
+      .bas .rangee button { flex: 1; }
+      .vide { color: var(--texte-3); font-size: 11.5px; line-height: 1.5; padding: 6px 2px; }
+      .note { color: var(--texte-3); font-size: 10.5px; line-height: 1.5; margin: 10px 2px 0; }
+      .resume { font-size: 11px; color: var(--texte-3); margin-top: 6px; font-variant-numeric: tabular-nums; }
+      .resume b { color: var(--vif); font-weight: 600; }
+      .paquet {
+        display: flex; align-items: center; gap: 8px; padding: 8px 9px; margin-bottom: 6px;
+        border: 1px solid rgba(96, 165, 250, 0.28); border-radius: 9px; background: rgba(96, 165, 250, 0.06);
+      }
+      .paquet .titre { flex: 1; font-size: 12px; font-weight: 600; }
+      .paquet .detail { font-size: 10.5px; color: var(--texte-3); font-weight: 400; }
+      .compte { font-size: 10.5px; margin-top: 3px; font-variant-numeric: tabular-nums; color: var(--texte-3); }
+      .compte.actif { color: #86efac; }
+      .compte.casse { color: #fbbf24; }
+      .texte-cond { font-size: 10.5px; color: #cfe2ff; margin-top: 2px; }
+      .groupe-titre .mini { margin-left: auto; padding: 1px 6px; font-size: 9.5px; border-radius: 6px; letter-spacing: 0; text-transform: none; }
+      .groupe-titre .mini + .mini { margin-left: 4px; }
+      .formulaire { display: flex; gap: 6px; margin: 0 0 8px; }
+      .formulaire input { flex: 1; min-width: 0; font: inherit; font-size: 11px; color: var(--texte); background: rgba(255,255,255,.05); border: 1px solid var(--bord); border-radius: 7px; padding: 5px 8px; outline: none; }
+      .echange { display: none; margin-top: 8px; }
+      .echange.ouvert { display: block; }
+      .echange textarea {
+        width: 100%; height: 110px; resize: vertical; font: 10.5px/1.4 ui-monospace, Consolas, monospace;
+        color: var(--texte); background: rgba(255,255,255,.05); border: 1px solid var(--bord); border-radius: 7px; padding: 7px 9px; outline: none;
+      }
+      .echange .rangee { display: flex; gap: 6px; margin-top: 6px; }
+      .echange .rangee button { flex: 1; }
+      .outils { display: flex; gap: 6px; margin-top: 6px; }
+      .outils button { flex: 1; font-size: 10.5px; padding: 5px 6px; }
+      #origine.appuye { background: rgba(251, 191, 36, 0.18); border-color: rgba(251, 191, 36, 0.45); color: #fde68a; }
+      .action {
+        display: inline-block; font-size: 9.5px; letter-spacing: .04em; padding: 1px 6px; margin-bottom: 3px;
+        border-radius: 999px; background: rgba(96, 165, 250, 0.14); color: #cfe2ff;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Masquer des éléments</h1>
+      <div class="domaine" id="domaine">—</div>
+      <div class="resume" id="resume"></div>
+      <button class="principal" id="choisir" title="Survolez, la molette agrandit au bloc parent, cliquez pour choisir">Choisir un élément dans la page</button>
+      <div class="outils">
+        <button id="annuler" title="Retire la dernière règle ajoutée">Annuler la dernière</button>
+        <button id="origine" title="Gardez le bouton appuyé : la page s'affiche sans vos règles">Voir la page d'origine</button>
+      </div>
+    </header>
+
+    <div class="liste" id="liste"></div>
+
+    <div class="bas">
+      <input id="selecteur" type="text" spellcheck="false" placeholder="ou coller un sélecteur CSS : #shorts, ytd-ad-slot-renderer…" />
+      <div class="rangee">
+        <button id="ajouter">Ajouter pour ce domaine</button>
+        <button id="ajouter-partout" title="La règle s'appliquera sur tous les sites">Partout</button>
+        <button id="importer-ouvrir" title="Coller des règles exportées (d'ici ou d'un autre Trame)">Importer…</button>
+      </div>
+      <div class="echange" id="echange">
+        <textarea id="echange-texte" spellcheck="false" placeholder="Collez ici des règles exportées, puis « Importer »."></textarea>
+        <div class="rangee">
+          <button id="echange-action">Importer</button>
+          <button id="echange-fermer">Fermer</button>
+        </div>
+      </div>
+      <p class="note">
+        Une règle cache l'élément repéré par son sélecteur CSS, sur ce site, à chaque visite — y
+        compris dans ce que la page charge en défilant. Pour choisir : survolez, la molette agrandit
+        au bloc parent, cliquez. Les règles vivent dans <b>zap.json</b> du profil : rien n'est
+        envoyé sur Internet.
+      </p>
+    </div>
+
+    <script>
+      (function () {
+        const ipc = (o) => {
+          try { window.ipc.postMessage(JSON.stringify(o)); } catch (e) {}
+        };
+        let etat = null;
+
+        function elem(tag, classe, texte) {
+          const d = document.createElement(tag);
+          if (classe) d.className = classe;
+          if (texte !== undefined && texte !== null) d.textContent = String(texte);
+          return d;
+        }
+
+        window.trame = {
+          etat(s) { etat = s; rendre(); },
+          budget() {},
+          resultats() {},
+          toast(m) { const z = document.getElementById("domaine"); if (z) z.title = m; },
+          focusCouture() {},
+        };
+
+        function rendre() {
+          if (!etat || !etat.zap) return;
+          const domaine = etat.zap.domaine || "";
+          const zone = document.getElementById("domaine");
+          zone.textContent = "";
+          zone.appendChild(document.createTextNode(domaine || "aucun site ouvert"));
+          if (domaine) zone.appendChild(elem("span", null, `  ·  ${etat.zap.regles.filter((r) => r.domaine === domaine || !r.domaine).length} règle(s) ici`));
+
+          // Ce que les regles attrapent dans la page affichee (remonte par le script vivant).
+          const ici = etat.zap.regles.filter((r) => r.actif && (r.domaine === domaine || !r.domaine));
+          const masques = ici.reduce((s, r) => s + (r.n || 0), 0);
+          const mesure = ici.some((r) => r.n !== null && r.n !== undefined);
+          const resume = document.getElementById("resume");
+          resume.textContent = "";
+          if (domaine && mesure) {
+            resume.append(elem("b", null, String(ici.length)), ` règle(s) active(s) ici · `, elem("b", null, String(masques)), ` élément(s) masqué(s) sur cette page`);
+          }
+
+          const liste = document.getElementById("liste");
+          liste.textContent = "";
+
+          // Paquets tout faits : un interrupteur pour l'ensemble.
+          for (const p of etat.zap.paquets || []) {
+            const siennes = etat.zap.regles.filter((r) => r.paquet === p.id);
+            const actives = siennes.filter((r) => r.actif).length;
+            const ligne = elem("div", "paquet");
+            const titre = elem("div", "titre", p.titre);
+            titre.appendChild(elem("div", "detail", siennes.length ? `${actives} / ${siennes.length} règles actives` : "retiré"));
+            ligne.appendChild(titre);
+            const allume = actives > 0;
+            const b = elem("button", null, allume ? "couper" : "activer");
+            b.onclick = () => ipc({ m: "zapPaquet", id: p.id, actif: !allume });
+            ligne.appendChild(b);
+            liste.appendChild(ligne);
+          }
+
+          const groupes = new Map();
+          for (const r of etat.zap.regles) {
+            const cle = r.domaine || "";
+            if (!groupes.has(cle)) groupes.set(cle, []);
+            groupes.get(cle).push(r);
+          }
+          // Le domaine courant d'abord, puis « tous les sites », puis le reste.
+          const ordre = [...groupes.keys()].sort((a, b) => {
+            const poids = (d) => (d === domaine ? 0 : d === "" ? 1 : 2);
+            return poids(a) - poids(b) || a.localeCompare(b);
+          });
+
+          if (!etat.zap.regles.length) {
+            liste.appendChild(elem("div", "vide", "Aucune règle. Clique « Choisir un élément dans la page », puis désigne ce que tu ne veux plus voir."));
+          }
+
+          for (const cle of ordre) {
+            const bloc = elem("div", "groupe");
+            const titre = elem("div", "groupe-titre");
+            titre.appendChild(elem("span", null, cle || "tous les sites"));
+            if (cle === domaine) titre.appendChild(elem("span", "ici", "· ici"));
+            if (cle) {
+              // Copier les regles de ce site vers un autre, ou les exporter en texte.
+              const copier = elem("button", "mini", "copier vers…");
+              const exporter = elem("button", "mini", "exporter");
+              titre.append(copier, exporter);
+              copier.onclick = () => {
+                if (bloc.querySelector(".formulaire")) return;
+                const f = elem("div", "formulaire");
+                const champ = document.createElement("input");
+                champ.placeholder = "autre site, ex. youtube-nocookie.com";
+                const ok = elem("button", null, "copier");
+                const envoyer = () => { if (champ.value.trim()) ipc({ m: "zapCopier", de: cle, vers: champ.value.trim() }); f.remove(); };
+                ok.onclick = envoyer;
+                champ.addEventListener("keydown", (e) => { if (e.key === "Enter") envoyer(); if (e.key === "Escape") f.remove(); });
+                f.append(champ, ok);
+                titre.after(f);
+                champ.focus();
+              };
+              exporter.onclick = () => montrerExport(cle);
+            }
+            bloc.appendChild(titre);
+
+            for (const regle of groupes.get(cle)) {
+              const ligne = elem("div", "regle" + (regle.actif ? "" : " coupee"));
+              const corps = elem("div", "corps");
+              if (regle.action) {
+                const detail = regle.action === "texte" ? ` → « ${regle.valeur} »` : regle.action === "style" ? ` (${regle.valeur})` : "";
+                corps.appendChild(elem("div", "action", regle.nomAction + detail));
+              }
+              corps.appendChild(elem("div", "selecteur", regle.selecteur));
+              if (regle.texte) corps.appendChild(elem("div", "texte-cond", `seulement si le texte est « ${regle.texte} »`));
+              if (regle.libelle) corps.appendChild(elem("div", "libelle", regle.libelle));
+              // Compte dans la page affichee, ou alerte si la regle n'attrape plus rien depuis longtemps.
+              if (regle.actif && cle === domaine && regle.n !== null && regle.n !== undefined) {
+                corps.appendChild(elem("div", "compte" + (regle.n ? " actif" : ""), regle.n ? `${regle.n} masqué(s) sur cette page` : "rien sur cette page"));
+              }
+              const jours = regle.vuLe ? Math.floor((etat.zap.maintenant - regle.vuLe) / 86400000) : null;
+              if (regle.actif && jours !== null && jours >= 30) {
+                const c = elem("div", "compte casse", `n'a rien attrapé depuis ${jours} jours : le site a peut-être changé`);
+                corps.appendChild(c);
+              }
+              ligne.appendChild(corps);
+
+              const actions = elem("div", "actions");
+              const bascule = elem("button", null, regle.actif ? "couper" : "activer");
+              bascule.onclick = () => ipc({ m: "zapBasculer", index: regle.index });
+              actions.appendChild(bascule);
+              const suppr = elem("button", "suppr", "supprimer");
+              suppr.onclick = () => ipc({ m: "zapSupprimer", index: regle.index });
+              actions.appendChild(suppr);
+              ligne.appendChild(actions);
+
+              bloc.appendChild(ligne);
+            }
+            liste.appendChild(bloc);
+          }
+        }
+
+        document.getElementById("choisir").onclick = () => ipc({ m: "zapChoisir" });
+        document.getElementById("annuler").onclick = () => ipc({ m: "zapAnnuler" });
+
+        // Echange de regles en texte : export (copie) et import (collage).
+        const echange = document.getElementById("echange");
+        const zone = document.getElementById("echange-texte");
+        const bouton = document.getElementById("echange-action");
+        let mode = "importer";
+        const ouvrirEchange = (m) => {
+          mode = m;
+          echange.classList.add("ouvert");
+          bouton.textContent = m === "importer" ? "Importer" : "Copier";
+        };
+        window.montrerExport = (site) => {
+          const regles = ((etat && etat.zap && etat.zap.regles) || [])
+            .filter((r) => r.domaine === site)
+            .map((r) => {
+              const o = { domaine: r.domaine, selecteur: r.selecteur, libelle: r.libelle, actif: r.actif };
+              if (r.texte) o.texte = r.texte;
+              if (r.action) o.action = r.action;
+              if (r.valeur) o.valeur = r.valeur;
+              return o;
+            });
+          zone.value = JSON.stringify(regles, null, 2);
+          ouvrirEchange("exporter");
+          zone.focus();
+          zone.select();
+        };
+        document.getElementById("importer-ouvrir").onclick = () => { zone.value = ""; ouvrirEchange("importer"); zone.focus(); };
+        document.getElementById("echange-fermer").onclick = () => echange.classList.remove("ouvert");
+        bouton.onclick = async () => {
+          if (mode === "importer") {
+            if (zone.value.trim()) ipc({ m: "zapImporter", texte: zone.value });
+            echange.classList.remove("ouvert");
+          } else {
+            zone.select();
+            try { await navigator.clipboard.writeText(zone.value); bouton.textContent = "Copié ✓"; }
+            catch (e) { document.execCommand("copy"); bouton.textContent = "Copié ✓"; }
+          }
+        };
+        // « Voir la page d'origine » : tant que le bouton est appuye.
+        const origine = document.getElementById("origine");
+        let appuye = false;
+        const voir = (v) => {
+          if (appuye === v) return;
+          appuye = v;
+          origine.classList.toggle("appuye", v);
+          ipc({ m: "zapOrigine", voir: v });
+        };
+        origine.addEventListener("pointerdown", (e) => { e.preventDefault(); voir(true); });
+        for (const ev of ["pointerup", "pointerleave", "pointercancel"]) origine.addEventListener(ev, () => voir(false));
+        window.addEventListener("blur", () => voir(false));
+        document.getElementById("ajouter").onclick = () => {
+          const champ = document.getElementById("selecteur");
+          if (champ.value.trim()) {
+            ipc({ m: "zapAjouter", selecteur: champ.value.trim(), domaine: (etat && etat.zap && etat.zap.domaine) || "" });
+            champ.value = "";
+          }
+        };
+        document.getElementById("ajouter-partout").onclick = () => {
+          const champ = document.getElementById("selecteur");
+          if (champ.value.trim()) {
+            ipc({ m: "zapAjouter", selecteur: champ.value.trim(), domaine: "" });
+            champ.value = "";
+          }
+        };
+        document.getElementById("selecteur").addEventListener("keydown", (e) => {
+          if (e.key === "Enter") document.getElementById("ajouter").click();
+        });
+
+        ipc({ m: "pret", surface: "zap" });
+        setInterval(() => { if (!etat) ipc({ m: "pret", surface: "zap" }); }, 900);
+      })();
+    </script>
+  </body>
+</html>
