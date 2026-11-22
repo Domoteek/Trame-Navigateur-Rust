@@ -1189,6 +1189,69 @@ async function suite() {
     await p.close();
   });
 
+  // ---------------------------------------------------------------- video flottante
+
+  // Une video sans reseau : un canevas anime, diffuse dans la balise <video>.
+  const PAGE_VIDEO = `<body style="margin:0;background:#111">
+    <canvas id="c" width="320" height="180" style="display:none"></canvas>
+    <video id="v" muted autoplay playsinline style="position:absolute;left:100px;top:80px;width:640px;height:360px"></video>
+    <video id="petite" muted style="position:absolute;left:900px;top:80px;width:120px;height:70px"></video>
+    <script>
+      const c = document.getElementById("c"), x = c.getContext("2d");
+      let i = 0;
+      setInterval(() => { x.fillStyle = "hsl(" + (i++ * 7) % 360 + ",70%,50%)"; x.fillRect(0, 0, 320, 180); }, 40);
+      const v = document.getElementById("v");
+      v.srcObject = c.captureStream(25);
+      v.play().catch(() => {});
+    </script></body>`;
+
+  await cas("incrustation : la pastille apparait au survol d'une video, pas d'une petite", async () => {
+    const p = await page("newtab.html");
+    await p.setContent(PAGE_VIDEO);
+    await p.waitForFunction(() => document.getElementById("v").readyState > 0);
+    await p.addScriptTag({ path: path.join(UI, "incrustation.js") });
+    await p.mouse.move(420, 260);
+    await p.mouse.move(421, 262);
+    await p.waitForTimeout(250);
+    // La pastille est centree en haut de la video (x = 100 + 640 / 2, y = 80 + 12 + 15).
+    const dessus = await p.evaluate(() => document.elementFromPoint(420, 107)?.tagName.toLowerCase());
+    egal(dessus, "trame-incrustation", "la pastille doit etre sous le pointeur, en haut de la video");
+    await p.mouse.move(960, 115);
+    await p.waitForTimeout(250);
+    const ailleurs = await p.evaluate(() => document.elementFromPoint(420, 107)?.tagName.toLowerCase());
+    egal(ailleurs, "video", "la pastille disparait hors de la video (la petite n'en a pas)");
+    await p.close();
+  });
+
+  await cas("incrustation : le clic sort la video sans la mettre en pause", async () => {
+    const p = await page("newtab.html");
+    await p.setContent(PAGE_VIDEO);
+    await p.waitForFunction(() => document.getElementById("v").readyState > 0);
+    await p.addScriptTag({ path: path.join(UI, "incrustation.js") });
+    await p.evaluate(() => {
+      window.__clicsLecteur = 0;
+      document.getElementById("v").addEventListener("click", () => window.__clicsLecteur++);
+    });
+    await p.mouse.move(420, 260);
+    await p.mouse.move(420, 200);
+    await p.waitForTimeout(250);
+    await p.mouse.click(420, 107);
+    await p.waitForTimeout(500);
+    const etat = await p.evaluate(() => ({
+      clics: window.__clicsLecteur,
+      enPause: document.getElementById("v").paused,
+      permis: document.pictureInPictureEnabled,
+      flottante: document.pictureInPictureElement?.id || null,
+      erreurs: window.__ipc.filter((m) => m.m === "erreurUi").map((m) => m.message),
+    }));
+    egal(etat.clics, 0, "le lecteur ne doit pas recevoir le clic de la pastille");
+    egal(etat.enPause, false, "la video continue de jouer");
+    // Le Chromium sans fenetre de Playwright peut refuser la fenetre flottante : on ne juge
+    // la sortie que s'il l'autorise (le vrai WebView2 est verifie a part).
+    if (etat.permis) egal(etat.flottante, "v", `la video doit etre sortie (erreurs : ${etat.erreurs})`);
+    await p.close();
+  });
+
   // ---------------------------------------------------------------- recherche dans la page
 
   await cas("recherche : Ctrl+F installe la barre, une seule fois", async () => {

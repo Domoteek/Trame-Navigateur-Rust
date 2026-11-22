@@ -1147,9 +1147,10 @@ impl App {
             builder
         } else {
             builder.with_initialization_script(format!(
-                "{}\n{}\n{}",
+                "{}\n{}\n{}\n{}",
                 extensions::AMORCE,
                 RACCOURCIS,
+                INCRUSTATION,
                 extensions::script_de_debut(&self.extensions)
             ))
         };
@@ -5784,6 +5785,9 @@ const ZAP_VIVANT_JS: &str = include_str!("../ui/zap-vivant.js");
 /// il est embarque a la compilation et teste par `outils/tester-ui.mjs` (vraies frappes).
 const RACCOURCIS: &str = include_str!("../ui/raccourcis.js");
 
+/// Video flottante : pastille au survol d'une video, et Alt+P (`ui/incrustation.js`).
+const INCRUSTATION: &str = include_str!("../ui/incrustation.js");
+
 /// Une extension qui demande une vraie **fenetre** (`chrome.windows.create` avec une taille :
 /// passkey de Bitwarden, « popout » d'un gestionnaire de mots de passe) doit l'obtenir. Ces
 /// extensions suivent la fenetre creee (identifiant, fermeture par `window.close()`) : rouverte
@@ -5941,6 +5945,9 @@ mod tests {
     fn l_amorce_des_raccourcis_est_du_javascript_non_vide() {
         assert!(RACCOURCIS.contains("keydown"));
         assert!(RACCOURCIS.len() > 200);
+        assert!(INCRUSTATION.contains("requestPictureInPicture"));
+        // YouTube impose les Trusted Types : une affectation HTML ferait echouer le script.
+        assert!(!INCRUSTATION.contains("innerHTML"));
     }
 
     #[test]

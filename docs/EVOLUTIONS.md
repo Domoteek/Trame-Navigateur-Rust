@@ -633,6 +633,28 @@ Limites : une pub **cousue dans le flux** (essais de YouTube depuis 2025) n'est 
 dans la réponse : le filet de la 1.0 (son coupé, ×16, « Passer ») reste en place. YouTube peut
 afficher son avertissement anti-bloqueur ; ses CGU interdisent les bloqueurs.
 
+## 10 octies. 2026-11-22, nuit — la vidéo flottante (étape 1)
+
+Demande de Clément, sur le modèle de l'icône d'Opera GX : sortir une vidéo de la page dans
+une petite fenêtre qu'on place où on veut, sur n'importe quel écran. Choix : « la 1, puis la 3 ».
+Étape 1 = la fenêtre flottante de Chromium (`requestPictureInPicture`) ; étape 3 (à venir) =
+déplacer l'onglet entier dans une mini-fenêtre de Trame, pour garder toutes les commandes du site.
+
+| Ajout | Détail |
+|---|---|
+| **`ui/incrustation.js`** | injecté dans chaque onglet avec les raccourcis (`INCRUSTATION` dans `app.rs`). Au survol d'une vidéo d'au moins 200 × 120, une pastille « Sortir la vidéo » apparaît en haut de l'image (racine fantôme fermée, construite sans HTML brut à cause des Trusted Types de YouTube) ; elle devient « Ramener » quand la vidéo flotte et disparaît après 2,5 s sans mouvement ou en plein écran |
+| **Alt+P** | sort ou ramène la vidéo survolée, sinon la vidéo principale (celle qui joue, sinon la plus grande) |
+| **Clic protégé** | appui, clic et double clic de la pastille n'atteignent pas le lecteur (YouTube mettait en pause) ; l'attribut `disablepictureinpicture` d'un site est retiré |
+
+Preuves : `tester-ui.mjs` 64/64 (2 nouveaux cas : pastille au survol, pas sur une petite vidéo ;
+clic sans pause ni clic transmis au lecteur) ; vrai WebView2 (Trame caché, profil jetable,
+vidéo de canevas) : `pictureInPictureEnabled` vrai, clic → vidéo flottante, lecture continue,
+Alt+P la ramène puis la ressort. `cargo test --release` 176/176. Pas encore installé chez Clément.
+
+Limites : la fenêtre de Chromium n'a que lecture/pause et retour ; une vidéo dans un cadre
+d'un autre site (lecteur YouTube intégré) n'a pas de pastille si le script ne court pas dans
+ce cadre.
+
 ## 11. L'état aujourd'hui
 
 ```
