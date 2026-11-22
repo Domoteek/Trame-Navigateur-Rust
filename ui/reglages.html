@@ -625,7 +625,25 @@ setInterval(() => {
   const version = document.getElementById('maj-version');
   if (version) version.textContent = etat.version || '—';
   const ligne = document.getElementById('maj-etat');
-  if (ligne) ligne.textContent = etat.maj ? `Trame ${etat.maj.version} disponible` : 'Rien de plus récent';
+  if (!ligne) return;
+  if (!etat.maj) {
+    ligne.textContent = 'Rien de plus récent';
+    return;
+  }
+  // La progression vient du gestionnaire de telechargements : c'est sa liste, pas un second
+  // compteur. On la retrouve par l'adresse du setup.
+  const suivi = (etat.telechargements && etat.telechargements.liste ? etat.telechargements.liste : [])
+    .find((d) => d.url === etat.maj.url);
+  if (!suivi) {
+    ligne.textContent = `Trame ${etat.maj.version} disponible — cliquez sur Installer`;
+  } else if (suivi.etat === 'en_cours' || suivi.etat === 'en_pause') {
+    const pourcent = suivi.total ? Math.min(100, (suivi.recu / suivi.total) * 100).toFixed(0) : null;
+    ligne.textContent = `Téléchargement ${pourcent !== null ? pourcent + ' %' : ''} (${suivi.recuLisible} sur ${suivi.totalLisible || '?'})`;
+  } else if (suivi.etat === 'termine') {
+    ligne.textContent = `Trame ${etat.maj.version} téléchargée — cliquez sur Installer`;
+  } else {
+    ligne.textContent = `Trame ${etat.maj.version} disponible — téléchargement ${suivi.etat}`;
+  }
 }, 1000);
 
 function elem(tag, classe, texte) {

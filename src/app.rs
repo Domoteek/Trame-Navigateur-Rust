@@ -4960,12 +4960,13 @@ impl App {
             return;
         };
         info!("mise a jour : {} disponible ({})", nouveaute.version, nouveaute.url);
+        // On PROPOSE, on ne telecharge pas : c'est a Clement de valider (reglages > Mises a jour).
         self.signaler(&format!(
-            "Trame {} est disponible : le nouveau programme se télécharge.",
+            "Trame {} est disponible — Réglages (Ctrl+,) puis « Mises à jour ».",
             nouveaute.version
         ));
-        self.ouvrir_onglet(nouveaute.url.clone(), Declencheur::Lien, None);
         self.maj = Some(nouveaute);
+        self.pousser_etat();
     }
 
     /// Relit la fiche produit (bouton « Verifier maintenant » des reglages).
