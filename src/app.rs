@@ -3312,12 +3312,31 @@ impl App {
                 }
             }
             "recharger" => {
-                if let Some(w) = self.actif.and_then(|id| self.webviews.get(&id)) {
+                let id = v["id"].as_u64().map(|n| n as TabId).or(self.actif);
+                if let Some(w) = id.and_then(|id| self.webviews.get(&id)) {
                     let _ = w.reload();
+                }
+            }
+            "reveillerFond" => {
+                // Reveiller sans afficher (menu de l'onglet).
+                if let Some(id) = v["id"].as_u64().map(|n| n as TabId) {
+                    self.reveiller(id);
+                    self.marquer_modifie();
+                    self.pousser_etat();
                 }
             }
             "endormir" => {
                 let id = v["id"].as_u64().map(|n| n as TabId).or(self.actif);
+                // L'onglet affiche ne peut pas dormir : on passe d'abord au precedent.
+                if let Some(id) = id.filter(|id| Some(*id) == self.actif) {
+                    match self.onglet_precedent().filter(|p| *p != id) {
+                        Some(p) => self.activer(p),
+                        None => {
+                            self.signaler("C'est le seul onglet : il reste éveillé.");
+                            return;
+                        }
+                    }
+                }
                 if let Some(id) = id {
                     if self.endormir(id) {
                         self.marquer_modifie();

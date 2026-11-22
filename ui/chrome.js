@@ -914,6 +914,7 @@ function actionMenu(classe, titre, message, contenu) {
       [
         "nouvelOnglet", "chromePopup", "ouvrirReglages", "imprimer", "chercherPage", "guetPoser",
         "guetOuvrir", "rendezVous", "coteAvec", "coteFermer", "coteInverser", "lectureExclure",
+        "endormir", "reveillerFond", "recharger", "tisser",
       ].includes(message.m)
     )
       fermerPanneau();
@@ -1321,8 +1322,10 @@ function rendreBarre(s) {
 
 /* ---------------------------------------------------------- menu de la page */
 
+let cibleMenu = null; // onglet clique dans le rail ; null : la page affichee (bouton « … »)
 function ouvrirMenuPage(ancre) {
   ancreMenu = ancre && typeof ancre.y === "number" ? ancre : null;
+  cibleMenu = ancre && ancre.cible ? ancre.cible : null;
   ouvrirPanneau();
   extensionsVisibles = false;
   commandesVisibles = false;
@@ -1446,6 +1449,42 @@ function lignePage(nom, detail, ic, message, classe) {
   return ligne;
 }
 
+/** « Copier l'adresse » : le presse-papiers est celui de la barre (ce document), pas l'hote. */
+function ligneCopierAdresse(url) {
+  const ligne = elem("div", "menu-ligne");
+  const b = elem("button", "menu-principal");
+  b.title = url;
+  const boite = elem("span", "menu-icone page");
+  boite.appendChild(icone("external", "petit"));
+  b.appendChild(boite);
+  const corps = elem("span", "corps");
+  corps.appendChild(elem("span", "n", "Copier l'adresse"));
+  corps.appendChild(elem("span", "d", url.length > 60 ? url.slice(0, 57) + "…" : url));
+  b.appendChild(corps);
+  b.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const fini = () => {
+      fermerPanneau();
+      toast("Adresse copiée.");
+    };
+    const secours = () => {
+      const t = document.createElement("textarea");
+      t.value = url;
+      document.body.appendChild(t);
+      t.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      t.remove();
+      fini();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(fini, secours);
+    else secours();
+  });
+  ligne.appendChild(b);
+  return ligne;
+}
+
 function puces(liste) {
   const zone = elem("div", "menu-puces");
   for (const p of liste) {
@@ -1459,8 +1498,14 @@ function puces(liste) {
 function rendreMenuPage(s) {
   const zone = document.getElementById("menu-page");
   const c = s.carnet || {};
-  const actif = (s.onglets || []).find((o) => o.actif) || {};
-  const signature = JSON.stringify([c, actif.id, actif.fermeture, actif.titre, s.url]);
+  const onglets = s.onglets || [];
+  const affiche = onglets.find((o) => o.actif) || {};
+  // L'onglet vise : celui du clic droit dans le rail, sinon la page affichee. Les lignes propres
+  // a la page (favori, imprimer, guetter, cote a cote…) ne valent que pour la page affichee.
+  const actif = (cibleMenu && onglets.find((o) => o.id === cibleMenu)) || affiche;
+  const surPage = actif.id === affiche.id;
+  const fils = (s.fils || []).map((f) => [f.id, f.nom]);
+  const signature = JSON.stringify([c, actif.id, actif.fermeture, actif.titre, actif.eveille, actif.muet, actif.fil, fils, s.url, surPage]);
   if (signature === signaturePage && zone.childElementCount) return;
   signaturePage = signature;
   zone.textContent = "";
@@ -1468,10 +1513,35 @@ function rendreMenuPage(s) {
   zone.appendChild(colonne);
 
   const tete = elem("div", "menu-tete");
-  tete.appendChild(elem("span", "menu-titre", "Cette page"));
+  tete.appendChild(elem("span", "menu-titre", surPage ? "Cette page" : "Cet onglet — " + (actif.titre || actif.urlCourte || "")));
   colonne.appendChild(tete);
 
-  if (c.pageWeb) {
+  // L'onglet lui-meme : veille, rechargement, son, adresse, fil.
+  if (actif.id) {
+    colonne.appendChild(
+      actif.eveille
+        ? lignePage("Mettre en veille", surPage ? "libère sa mémoire ; on passe à l'onglet précédent" : "libère sa mémoire, rien n'est fermé", "sleep", { m: "endormir", id: actif.id })
+        : lignePage("Réveiller", "recharge la page en arrière-plan, sans l'afficher", "reload", { m: "reveillerFond", id: actif.id })
+    );
+    if (actif.eveille) colonne.appendChild(lignePage("Recharger", surPage ? "F5" : "", "reload", { m: "recharger", id: actif.id }));
+    colonne.appendChild(
+      actif.muet
+        ? lignePage("Remettre le son", "", "son", { m: "muet", id: actif.id }, "on")
+        : lignePage("Couper le son", "cet onglet seulement", "muet", { m: "muet", id: actif.id })
+    );
+    if (actif.url && /^(https?|file):/.test(actif.url)) colonne.appendChild(ligneCopierAdresse(actif.url));
+    const autres = (s.fils || []).filter((f) => f.id !== actif.fil);
+    colonne.appendChild(elem("div", "menu-sous", "Déplacer vers un fil"));
+    colonne.appendChild(
+      puces(
+        autres
+          .map((f) => ({ t: f.nom, titre: "Ranger cet onglet dans « " + f.nom + " »", message: { m: "tisser", onglet: actif.id, fil: f.id } }))
+          .concat([{ t: "＋ Nouveau fil", titre: "Ouvrir un nouveau fil avec cet onglet", message: { m: "tisser", onglet: actif.id, fil: 0 } }])
+      )
+    );
+  }
+
+  if (c.pageWeb && surPage) {
     colonne.appendChild(
       lignePage(c.favori ? "Retirer des favoris" : "Ajouter aux favoris", "Ctrl+D", "etoile", { m: "favori" }, c.favori ? "on" : "")
     );
@@ -1494,6 +1564,13 @@ function rendreMenuPage(s) {
   }
   colonne.appendChild(elem("div", "menu-sous", "Fermer tout seul"));
   colonne.appendChild(puces(fermetures));
+
+  if (!surPage) {
+    colonne.appendChild(elem("div", "menu-astuce", "Clic sur l'onglet pour l'afficher : favori, impression, guet et côte à côte s'y trouvent."));
+    placerMenuPage();
+    ajusterHauteur();
+    return;
+  }
 
   // Cote a cote
   colonne.appendChild(elem("div", "menu-section", "Côte à côte"));

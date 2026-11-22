@@ -1402,8 +1402,8 @@ async function suite() {
 
     // Clic droit sur un onglet du rail : le menu se pose a gauche, a la hauteur du clic, et
     // annonce son haut a l'hote (region de fenetre) ; trop bas, il remonte dans la fenetre.
-    await p.setViewportSize({ width: 1150, height: 900 });
-    await p.evaluate(() => window.trame.menuPage({ y: 150, h: 900 }));
+    await p.setViewportSize({ width: 1150, height: 1200 });
+    await p.evaluate(() => window.trame.menuPage({ y: 150, h: 1200 }));
     await p.waitForTimeout(120);
     const pose = await p.$eval("#menu-page .menu-colonne", (n) => {
       const r = n.getBoundingClientRect();
@@ -1422,6 +1422,39 @@ async function suite() {
     await p.click("#btn-page");
     const droite = await p.$eval("#menu-page .menu-colonne", (n) => ({ x: n.getBoundingClientRect().left, ancre: n.classList.contains("ancre") }));
     verifier(!droite.ancre && droite.x > 500, `bouton « … » : menu à droite : ${JSON.stringify(droite)}`);
+    await p.close();
+  });
+
+  await cas("menu d'un onglet du rail : veille, réveil, son, adresse, fil — sans l'afficher", async () => {
+    const p = await page("chrome.html", { query: "?surface=barre" });
+    const etat = etatDeBase();
+    etat.actif = 1;
+    etat.onglets = [
+      onglet(1, 1, "Aliexpress", "https://aliexpress.com/x", { actif: true }),
+      onglet(2, 1, "Une vidéo", "https://www.youtube.com/watch?v=abc", { eveille: false }),
+    ];
+    etat.fils = [{ id: 1, nom: "Achats", onglets: [1, 2] }, { id: 3, nom: "Vidéos", onglets: [] }];
+    etat.carnet = { pageWeb: true, favori: false, favoris: [], guets: [] };
+    await pousser(p, etat);
+    await p.setViewportSize({ width: 1150, height: 1200 });
+    await p.evaluate(() => window.trame.menuPage({ y: 150, h: 1200, cible: 2 }));
+    await p.waitForTimeout(120);
+    const texte = await p.$eval("#menu-page", (n) => n.textContent);
+    verifier(texte.includes("Cet onglet — Une vidéo"), `titre : ${texte.slice(0, 80)}`);
+    verifier(texte.includes("Réveiller") && !texte.includes("Mettre en veille"), "onglet endormi : Réveiller");
+    verifier(!texte.includes("Ajouter aux favoris") && !texte.includes("Côte à côte"), "pas les lignes de la page affichée");
+    verifier(texte.includes("Copier l'adresse") && texte.includes("Couper le son"), "adresse et son");
+    await vider(p);
+    await p.click("#menu-page .menu-principal >> text=Réveiller");
+    verifier((await messages(p)).some((m) => m.m === "reveillerFond" && m.id === 2), "réveil en arrière-plan");
+    await p.evaluate(() => window.trame.menuPage({ y: 150, h: 1200, cible: 2 }));
+    await vider(p);
+    await p.click("#menu-page .puce >> text=Vidéos");
+    verifier((await messages(p)).some((m) => m.m === "tisser" && m.onglet === 2 && m.fil === 3), "déplacer vers « Vidéos »");
+    // L'onglet affiché : Mettre en veille, et les lignes de la page reviennent.
+    await p.evaluate(() => window.trame.menuPage({ y: 150, h: 1200, cible: 1 }));
+    const texte1 = await p.$eval("#menu-page", (n) => n.textContent);
+    verifier(texte1.includes("Mettre en veille") && texte1.includes("Ajouter aux favoris"), "onglet affiché : veille et page");
     await p.close();
   });
 

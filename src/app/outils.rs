@@ -581,16 +581,16 @@ impl App {
                 true
             }
             "menuPage" => {
-                // Clic droit sur un onglet du rail : il devient actif et son menu s'ouvre.
-                if let Some(id) = v["id"].as_u64() {
-                    self.activer(id as TabId);
-                }
+                // Clic droit sur un onglet du rail : son menu s'ouvre SANS l'afficher (on peut
+                // l'endormir, le reveiller, le deplacer… sans quitter la page lue). `cible` dit au
+                // menu de quel onglet il s'agit.
+                let cible = v["id"].as_u64();
                 // `y` (hauteur du clic dans le rail, meme repere que la barre) : le menu se pose a
                 // cote de l'onglet. `h` : hauteur de la fenetre, pour qu'il n'en deborde pas.
                 let ancre = v["y"].as_f64().map(|y| {
                     let echelle = self.window.scale_factor();
                     let h = self.window.inner_size().height as f64 / echelle;
-                    serde_json::json!({ "y": y, "h": h.round() })
+                    serde_json::json!({ "y": y, "h": h.round(), "cible": cible })
                 });
                 let ancre = ancre.map(|a| a.to_string()).unwrap_or_default();
                 if let Some(b) = &self.barre {
@@ -1010,7 +1010,7 @@ impl App {
     }
 
     /// L'onglet le plus recemment regarde, hors l'actif (et hors rendez-vous).
-    fn onglet_precedent(&self) -> Option<TabId> {
+    pub(super) fn onglet_precedent(&self) -> Option<TabId> {
         let actif = self.actif?;
         self.session
             .onglets
