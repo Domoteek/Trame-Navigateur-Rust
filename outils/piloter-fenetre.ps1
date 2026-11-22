@@ -11,12 +11,17 @@
 #   powershell -NoProfile -File outils\piloter-fenetre.ps1 -Focus 4132076 -Texte "bonjour" -Entree
 #   powershell -NoProfile -File outils\piloter-fenetre.ps1 -Focus 4132076 -Ctrl -Vk 0x20
 #   powershell -NoProfile -File outils\piloter-fenetre.ps1 -Sonde 1209,246
+#   powershell -NoProfile -File outils\piloter-fenetre.ps1 -Processus 32212 -Reduire
+#   powershell -NoProfile -File outils\piloter-fenetre.ps1 -Processus 32212 -Restaurer
 #
 # Fichier volontairement en ASCII pur : un .ps1 UTF-8 sans BOM est illisible pour
 # Windows PowerShell 5.1 (cf. AGENTS.md section 11).
 
 param(
   [int]$Focus = 0,
+  [int]$Processus = 0,
+  [switch]$Reduire,
+  [switch]$Restaurer,
   [string]$Click = "",
   [string]$Sonde = "",
   [string]$Texte = "",
@@ -44,6 +49,8 @@ public class Pilote {
   [DllImport("user32.dll")] public static extern uint SendInput(uint n, INPUT[] inputs, int size);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
 
   public struct RECT { public int L, T, R, B; }
 
@@ -119,6 +126,20 @@ public class Pilote {
     ShowWindow(h, 9);            // SW_RESTORE
     SetForegroundWindow(h);
   }
+
+  // WM_SYSCOMMAND / SC_MINIMIZE : exactement ce que fait le bouton de la barre des taches.
+  public static void Reduire(IntPtr h) {
+    PostMessage(h, 0x0112, (IntPtr)0xF020, IntPtr.Zero);
+  }
+
+  public static void Restaurer(IntPtr h) {
+    ShowWindow(h, 9);            // SW_RESTORE
+  }
+
+  public static string Etat(IntPtr h) {
+    if (h == IntPtr.Zero) return "fenetre=0";
+    return "fenetre=" + h.ToString() + " minimisee=" + IsIconic(h);
+  }
 }
 '@
 
@@ -127,6 +148,19 @@ Add-Type -TypeDefinition $source -Language CSharp
 if ($Focus -ne 0) {
   [Pilote]::Activer([IntPtr]$Focus)
   Start-Sleep -Milliseconds $Attente
+}
+
+# Reduire / restaurer la fenetre d'un processus (banc d'essai du 2026-11-22 : reduire tuait
+# Trame). L'etat est imprime apres l'action, pour que le test puisse le lire.
+if ($Processus -ne 0) {
+  $cible = Get-Process -Id $Processus -ErrorAction SilentlyContinue
+  if ($null -eq $cible) { "processus $Processus introuvable"; exit 2 }
+  $hw = [IntPtr]$cible.MainWindowHandle
+  if ($hw -eq [IntPtr]::Zero) { "processus $Processus sans fenetre principale"; exit 3 }
+  if ($Reduire) { [Pilote]::Reduire($hw) }
+  if ($Restaurer) { [Pilote]::Restaurer($hw) }
+  Start-Sleep -Milliseconds $Attente
+  [Pilote]::Etat($hw)
 }
 
 if ($Sonde -ne "") {

@@ -173,12 +173,12 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
-> Les fichiers de `dist\` ont été refaits et **signés** le 2026-11-22 (0.4.8) : exe et setup
+> Les fichiers de `dist\` ont été refaits et **signés** le 2026-11-22 (0.4.9) : exe et setup
 > `Valid`, horodatés (DigiCert), signataire `CN=CAHAGNE CLEMENT` ; empreintes dans
 > `dist\SHA256SUMS.txt`. **`node outils/verifier-setup.mjs` n'a pas été rejoué** pour cette
-> version : l'installation 0.4.6 de Clément tournait pendant la fabrication, et ce contrôle
+> version : l'installation de Clément tournait pendant la fabrication, et ce contrôle
 > installe puis désinstalle une copie (il écrit dans HKCU). À lancer juste avant ou juste après
-> l'installation de la 0.4.8.
+> l'installation de la 0.4.9.
 
 **Ce que l'installation ne fait pas** : ni elle ni la désinstallation ne touchent au profil
 `%LOCALAPPDATA%\Trame`. Désinstaller Trame ne supprime pas les onglets, les réglages ni les

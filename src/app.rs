@@ -1525,8 +1525,11 @@ impl App {
         let dessous = (bh - base).max(1);
         match self.panneau_zone {
             Some((x, l, haut)) => {
-                let x = ((x * echelle).round() as i32).clamp(0, bl - 1);
-                let l = ((l * echelle).round() as i32).clamp(1, bl - x);
+                // Meme precaution que dans `shell::geometrie` : sur une fenetre minuscule, les
+                // bornes hautes de ces `clamp` tombent sous leurs bornes basses (mesure du
+                // 2026-11-22, fenetre reduite).
+                let x = ((x * echelle).round() as i32).clamp(0, (bl - 1).max(0));
+                let l = ((l * echelle).round() as i32).clamp(1, (bl - x).max(1));
                 let rayon = (12.0 * echelle).round() as i32;
                 let haut = (haut * echelle).round() as i32;
                 // Menu pose plus bas (clic droit sur un onglet) : une carte detachee, quatre
@@ -1566,6 +1569,12 @@ impl App {
     }
 
     pub fn redimensionner(&mut self) {
+        // Fenetre reduite dans la barre des taches : Windows ne lui laisse qu'une taille
+        // symbolique. Rien a disposer tant qu'elle est la, et sa geometrie ne veut plus rien
+        // dire ; la restauration renvoie un `Resized` avec la vraie taille.
+        if self.window.is_minimized() {
+            return;
+        }
         let taille = self.window.inner_size();
         self.derniere_taille = (taille.width, taille.height);
         self.appliquer_geometrie();

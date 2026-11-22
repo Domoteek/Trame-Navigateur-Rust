@@ -757,6 +757,45 @@ progression, ce qui fige la position mémorisée. Le correctif supprime la dépe
 démontre pas les deux nombres. Le cas d'un YouTube **connecté** n'a pas été mesuré (profils
 d'essai déconnectés).
 
+## 10 undecies. 2026-11-22, nuit — réduire ne tue plus Trame (0.4.9)
+
+Signalé par Clément juste après l'installation de la 0.4.8 : « si je réduis l'application dans la
+barre des tâches elle se ferme ».
+
+**Reproduit et expliqué, pas deviné.** Le processus sortait en **code 101** — une panique Rust :
+
+```
+thread 'main' panicked at library\core\src\num\f64.rs:1432:9:
+min > max, or either was NaN. min = 46.0, max = 13.68
+```
+
+| Ce qui s'est passé | Pourquoi |
+|---|---|
+| Réduite, la fenêtre de Trame ne fait plus **19 px** de haut | Windows ne lui laisse qu'une taille symbolique |
+| `shell::geometrie` borne la barre haute entre `BARRE_H` (46 px) et **72 % de la hauteur** (13,68 px) | la borne haute tombait **sous** la borne basse |
+| `f64::clamp` **panique** quand `min > max` | d'où le code 101, et la fenêtre qui disparaît |
+| **Rien dans le journal** | une panique n'écrit que sur stderr, et la version release n'a pas de console : il a fallu relancer le binaire en capturant stderr pour lire le message. C'est exactement le piège « l'absence de trace n'est pas une preuve d'absence » |
+
+| Correctif | Où |
+|---|---|
+| Le minimum de la barre l'emporte sur le plafond : `(h * 0.72).max(BARRE_H * echelle)` | `src/shell.rs` — toute fenêtre minuscule est désormais sans danger, quel qu'en soit l'appelant |
+| Deux `clamp` du menu de la barre avaient le même défaut (`bl - 1`, `bl - x`) : bornes hautes ramenées à au moins la borne basse | `src/app.rs` |
+| Fenêtre réduite : **on ne dispose plus rien** (`redimensionner` sort si `is_minimized()`) ; la restauration renvoie un `Resized` avec la vraie taille | `src/app.rs` — plus de travail inutile sur une géométrie qui ne veut rien dire |
+| **Crochet de panique branché sur le journal** (`!! PANIQUE : …`) | `src/log.rs` — un plantage laisse désormais une trace, et ne se confond plus avec une fermeture propre |
+| Sonde `TRAME_SONDE_PANIQUE` (panique volontaire au démarrage) | prouve que le crochet écrit bien dans le journal |
+| **`outils/eprouver-reduire.mjs`** | banc d'essai du vrai geste : `WM_SYSCOMMAND`/`SC_MINIMIZE` envoyé à la fenêtre du binaire par `outils/piloter-fenetre.ps1` (qui gagne `-Processus`, `-Reduire`, `-Restaurer`), puis contrôle que le processus vit, que la fenêtre est bien réduite, qu'elle se restaure, et que le journal ne porte aucune panique |
+
+Preuves : **contre le binaire 0.4.8 installé, le banc échoue** (processus mort après le réduire,
+journal muet) ; **contre le binaire corrigé, il passe** (`minimisee=True`, processus vivant,
+restauration à `minimisee=False`, aucune panique, et la sonde écrit
+`!! PANIQUE : … sonde : panique volontaire`). `cargo test --release` **178/178** (un cas neuf :
+la géométrie de fenêtres de 19, 1 et 0 px, à quatre échelles) ; `node outils/tester-ui.mjs`
+**73/73**.
+
+Limite dite franchement : le bouton « réduire » **de la barre de Trame** n'a pas été cliqué dans
+le banc (il passe par `set_minimized(true)`, donc par le même `WM_SIZE`/`SIZE_MINIMIZED` que le
+geste éprouvé) ; et le correctif de `shell.rs` ne dépend d'aucun chemin d'appel.
+
 ## 11. L'état aujourd'hui
 
 ```

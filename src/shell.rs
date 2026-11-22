@@ -65,9 +65,15 @@ pub fn geometrie(
     // depasser la fenetre d'un pixel (contenu rogne en bas). Les complements sont donc
     // calcules en entiers, pas arrondis separement.
     let rail = (rail_logique * echelle).min(l * 0.5).round();
-    let barre = (barre_logique * echelle)
-        .clamp(BARRE_H * echelle, h * 0.72)
-        .round();
+    // Le plafond de la barre est une proportion de la fenetre (72 %, voir plus bas). Sur une
+    // fenetre minuscule, il tombe **sous** la hauteur minimale : `f64::clamp` panique alors
+    // (« min > max »). Mesure du 2026-11-22 : reduite dans la barre des taches, la fenetre de
+    // Trame ne fait plus 19 px de haut — plafond 13,68 px pour un minimum de 46 px — et
+    // l'application mourait la, sans un mot dans le journal. Le minimum gagne : la barre garde
+    // sa hauteur, la page se contente de ce qui reste.
+    let barre_mini = BARRE_H * echelle;
+    let barre_plafond = (h * 0.72).max(barre_mini);
+    let barre = (barre_logique * echelle).clamp(barre_mini, barre_plafond).round();
     // Le panneau de droite ne doit jamais prendre plus de 40 % de la largeur : sinon le site
     // n'a plus de place et l'outil devient plus genant que la publicite. Ferme, il garde
     // 1 px (une webview de largeur nulle est refusee par WebView2).
@@ -75,7 +81,7 @@ pub fn geometrie(
     // La page commence sous la barre **de base** (ligne du haut + etagere d'extensions), pas
     // sous la barre agrandie : le menu des extensions et la Couture se posent PAR-DESSUS la page
     // (voir `fenetres.rs`), ils ne la poussent plus. Meme chose pour le panneau de droite.
-    let base = (barre_base_logique * echelle).clamp(BARRE_H * echelle, barre).round();
+    let base = (barre_base_logique * echelle).clamp(barre_mini, barre.max(barre_mini)).round();
     let contenu_l = (l - rail).max(1.0);
     let contenu_h = (h - base).max(1.0);
 
@@ -272,5 +278,24 @@ mod tests {
         let (_, _, h_contenu) = taille(g.contenu);
         assert_eq!(h_barre, 600.0 * 0.72);
         assert_eq!(h_contenu, 600.0 - BARRE_H, "la page ne retrecit pas sous le menu");
+    }
+
+    #[test]
+    fn une_fenetre_reduite_ne_fait_pas_paniquer_la_geometrie() {
+        // Mesure du 2026-11-22 : reduite dans la barre des taches, la fenetre ne fait plus
+        // 19 px de haut. Le plafond de la barre (72 % = 13,68 px) tombait alors sous son
+        // minimum (46 px) et `f64::clamp` paniquait — l'application mourait au reduire.
+        for (l, h) in [(1000, 19), (1000, 0), (0, 0), (1, 1), (19, 1000)] {
+            for echelle in [1.0, 1.25, 1.5, 2.0] {
+                let g = geometrie(l, h, echelle, false, BARRE_H, BARRE_H, ZAP_LARGEUR);
+                let (_, _, h_barre) = taille(g.barre);
+                let (_, _, h_contenu) = taille(g.contenu);
+                assert!(
+                    h_barre + 0.5 >= (BARRE_H * echelle).round(),
+                    "la barre perd sa hauteur minimale en {l}x{h} a {echelle}"
+                );
+                assert!(h_contenu >= 1.0, "le contenu disparait en {l}x{h} a {echelle}");
+            }
+        }
     }
 }

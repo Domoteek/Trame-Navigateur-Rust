@@ -38,6 +38,24 @@ pub fn maintenant_ms() -> u64 {
 /// Fixe le fichier de journal (appele une fois au demarrage).
 pub fn init(chemin: PathBuf) {
     let _ = LOG_PATH.set(chemin);
+    // Une panique n'ecrit que sur stderr, et la version release n'a pas de console (fenetre
+    // console masquee, cf. `main.rs`) : le 2026-11-22, le plantage au reduire n'a laisse
+    // **aucune** trace dans le journal — il a fallu relancer le binaire en capturant stderr
+    // pour lire « min > max ». Le crochet de panique ecrit donc dans le journal, en plus de
+    // ce que le crochet par defaut fait (stderr, et le cas echeant `RUST_BACKTRACE`).
+    let defaut = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panique| {
+        ecrire(&format!(
+            "[{}] !! PANIQUE : {}",
+            horodatage(),
+            panique.to_string().replace('\n', " | ")
+        ));
+        defaut(panique);
+    }));
+    // Sonde de diagnostic : prouve que le crochet ci-dessus ecrit bien dans le journal.
+    if std::env::var("TRAME_SONDE_PANIQUE").is_ok() {
+        panic!("sonde : panique volontaire (TRAME_SONDE_PANIQUE)");
+    }
 }
 
 fn ecrire(ligne: &str) {
