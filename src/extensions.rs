@@ -174,24 +174,7 @@ pub fn correspond(motif: &Motif, url: &str) -> bool {
     let Ok(u) = url::Url::parse(url) else {
         return false;
     };
-    let schema = u.scheme();
-    if !motif.tout_schema && motif.schema != schema {
-        return false;
-    }
-    let Some(hote) = u.host_str() else {
-        return false;
-    };
-    let hote_ok = if let Some(base) = motif.hote.strip_prefix("*.") {
-        hote == base || hote.ends_with(&format!(".{base}"))
-    } else if motif.hote == "*" {
-        true
-    } else {
-        hote == motif.hote
-    };
-    if !hote_ok {
-        return false;
-    }
-    correspond_glob(&motif.chemin, u.path())
+    correspond_hote(motif, &u) && correspond_glob(&motif.chemin, u.path())
 }
 
 /// Glob `*` simple (sans `?` ni classes), iteratif, sans allocation.
@@ -359,6 +342,7 @@ pub fn est_bloquee(motifs: &[Motif], url: &str) -> bool {
         .any(|m| correspond_hote(m, &u) && correspond_glob(&m.chemin, &chemin_complet))
 }
 
+/// Schema et hote du motif (`*.exemple.fr` couvre aussi `exemple.fr`).
 fn correspond_hote(motif: &Motif, u: &url::Url) -> bool {
     if !motif.tout_schema && motif.schema != u.scheme() {
         return false;
