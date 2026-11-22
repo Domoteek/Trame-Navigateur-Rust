@@ -396,6 +396,13 @@
       } else if (!v.paused) {
         sortie = { v, quand: t };
       }
+      // Chromium ramene la video dans sa page, mais il ne sait pas montrer un onglet de Trame :
+      // mesure du 2026-11-22, la page restait `hidden` et Clement ne voyait pas l'onglet de la
+      // video. On demande donc a l'hote de l'afficher. Une video qui se termine ferme aussi la
+      // fenetre d'incrustation : la, on ne lui vole pas son onglet.
+      if (PRINCIPALE && !v.ended && document.visibilityState === "hidden") {
+        envoi({ m: "flottant", action: "montrer" });
+      }
     },
     true
   );

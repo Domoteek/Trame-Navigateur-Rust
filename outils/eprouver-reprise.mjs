@@ -27,6 +27,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { attendreCible, connecter, pause } from "./cdp.mjs";
 
 const RACINE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXE = path.join(RACINE, "target", "release", "trame.exe");
@@ -79,88 +80,6 @@ function servirPageLocale() {
   return new Promise((r) => serveur.listen(PORT_LOCAL, "127.0.0.1", () => r(serveur)));
 }
 
-const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/** Un client CDP minimal : une promesse par message, par identifiant. */
-class Cdp {
-  constructor(ws) {
-    this.ws = ws;
-    this.id = 0;
-    this.attente = new Map();
-    ws.addEventListener("message", (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && this.attente.has(m.id)) {
-        const { resoudre, rejeter } = this.attente.get(m.id);
-        this.attente.delete(m.id);
-        if (m.error) rejeter(new Error(JSON.stringify(m.error)));
-        else resoudre(m.result);
-      }
-    });
-  }
-  envoyer(method, params = {}) {
-    this.id += 1;
-    const id = this.id;
-    return new Promise((resoudre, rejeter) => {
-      this.attente.set(id, { resoudre, rejeter });
-      this.ws.send(JSON.stringify({ id, method, params }));
-      setTimeout(() => {
-        if (this.attente.has(id)) {
-          this.attente.delete(id);
-          rejeter(new Error(`CDP ${method} : pas de reponse`));
-        }
-      }, 20000);
-    });
-  }
-  /** Evalue une expression dans la page et rend sa valeur. */
-  async evaluer(expression) {
-    const r = await this.envoyer("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
-    if (r.exceptionDetails) {
-      throw new Error(`page : ${r.exceptionDetails.text} ${r.exceptionDetails.exception?.description || ""}`);
-    }
-    return r.result.value;
-  }
-  /** Attend qu'une expression devienne vraie. */
-  async attendre(expression, { delai = 60000, pas = 500, quoi = expression } = {}) {
-    const fin = Date.now() + delai;
-    let derniere = "";
-    while (Date.now() < fin) {
-      try {
-        if (await this.evaluer(expression)) return true;
-      } catch (e) {
-        derniere = e.message;
-      }
-      await pause(pas);
-    }
-    throw new Error(`attente expiree : ${quoi}${derniere ? ` (${derniere})` : ""}`);
-  }
-}
-
-async function cibles() {
-  try {
-    const r = await fetch(`http://127.0.0.1:${PORT}/json/list`);
-    return await r.json();
-  } catch {
-    return [];
-  }
-}
-
-async function attendreCible(contient, delai = 45000) {
-  const fin = Date.now() + delai;
-  while (Date.now() < fin) {
-    const c = (await cibles()).find((t) => t.type === "page" && t.url.includes(contient));
-    if (c) return c;
-    await pause(400);
-  }
-  throw new Error(`aucune cible CDP ne contient ${contient} (Trame a-t-elle demarre ?)`);
-}
-
-function connecter(url) {
-  return new Promise((resoudre, rejeter) => {
-    const ws = new WebSocket(url);
-    ws.addEventListener("open", () => resoudre(new Cdp(ws)));
-    ws.addEventListener("error", () => rejeter(new Error(`WebSocket refuse : ${url}`)));
-  });
-}
 
 /** La video principale : la plus grande, duree longue (une pub dure quelques dizaines de s). */
 const LECTEUR = `(() => {
@@ -222,7 +141,7 @@ async function principale() {
     console.log(`cible    : ${CIBLE}`);
     console.log(`position : ${POSITION} s, ${BOUCLES} rechargement(s)`);
     if (Object.keys(ENV_SUPPLEMENTAIRE).length) console.log(`env      : ${JSON.stringify(ENV_SUPPLEMENTAIRE)}`);
-    cdp = await connecter((await attendreCible(CIBLE)).webSocketDebuggerUrl);
+    cdp = await connecter((await attendreCible(PORT, CIBLE)).webSocketDebuggerUrl);
     await cdp.envoyer("Runtime.enable");
 
     const pret = `(() => { const v = ${LECTEUR}; return v.d > ${DUREE_MIN} && !v.pub; })()`;

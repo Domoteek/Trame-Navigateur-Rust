@@ -35,7 +35,7 @@ pub(super) struct Flottant {
 }
 
 impl App {
-    /// Messages `flottant` d'une page : `ouvrir`, `ramener`, `deplacer`.
+    /// Messages `flottant` d'une page : `ouvrir`, `ramener`, `montrer`, `deplacer`.
     pub(super) fn traiter_ipc_flottant(&mut self, source: Source, v: &Value) {
         let Source::Onglet(id) = source else { return };
         let ici = self.flottant.as_ref().map(|f| f.onglet) == Some(id);
@@ -43,10 +43,12 @@ impl App {
             "ouvrir" if !ici => self.flottant_demande = Some(id),
             // « Ramener » (bouton, Alt+Maj+P) remet la page dans son onglet et l'affiche,
             // comme le retour a l'onglet d'Opera. Fermer la fenetre (Alt+F4) la range sans plus.
-            "ramener" if ici => {
-                self.activer(id);
-                self.window.set_focus();
-            }
+            "ramener" if ici => self.montrer_onglet(id),
+            // « Retour a l'onglet » de la fenetre d'incrustation de Chromium : la video revient
+            // dans sa page, mais Chromium ne sait pas afficher un onglet de Trame. Mesure du
+            // 2026-11-22 : sans ce message, la page restait `hidden` — la video revenait dans un
+            // onglet que Clement ne voyait pas.
+            "montrer" if !ici => self.montrer_onglet(id),
             "deplacer" if ici => {
                 if let Some(f) = &self.flottant {
                     let _ = f.fenetre.drag_window();
@@ -54,6 +56,12 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Met l'onglet de la page au premier plan dans la fenetre principale.
+    fn montrer_onglet(&mut self, id: TabId) {
+        self.activer(id);
+        self.window.set_focus();
     }
 
     /// Demande en attente, prise par la boucle d'evenements (qui seule peut creer la fenetre).

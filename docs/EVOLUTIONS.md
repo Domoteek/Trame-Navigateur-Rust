@@ -796,6 +796,51 @@ Limite dite franchement : le bouton « réduire » **de la barre de Trame** n'a 
 le banc (il passe par `set_minimized(true)`, donc par le même `WM_SIZE`/`SIZE_MINIMIZED` que le
 geste éprouvé) ; et le correctif de `shell.rs` ne dépend d'aucun chemin d'appel.
 
+## 10 duodecies. 2026-11-22, nuit — le retour de la fenêtre d'incrustation ramène l'onglet (0.4.10)
+
+Signalé par Clément après la 0.4.9 : « quand je clique sur sortir la vidéo, je sors bien la vidéo
+du navigateur, je peux changer d'onglet et naviguer ; mais si je clique sur retour à l'onglet, il
+renvoie bien la vidéo en cours de lecture, mais il ne m'affiche pas l'onglet dans lequel il y a la
+vidéo. »
+
+Exact, et **mesuré** — banc d'essai neuf `outils/eprouver-flottant.mjs` (page locale avec une
+vidéo, incrustation demandée par un vrai clic, second onglet activé, puis sortie de
+l'incrustation, en lisant `document.visibilityState` de l'onglet de la vidéo) :
+
+| Étape | 0.4.9 | 0.4.10 |
+|---|---|---|
+| vidéo sortie en fenêtre d'incrustation | `pip: true` | `pip: true` |
+| second onglet activé | onglet de la vidéo `hidden` (la fenêtre d'incrustation survit) | idem |
+| retour à l'onglet | `pip: false`, onglet **`hidden`** — la vidéo revient dans une page invisible | `pip: false`, onglet **`visible`** |
+
+| Défaut trouvé | Pourquoi |
+|---|---|
+| Dans Chrome, **c'est le navigateur** qui montre l'onglet quand la fenêtre d'incrustation est fermée par « retour à l'onglet » | WebView2 n'a pas d'onglets : Chromium rend la vidéo à sa page et s'arrête là |
+| `ui/incrustation.js` écoutait déjà `leavepictureinpicture`… | mais seulement pour relancer une vidéo que la croix met en pause (correctif de la 0.4.6) : **rien** ne demandait à Trame d'afficher l'onglet |
+
+| Correctif | Où |
+|---|---|
+| La page demande l'affichage : `{ m: "flottant", action: "montrer" }` sur `leavepictureinpicture`, **si la page est masquée** et **si la vidéo ne s'est pas terminée** (une vidéo finie ferme aussi la fenêtre d'incrustation : là, on ne vole pas l'onglet) | `ui/incrustation.js` |
+| `"montrer"` traité par l'hôte : l'onglet passe au premier plan ; le bouton « Ramener » de la mini-fenêtre et le retour d'incrustation passent par la **même** fonction (`montrer_onglet`) | `src/app/flottant.rs` |
+| `outils/cdp.mjs` : le client CDP des bancs d'essai, extrait pour être partagé (reprise, réduire, flottant) au lieu d'être recopié | `outils/` |
+| **`outils/eprouver-flottant.mjs`** | le banc d'essai ci-dessus, rejouable |
+
+Preuves : contre le binaire 0.4.9, le banc rend `hidden` et annonce l'échec ; contre le binaire
+corrigé, il rend `visible` et annonce « le retour de l'incrustation ramène bien l'onglet ».
+`cargo test --release` **178/178**, `node outils/tester-ui.mjs` **73/73**, et les deux autres
+bancs (`eprouver-reprise.mjs`, `eprouver-reduire.mjs`) rejoués après l'extraction du client CDP.
+
+Conséquence assumée : la **croix** de la fenêtre d'incrustation ramène aussi l'onglet. Chromium
+ne dit pas laquelle des deux commandes (« retour à l'onglet » ou « fermer ») a mis fin à
+l'incrustation — les deux produisent le même événement. Si Clément préfère que la croix le laisse
+où il est, il faudra une autre source (Chromium ne la donne pas).
+
+Ce qui n'est pas éprouvé : la vidéo du banc ne joue pas (lecture bloquée dans le profil jetable) ;
+l'incrustation s'ouvre quand même, et le mécanisme mesuré — le retour — ne dépend pas de la
+lecture. Le geste réel de Clément (bouton « retour à l'onglet » de la fenêtre de Chromium) n'est
+pas cliquable depuis CDP : c'est `exitPictureInPicture()`, qui produit le même événement, qui est
+employé.
+
 ## 11. L'état aujourd'hui
 
 ```
