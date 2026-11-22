@@ -2380,6 +2380,12 @@ impl App {
     }
 
     pub fn sauver(&mut self) {
+        // Les adresses changees sans rechargement (YouTube) : sinon la session rouvrirait
+        // l'accueil du site au lieu de la video.
+        let vivants: Vec<TabId> = self.webviews.keys().copied().collect();
+        for id in vivants {
+            self.actualiser_adresse(id);
+        }
         self.session.rail_replie = self.rail_replie;
         self.session.actif = self.actif;
         // On ne touche JAMAIS a l'etat d'execution en memoire : la copie persistee n'a pas
@@ -2860,6 +2866,12 @@ impl App {
             }
             UserEvent::Memoire(mesure) => self.memoire(mesure),
             UserEvent::Titre { onglet, titre } => {
+                // Un site a page unique (YouTube…) change d'adresse sans recharger : seul le
+                // titre le signale. On relit donc l'adresse reelle a chaque titre.
+                if self.actualiser_adresse(onglet) {
+                    self.marquer_modifie();
+                    self.pousser_etat();
+                }
                 if let Some(o) = self.onglet_mut(onglet) {
                     if o.titre != titre {
                         o.titre = titre;
@@ -3035,6 +3047,23 @@ impl App {
                     self.signaler(&format!("Téléchargement échoué : {nom}"));
                 }
             }
+        }
+    }
+
+    /// Relit l'adresse affichee par la webview d'un onglet (navigation sans rechargement :
+    /// `history.pushState`). Rend `true` si elle a change.
+    pub(super) fn actualiser_adresse(&mut self, id: TabId) -> bool {
+        let Some(url) = self.webviews.get(&id).and_then(|w| w.url().ok()) else { return false };
+        let url = retranscrire_interne(&url);
+        if !(url.starts_with("http://") || url.starts_with("https://") || url.starts_with("trame:")) {
+            return false;
+        }
+        match self.onglet_mut(id) {
+            Some(o) if o.url != url => {
+                o.url = url;
+                true
+            }
+            _ => false,
         }
     }
 

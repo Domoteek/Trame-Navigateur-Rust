@@ -763,6 +763,11 @@ impl App {
     // ------------------------------------------------------------------ favoris, impression
 
     pub(super) fn basculer_favori(&mut self) {
+        // L'adresse vraie de la page, pas celle du dernier chargement (YouTube change de video
+        // sans recharger : le favori gardait youtube.com, constate le 2026-11-22).
+        if let Some(id) = self.actif {
+            self.actualiser_adresse(id);
+        }
         let Some(o) = self.actif.and_then(|id| self.trouver(id)).cloned() else { return };
         if !carnet::favorisable(&o.url) {
             self.signaler("Les favoris s'appliquent aux pages web.");
