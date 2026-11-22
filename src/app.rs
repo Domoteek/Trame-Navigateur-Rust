@@ -125,6 +125,8 @@ pub enum UserEvent {
     MoteurBilan(crate::moteur_ext::Bilan),
     /// Ce que le moteur de WebView2 a reellement charge.
     MoteurListe(Vec<crate::moteur_ext::Chargee>),
+    /// La fiche produit a repondu : une version plus recente est-elle annoncee ?
+    Maj(Option<crate::maj::Nouveaute>),
     /// Taille du contenu de la fenetre d'extension ouverte (pixels CSS).
     TaillePopup { largeur: f64, hauteur: f64 },
     /// Texte d'une page lue (memoire de lecture), rendu par le script de lecture.
@@ -214,6 +216,8 @@ pub struct App {
     telechargements: Vec<crate::telechargements::Telechargement>,
     /// Dossier ou vont les telechargements, partage avec les gestionnaires du moteur.
     dossier_dl: std::rc::Rc<std::cell::RefCell<PathBuf>>,
+    /// Version plus recente annoncee par la fiche produit, si elle a ete lue.
+    maj: Option<crate::maj::Nouveaute>,
     zap_ouvert: bool,
     /// Ce que montre le panneau de droite : le zappeur, ou la popup d'une extension epinglee.
     panneau_extension: Option<String>,
@@ -597,6 +601,7 @@ impl App {
             muets: std::collections::HashSet::new(),
             telechargements: Vec::new(),
             dossier_dl: std::rc::Rc::new(std::cell::RefCell::new(PathBuf::new())),
+            maj: None,
             zap_ouvert: false,
             panneau_extension: None,
             panneau_demande: std::env::var("TRAME_PANNEAU").ok().filter(|s| !s.is_empty()),
@@ -856,6 +861,16 @@ impl App {
         }
         if repris + coupes > 0 {
             self.profil.sauver_telechargements(&self.telechargements);
+        }
+        // Mise a jour : la fiche produit est lue en fil annexe, pour ne pas retarder l'affichage.
+        // Un profil jetable (`TRAME_PROFIL`, celui des bancs d'essai) ne va pas chercher de mise
+        // a jour : un essai ne doit ni ouvrir d'onglet ni telecharger quoi que ce soit.
+        if std::env::var_os("TRAME_PROFIL").is_none() {
+            let proxy = self.proxy.clone();
+            std::thread::spawn(move || {
+                let nouveaute = crate::maj::verifier(crate::maj::ACTUELLE);
+                let _ = proxy.send_event(UserEvent::Maj(nouveaute));
+            });
         }
         self.extensions_chrome = self.profil.racine().join("extensions-chrome");
         protocol::definir_extensions_chrome(self.extensions_chrome.clone());
@@ -3233,6 +3248,7 @@ impl App {
             UserEvent::TelechargementEtat { id, termine, interrompu, reprenable, raison, recu } => {
                 self.telechargement_etat(id, termine, interrompu, reprenable, raison, recu)
             }
+            UserEvent::Maj(nouveaute) => self.maj(nouveaute),
             UserEvent::Telechargement {
                 url,
                 chemin,
@@ -4926,6 +4942,26 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// La fiche produit a repondu : s'il y a plus recent, on l'annonce et on fait telecharger le
+    /// nouveau programme par le gestionnaire de telechargements de Trame, pas par un second
+    /// chemin qui aurait ses propres regles.
+    ///
+    /// L'installation elle-meme reste un geste : le setup est signe, il arrive dans le dossier
+    /// de telechargements, et c'est lui qui remplace l'application.
+    fn maj(&mut self, nouveaute: Option<crate::maj::Nouveaute>) {
+        let Some(nouveaute) = nouveaute else {
+            info!("mise a jour : rien de plus recent que {}", crate::maj::ACTUELLE);
+            return;
+        };
+        info!("mise a jour : {} disponible ({})", nouveaute.version, nouveaute.url);
+        self.signaler(&format!(
+            "Trame {} est disponible : le nouveau programme se télécharge.",
+            nouveaute.version
+        ));
+        self.ouvrir_onglet(nouveaute.url.clone(), Declencheur::Lien, None);
+        self.maj = Some(nouveaute);
     }
 
     /// Chaque seconde, la progression des telechargements en cours.

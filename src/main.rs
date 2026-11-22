@@ -20,6 +20,7 @@ mod externe;
 mod fenetres;
 mod installation;
 mod log;
+mod maj;
 mod model;
 mod ombre;
 mod moteur_ext;
