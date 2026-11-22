@@ -460,10 +460,14 @@
         <h2>Vidéos</h2>
         <div class="ligne">
           <div class="libelle">
-            <b>Plein écran sur toute la fenêtre</b>
-            <span>Le bouton plein écran d'une vidéo (YouTube…) cache le menu et la barre et passe la fenêtre en plein écran. Désactivé : la vidéo ne remplit que la zone de la page.</span>
+            <b>Plein écran d'une vidéo</b>
+            <span>Ce que prend une vidéo (YouTube…) mise en plein écran. Échap ou le bouton de la vidéo rendent l'interface.</span>
           </div>
-          <div class="bascule" id="bascule-plein-ecran"></div>
+          <select id="plein-ecran">
+            <option value="fenetre">Toute la fenêtre de Trame</option>
+            <option value="ecran">Tout l'écran</option>
+            <option value="page">La zone de la page seulement</option>
+          </select>
         </div>
       </section>
 
@@ -805,8 +809,8 @@
             "bascule" + (r.veilleAuto ? " on" : "");
           document.getElementById("bascule-barre-ext").className =
             "bascule" + (r.barreExtensions ? " on" : "");
-          document.getElementById("bascule-plein-ecran").className =
-            "bascule" + (r.pleinEcranTotal !== false ? " on" : "");
+          const selPlein = document.getElementById("plein-ecran");
+          if (document.activeElement !== selPlein) selPlein.value = r.pleinEcran || "fenetre";
           document.getElementById("bascule-memoire-basse").className =
             "bascule" + (r.memoireBasse ? " on" : "");
           document.getElementById("bascule-budget-auto").className =
@@ -861,8 +865,8 @@
           ipc({ m: "memoireBasse", actif: !((etat && etat.reglages && etat.reglages.memoireBasse) || false) });
         document.getElementById("bascule-barre-ext").onclick = () =>
           ipc({ m: "barreExtensions", visible: !((etat && etat.reglages && etat.reglages.barreExtensions) || false) });
-        document.getElementById("bascule-plein-ecran").onclick = () =>
-          ipc({ m: "pleinEcranTotal", actif: !(etat && etat.reglages && etat.reglages.pleinEcranTotal !== false) });
+        document.getElementById("plein-ecran").addEventListener("change", (e) =>
+          ipc({ m: "pleinEcran", mode: e.target.value }));
         document.getElementById("btn-recharger").onclick = () => ipc({ m: "extensionsRecharger" });
         document.getElementById("btn-dossier-ext").onclick = () => ipc({ m: "dossierExtensions" });
         document.getElementById("btn-chercher-chrome").addEventListener("click", () => ipc({ m: "chromeScan" }));

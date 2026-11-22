@@ -157,10 +157,10 @@ enum OperationMoteur {
 
 pub struct App {
     window: Window,
-    /// Onglet dont une video occupe toute la fenetre (rail et barre caches), et si la fenetre
-    /// etait deja en plein ecran avant (on ne l'en sort pas alors a la fin).
+    /// Onglet dont une video occupe toute la fenetre (rail et barre caches), et si c'est Trame
+    /// qui a passe la fenetre en plein ecran Windows (mode `ecran`) : il l'en sortira a la fin.
     plein_ecran: Option<TabId>,
-    fenetre_deja_plein_ecran: bool,
+    fenetre_basculee: bool,
     profil: Profil,
     proxy: EventLoopProxy<UserEvent>,
 
@@ -537,7 +537,7 @@ impl App {
         let mut app = App {
             window,
             plein_ecran: None,
-            fenetre_deja_plein_ecran: false,
+            fenetre_basculee: false,
             profil,
             proxy,
             session: Session::default(),
@@ -1310,15 +1310,16 @@ impl App {
     /// Une video demande (ou quitte) le plein ecran.
     fn sur_plein_ecran(&mut self, onglet: TabId, actif: bool) {
         if actif {
-            if !self.reglages.plein_ecran_total || Some(onglet) != self.actif || self.plein_ecran.is_some() {
+            let mode = self.reglages.plein_ecran.clone();
+            if mode == "page" || Some(onglet) != self.actif || self.plein_ecran.is_some() {
                 return;
             }
-            self.fenetre_deja_plein_ecran = self.window.fullscreen().is_some();
             self.plein_ecran = Some(onglet);
-            if !self.fenetre_deja_plein_ecran {
+            self.fenetre_basculee = mode == "ecran" && self.window.fullscreen().is_none();
+            if self.fenetre_basculee {
                 self.window.set_fullscreen(Some(tao::window::Fullscreen::Borderless(None)));
             }
-            info!("onglet {onglet} : plein ecran sur toute la fenetre");
+            info!("onglet {onglet} : plein ecran ({mode})");
         } else {
             if self.plein_ecran != Some(onglet) {
                 return;
@@ -1333,7 +1334,7 @@ impl App {
         if self.plein_ecran.take().is_none() {
             return;
         }
-        if !self.fenetre_deja_plein_ecran {
+        if std::mem::take(&mut self.fenetre_basculee) {
             self.window.set_fullscreen(None);
         }
         for w in self.rail.iter().chain(self.barre.iter()) {
@@ -2655,7 +2656,7 @@ impl App {
                 "adressesNettoyees": self.adresses_nettoyees,
                 "budget": self.reglages.budget_borne(),
                 "barreExtensions": self.reglages.barre_extensions,
-                "pleinEcranTotal": self.reglages.plein_ecran_total,
+                "pleinEcran": self.reglages.plein_ecran.clone(),
                 "moteur": self.reglages.moteur.clone(),
             },
             "profil": self.profil.racine().display().to_string(),
@@ -3756,10 +3757,12 @@ impl App {
                     self.pousser_etat();
                 }
             }
-            "pleinEcranTotal" => {
-                self.reglages.plein_ecran_total = v["actif"].as_bool().unwrap_or(true);
-                self.profil.sauver_reglages(&self.reglages);
-                self.pousser_etat();
+            "pleinEcran" => {
+                if let Some(mode) = v["mode"].as_str().filter(|m| ["page", "fenetre", "ecran"].contains(m)) {
+                    self.reglages.plein_ecran = mode.to_string();
+                    self.profil.sauver_reglages(&self.reglages);
+                    self.pousser_etat();
+                }
             }
             "veilleAuto" => {
                 self.reglages.veille_auto = v["actif"].as_bool().unwrap_or(true);

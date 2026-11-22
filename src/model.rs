@@ -266,10 +266,11 @@ pub struct Reglages {
     /// Afficher la barre d'extensions sous la Couture.
     #[serde(default = "vrai")]
     pub barre_extensions: bool,
-    /// Plein ecran d'une video (YouTube…) : toute la fenetre, rail et barre caches, fenetre
-    /// elle-meme en plein ecran. Desactive : la video ne remplit que la zone de la page.
-    #[serde(default = "vrai")]
-    pub plein_ecran_total: bool,
+    /// Plein ecran d'une video (YouTube…) : `page` (la zone de la page seulement, comme
+    /// WebView2 le fait seul), `fenetre` (toute la fenetre de Trame, rail et barre caches, la
+    /// fenetre garde sa taille) ou `ecran` (en plus, la fenetre passe en plein ecran Windows).
+    #[serde(default = "plein_ecran_defaut")]
+    pub plein_ecran: String,
     /// Endormir automatiquement les onglets refroidis.
     #[serde(default = "vrai")]
     pub veille_auto: bool,
@@ -329,6 +330,10 @@ pub struct Reglages {
     /// « Telechargements » de Windows.
     #[serde(default)]
     pub dossier_telechargements: String,
+}
+
+fn plein_ecran_defaut() -> String {
+    "fenetre".into()
 }
 
 fn pistage_defaut() -> String {
@@ -417,7 +422,7 @@ impl Default for Reglages {
         Reglages {
             moteur: moteur_defaut(),
             barre_extensions: true,
-            plein_ecran_total: true,
+            plein_ecran: plein_ecran_defaut(),
             veille_auto: true,
             budget: budget_defaut(),
             extensions_etat: BTreeMap::new(),
