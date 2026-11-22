@@ -85,7 +85,6 @@
         <span><i class="pt" style="background: var(--dormant)"></i>dormant</span>
       </div>
       <div class="actions">
-        <button id="reveiller">Réveiller tout</button>
         <button id="veille">Endormir les froids</button>
         <button id="retour">Revenir à la page</button>
       </div>
@@ -308,7 +307,6 @@
           else rendre();
         });
 
-        document.getElementById("reveiller").onclick = () => ipc({ m: "reveiller", id: 0 });
         document.getElementById("veille").onclick = () => ipc({ m: "endormirFroids" });
         document.getElementById("retour").onclick = () => ipc({ m: "trame" });
 

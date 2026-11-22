@@ -517,6 +517,10 @@ input {
 .pied-actions { display: flex; gap: 5px; }
 .pied-actions button {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 5px 0;
   border-radius: 7px;
   font-size: 10.5px;
@@ -1015,7 +1019,7 @@ input {
 /* -------------------------------------------------- rail replie (fenetre etroite) */
 
 @media (max-width: 130px) {
-  .nom-marque, .fil-compte, .fil-outils, .pied-actions, .budget .txt-budget,
+  .nom-marque, .fil-compte, .fil-outils, .pied-actions span, #btn-capsules, .budget .txt-budget,
   .onglet .texte, .fil-nom, .suggestion, .depot, .astuce { display: none !important; }
   /* La marque est retiree : dans 64 px, marque + deux boutons deborderaient et
      pousseraient le « + » hors du rail. */
@@ -1234,4 +1238,14 @@ body[data-fenetre="rail"] .pastilles { display: flex; }
 @media (max-width: 130px) {
   /* Rail replie : les pastilles passent en premier, au-dessus du « + ». */
   .pastilles { order: -1; gap: 6px; padding: 2px 0 6px; }
+}
+
+@media (max-width: 130px) {
+  /* Rail replie : le pied garde la jauge (detail au survol) et l'icone Veille. Capsules et
+     son volet demandent la largeur du rail deplie (choix de Clement, 2026-11-22). */
+  .rail-pied { padding: 8px 6px 10px; align-items: center; }
+  .budget { width: 38px; }
+  .budget .jauge-budget { display: block; flex: 1; }
+  .pied-actions button { width: 36px; height: 32px; flex: 0 0 auto; padding: 0; }
+  .pied-actions .ic.petit { width: 16px; height: 16px; }
 }

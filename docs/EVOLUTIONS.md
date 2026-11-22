@@ -571,6 +571,22 @@ Preuve : `cargo test --release` 172/172, `tester-ui.mjs` 60/60 ; essai dans Edge
 une vraie vidéo : à 8 s, F5 → reprise à 8 s ; menu « Recharger » → reprise aussi. Le cas
 YouTube (`t=`) n'est pas éprouvé hors ligne.
 
+## 10 sexies. 2026-11-22, soir — plus de « Réveiller », pied du rail replié (0.4.1)
+
+« Réveiller » (rail, vue Trame « Réveiller tout », commande « Réveiller tous les onglets ») ne
+servait à rien : les onglets réveillés d'un coup restent froids (vitalité < 0,16), et la veille
+automatique les rendormait au battement suivant. Constaté au journal de Clément le 22/11 à
+19 h 31 min 24 s : « 15 onglet(s) réveillé(s) » puis « 16 onglet(s) en veille » dans la même
+seconde, après 15 pages chargées pour rien. Retiré partout ; un onglet se réveille toujours
+d'un clic.
+
+Rail replié (64 px) : le pied montrait rien. Il garde maintenant la jauge de mémoire (détail au
+survol) et l'icône **Veille** ; Capsules reste au rail déplié (choix de Clément). Déplié, les
+deux boutons portent leur icône.
+
+Preuve : `cargo test --release` 172/172, `tester-ui.mjs` 61/61 (cas neuf : pied déplié et
+replié, plus de bouton Réveiller).
+
 ## 11. L'état aujourd'hui
 
 ```

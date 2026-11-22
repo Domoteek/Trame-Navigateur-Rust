@@ -230,6 +230,8 @@ function rendreBudget() {
         : `Jusqu'à ${b.plafond} onglet(s) ouvert(s) ; une mise en veille détruit la webview, rien n'est fermé.`,
     ];
     txt.title = lignes.filter(Boolean).join("\n");
+    // Rail replie : le texte est cache, la jauge porte le detail.
+    document.getElementById("budget").title = txt.textContent + "\n" + txt.title;
   }
   if (jauge) {
     const ratio = b.plafond > 0 ? Math.min(1, b.reveilles / b.plafond) : 0;
@@ -1967,7 +1969,6 @@ function brancherRail() {
   const btnRail = document.getElementById("btn-rail");
   if (btnRail) btnRail.onclick = () => ipc({ m: "rail" });
   document.getElementById("btn-trame-vue").onclick = () => ipc({ m: "trame" });
-  document.getElementById("btn-reveiller").onclick = () => ipc({ m: "reveiller", id: 0 });
   document.getElementById("btn-veille").onclick = () => ipc({ m: "endormirFroids" });
   document.getElementById("btn-capsules").onclick = () => basculerVolet("capsules");
   document.getElementById("volet-fermer").onclick = () => {

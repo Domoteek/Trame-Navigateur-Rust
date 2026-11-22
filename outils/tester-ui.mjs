@@ -1599,6 +1599,28 @@ async function suite() {
     verifier(p.visible && p.droite <= 64, `pastilles dans le rail replié : ${JSON.stringify(p)}`);
   });
 
+  await cas("pied du rail : Veille et Capsules ; replié, la jauge et Veille seulement", async () => {
+    const r = await page("chrome.html", { query: "?surface=rail" });
+    await r.setViewportSize({ width: 292, height: 700 });
+    await pousser(r, etatDeBase());
+    verifier(!(await r.$("#btn-reveiller")), "plus de bouton Réveiller");
+    const visibles = () =>
+      r.$$eval(".pied-actions button", (l) => l.filter((n) => n.offsetParent !== null).map((n) => n.id));
+    egal(await visibles(), ["btn-veille", "btn-capsules"], "déplié : Veille et Capsules");
+    await vider(r);
+    await r.click("#btn-veille");
+    verifier((await messages(r)).some((m) => m.m === "endormirFroids"), "Veille endort les onglets froids");
+    await r.setViewportSize({ width: 64, height: 700 });
+    egal(await visibles(), ["btn-veille"], "replié : Veille seule");
+    const pied = await r.$eval(".rail-pied", (n) => {
+      const v = document.getElementById("btn-veille").getBoundingClientRect();
+      const j = document.querySelector(".jauge-budget").getBoundingClientRect();
+      return { droite: v.right, jauge: j.width, texte: document.querySelector("#btn-veille span").offsetParent !== null };
+    });
+    verifier(pied.droite <= 64 && pied.jauge > 10 && !pied.texte, `replié : icône sans texte, jauge visible ${JSON.stringify(pied)}`);
+    verifier(((await r.getAttribute("#budget", "title")) || "").includes("éveillé"), "la jauge donne le détail au survol");
+  });
+
   await cas("logo : clic droit = menu des commandes, dessiné par la barre", async () => {
     const r = await page("chrome.html", { query: "?surface=rail" });
     await pousser(r, etatDeBase());

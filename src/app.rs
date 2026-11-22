@@ -3353,26 +3353,6 @@ impl App {
                     }
                 }
             }
-            "reveiller" => {
-                let id = v["id"].as_u64().unwrap_or(0);
-                if id == 0 {
-                    let ids: Vec<TabId> = self
-                        .session
-                        .onglets
-                        .iter()
-                        .filter(|o| !o.eveille)
-                        .map(|o| o.id)
-                        .collect();
-                    let n = ids.len();
-                    for id in ids {
-                        self.reveiller(id);
-                    }
-                    self.signaler(&format!("{n} onglet(s) reveille(s)."));
-                    self.pousser_etat();
-                } else {
-                    self.activer(id as TabId);
-                }
-            }
             "endormirFroids" => {
                 let mut n = 0;
                 let ids: Vec<TabId> = self
@@ -4307,20 +4287,6 @@ impl App {
                     }
                 }
                 self.signaler(&format!("{n} onglet(s) en veille."));
-                self.pousser_etat();
-            }
-            "reveiller" => {
-                let ids: Vec<TabId> = self
-                    .session
-                    .onglets
-                    .iter()
-                    .filter(|o| !o.eveille)
-                    .map(|o| o.id)
-                    .collect();
-                for id in ids {
-                    self.reveiller(id);
-                }
-                self.signaler("Onglets reveles.");
                 self.pousser_etat();
             }
             "capsule" => {
