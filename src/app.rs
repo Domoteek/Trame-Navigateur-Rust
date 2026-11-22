@@ -68,6 +68,11 @@ pub enum UserEvent {
         onglet: TabId,
         url: String,
     },
+    /// La page entre (`actif`) ou sort du plein ecran.
+    PleinEcran {
+        onglet: TabId,
+        actif: bool,
+    },
     /// L'image de l'icone d'un onglet, lue par WebView2 (`data:image/png;base64,…`).
     IconeImage {
         onglet: TabId,
@@ -152,6 +157,10 @@ enum OperationMoteur {
 
 pub struct App {
     window: Window,
+    /// Onglet dont une video occupe toute la fenetre (rail et barre caches), et si la fenetre
+    /// etait deja en plein ecran avant (on ne l'en sort pas alors a la fin).
+    plein_ecran: Option<TabId>,
+    fenetre_deja_plein_ecran: bool,
     profil: Profil,
     proxy: EventLoopProxy<UserEvent>,
 
@@ -527,6 +536,8 @@ impl App {
 
         let mut app = App {
             window,
+            plein_ecran: None,
+            fenetre_deja_plein_ecran: false,
             profil,
             proxy,
             session: Session::default(),
@@ -1163,6 +1174,9 @@ impl App {
                     crate::moteur_ext::regler_muet(&w, true);
                 }
                 let site = self.trouver(id).map(|o| o.domaine()).unwrap_or_default();
+                if let Err(e) = crate::moteur_ext::suivre_plein_ecran(&w, self.proxy.clone(), id) {
+                    alerte!("onglet {id} : suivi du plein ecran impossible ({e})");
+                }
                 if let Err(e) = crate::telechargements::brancher(&w, self.proxy.clone(), site, self.dossier_dl.clone()) {
                     alerte!("onglet {id} : suivi des telechargements impossible ({e})");
                 }
@@ -1293,7 +1307,66 @@ impl App {
         geo
     }
 
+    /// Une video demande (ou quitte) le plein ecran.
+    fn sur_plein_ecran(&mut self, onglet: TabId, actif: bool) {
+        if actif {
+            if !self.reglages.plein_ecran_total || Some(onglet) != self.actif || self.plein_ecran.is_some() {
+                return;
+            }
+            self.fenetre_deja_plein_ecran = self.window.fullscreen().is_some();
+            self.plein_ecran = Some(onglet);
+            if !self.fenetre_deja_plein_ecran {
+                self.window.set_fullscreen(Some(tao::window::Fullscreen::Borderless(None)));
+            }
+            info!("onglet {onglet} : plein ecran sur toute la fenetre");
+        } else {
+            if self.plein_ecran != Some(onglet) {
+                return;
+            }
+            self.quitter_plein_ecran();
+        }
+        self.appliquer_geometrie();
+    }
+
+    /// Rend l'interface (fin du plein ecran, ou l'onglet n'est plus celui affiche).
+    fn quitter_plein_ecran(&mut self) {
+        if self.plein_ecran.take().is_none() {
+            return;
+        }
+        if !self.fenetre_deja_plein_ecran {
+            self.window.set_fullscreen(None);
+        }
+        for w in self.rail.iter().chain(self.barre.iter()) {
+            let _ = w.set_visible(true);
+        }
+    }
+
     pub fn appliquer_geometrie(&mut self) {
+        // Plein ecran d'une video : l'onglet couvre toute la fenetre, le reste est cache.
+        if let Some(id) = self.plein_ecran {
+            if Some(id) != self.actif || !self.webviews.contains_key(&id) {
+                self.quitter_plein_ecran();
+            } else {
+                let taille = self.window.inner_size();
+                let tout = wry::Rect {
+                    position: tao::dpi::PhysicalPosition::new(0, 0).into(),
+                    size: tao::dpi::PhysicalSize::new(taille.width.max(1), taille.height.max(1)).into(),
+                };
+                for w in self.rail.iter().chain(self.barre.iter()).chain(self.zap.iter()).chain(self.vue.iter()) {
+                    let _ = w.set_visible(false);
+                }
+                for (autre, w) in self.webviews.iter() {
+                    if *autre == id {
+                        let _ = w.set_bounds(tout);
+                        let _ = w.set_visible(true);
+                        crate::fenetres::au_premier_plan(w);
+                    } else {
+                        let _ = w.set_visible(false);
+                    }
+                }
+                return;
+            }
+        }
         let geo = self.geometrie_courante();
         if let Some(w) = &self.rail {
             let _ = w.set_bounds(geo.rail);
@@ -2582,6 +2655,7 @@ impl App {
                 "adressesNettoyees": self.adresses_nettoyees,
                 "budget": self.reglages.budget_borne(),
                 "barreExtensions": self.reglages.barre_extensions,
+                "pleinEcranTotal": self.reglages.plein_ecran_total,
                 "moteur": self.reglages.moteur.clone(),
             },
             "profil": self.profil.racine().display().to_string(),
@@ -2898,6 +2972,7 @@ impl App {
                 self.capturer_icone_si_utile(onglet);
             }
             UserEvent::IconeImage { onglet, donnees } => self.icone_capturee(onglet, donnees),
+            UserEvent::PleinEcran { onglet, actif } => self.sur_plein_ecran(onglet, actif),
             UserEvent::NouvelleFenetre { onglet, url } => {
                 let url = urls::normaliser_avec(&url, &self.reglages.moteur);
                 // Depuis le panneau de droite (popup d'extension), il n'y a pas d'onglet
@@ -3680,6 +3755,11 @@ impl App {
                     self.appliquer_geometrie();
                     self.pousser_etat();
                 }
+            }
+            "pleinEcranTotal" => {
+                self.reglages.plein_ecran_total = v["actif"].as_bool().unwrap_or(true);
+                self.profil.sauver_reglages(&self.reglages);
+                self.pousser_etat();
             }
             "veilleAuto" => {
                 self.reglages.veille_auto = v["actif"].as_bool().unwrap_or(true);

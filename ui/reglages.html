@@ -457,6 +457,17 @@
       </section>
 
       <section>
+        <h2>Vidéos</h2>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Plein écran sur toute la fenêtre</b>
+            <span>Le bouton plein écran d'une vidéo (YouTube…) cache le menu et la barre et passe la fenêtre en plein écran. Désactivé : la vidéo ne remplit que la zone de la page.</span>
+          </div>
+          <div class="bascule" id="bascule-plein-ecran"></div>
+        </div>
+      </section>
+
+      <section>
         <h2>Système</h2>
         <div class="ligne">
           <div class="libelle">
@@ -794,6 +805,8 @@
             "bascule" + (r.veilleAuto ? " on" : "");
           document.getElementById("bascule-barre-ext").className =
             "bascule" + (r.barreExtensions ? " on" : "");
+          document.getElementById("bascule-plein-ecran").className =
+            "bascule" + (r.pleinEcranTotal !== false ? " on" : "");
           document.getElementById("bascule-memoire-basse").className =
             "bascule" + (r.memoireBasse ? " on" : "");
           document.getElementById("bascule-budget-auto").className =
@@ -848,6 +861,8 @@
           ipc({ m: "memoireBasse", actif: !((etat && etat.reglages && etat.reglages.memoireBasse) || false) });
         document.getElementById("bascule-barre-ext").onclick = () =>
           ipc({ m: "barreExtensions", visible: !((etat && etat.reglages && etat.reglages.barreExtensions) || false) });
+        document.getElementById("bascule-plein-ecran").onclick = () =>
+          ipc({ m: "pleinEcranTotal", actif: !(etat && etat.reglages && etat.reglages.pleinEcranTotal !== false) });
         document.getElementById("btn-recharger").onclick = () => ipc({ m: "extensionsRecharger" });
         document.getElementById("btn-dossier-ext").onclick = () => ipc({ m: "dossierExtensions" });
         document.getElementById("btn-chercher-chrome").addEventListener("click", () => ipc({ m: "chromeScan" }));

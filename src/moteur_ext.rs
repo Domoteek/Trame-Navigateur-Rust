@@ -224,6 +224,30 @@ pub fn lire_icone(webview: &WebView, proxy: EventLoopProxy<UserEvent>, onglet: u
     }
 }
 
+/// Suit le plein ecran demande par la page (bouton plein ecran d'une video). WebView2 ne
+/// l'etend qu'a la webview, donc a la zone de contenu : Trame doit agrandir lui-meme.
+/// Chaque changement revient en `UserEvent::PleinEcran`.
+pub fn suivre_plein_ecran(webview: &WebView, proxy: EventLoopProxy<UserEvent>, onglet: u32) -> Result<(), String> {
+    use webview2_com::ContainsFullScreenElementChangedEventHandler;
+    let gestionnaire = ContainsFullScreenElementChangedEventHandler::create(Box::new(move |coeur, _| {
+        let mut actif = BOOL(0);
+        if let Some(c) = coeur {
+            unsafe {
+                let _ = c.ContainsFullScreenElement(&mut actif);
+            }
+        }
+        let _ = proxy.send_event(UserEvent::PleinEcran { onglet, actif: actif.as_bool() });
+        Ok(())
+    }));
+    let mut jeton = 0i64;
+    unsafe {
+        webview
+            .webview()
+            .add_ContainsFullScreenElementChanged(&gestionnaire, &mut jeton)
+            .map_err(|e| e.message().to_string())
+    }
+}
+
 /// Reprend une webview mise en pause (avant de l'afficher).
 pub fn reprendre(webview: &WebView) {
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_3;

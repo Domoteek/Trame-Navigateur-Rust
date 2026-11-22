@@ -266,6 +266,10 @@ pub struct Reglages {
     /// Afficher la barre d'extensions sous la Couture.
     #[serde(default = "vrai")]
     pub barre_extensions: bool,
+    /// Plein ecran d'une video (YouTube…) : toute la fenetre, rail et barre caches, fenetre
+    /// elle-meme en plein ecran. Desactive : la video ne remplit que la zone de la page.
+    #[serde(default = "vrai")]
+    pub plein_ecran_total: bool,
     /// Endormir automatiquement les onglets refroidis.
     #[serde(default = "vrai")]
     pub veille_auto: bool,
@@ -413,6 +417,7 @@ impl Default for Reglages {
         Reglages {
             moteur: moteur_defaut(),
             barre_extensions: true,
+            plein_ecran_total: true,
             veille_auto: true,
             budget: budget_defaut(),
             extensions_etat: BTreeMap::new(),
