@@ -571,7 +571,7 @@ Preuve : `cargo test --release` 172/172, `tester-ui.mjs` 60/60 ; essai dans Edge
 une vraie vidéo : à 8 s, F5 → reprise à 8 s ; menu « Recharger » → reprise aussi. Le cas
 YouTube (`t=`) n'est pas éprouvé hors ligne.
 
-## 10 sexies. 2026-11-22, soir — plus de « Réveiller », pied du rail replié (0.4.1)
+## 10 sexies. 2026-11-22, soir — plus de « Réveiller », pied du rail replié (0.4.2)
 
 « Réveiller » (rail, vue Trame « Réveiller tout », commande « Réveiller tous les onglets ») ne
 servait à rien : les onglets réveillés d'un coup restent froids (vitalité < 0,16), et la veille
