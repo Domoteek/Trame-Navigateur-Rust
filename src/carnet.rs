@@ -52,6 +52,25 @@ pub struct Acces {
     pub icone: Option<String>,
 }
 
+/// Encodage base64 standard (pour garder une icone en `data:` dans le carnet).
+pub fn base64(octets: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut s = String::with_capacity(octets.len().div_ceil(3) * 4);
+    for bloc in octets.chunks(3) {
+        let n = (bloc[0] as u32) << 16 | (*bloc.get(1).unwrap_or(&0) as u32) << 8 | *bloc.get(2).unwrap_or(&0) as u32;
+        s.push(T[(n >> 18) as usize & 63] as char);
+        s.push(T[(n >> 12) as usize & 63] as char);
+        s.push(if bloc.len() > 1 { T[(n >> 6) as usize & 63] as char } else { '=' });
+        s.push(if bloc.len() > 2 { T[n as usize & 63] as char } else { '=' });
+    }
+    s
+}
+
+/// L'icone est-elle deja gardee en image (et non en adresse a recharger) ?
+pub fn icone_locale(icone: &Option<String>) -> bool {
+    icone.as_deref().map(|i| i.starts_with("data:")).unwrap_or(false)
+}
+
 /// Places de la bande d'acces rapides du rail.
 pub const RAIL_MAX: usize = 10;
 
@@ -435,6 +454,15 @@ mod tests {
         ));
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn base64_standard() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
     }
 
     #[test]

@@ -69,6 +69,56 @@ impl App {
         self.acces.iter().any(|a| a.url == url && a.rail) || self.acces.iter().filter(|a| a.rail).count() < RAIL_MAX
     }
 
+    /// Un onglet ouvert sur le site d'un acces rapide ou d'un favori dont l'icone n'est pas
+    /// encore gardee en image : on demande l'image a WebView2.
+    pub(super) fn capturer_icone_si_utile(&self, onglet: TabId) {
+        let Some(o) = self.trouver(onglet) else { return };
+        let h = carnet::hote(&o.url);
+        if h.is_empty() {
+            return;
+        }
+        let manque = self.acces.iter().any(|a| carnet::hote(&a.url) == h && !carnet::icone_locale(&a.icone))
+            || self.favoris.iter().any(|f| carnet::hote(&f.url) == h && !carnet::icone_locale(&f.icone));
+        if let (true, Some(w)) = (manque, self.webviews.get(&onglet)) {
+            crate::moteur_ext::lire_icone(w, self.proxy.clone(), onglet);
+        }
+    }
+
+    /// Les onglets deja ouverts sur les sites des acces rapides et des favoris (apres un ajout).
+    fn capturer_icones_ouvertes(&self) {
+        let ids: Vec<TabId> = self.webviews.keys().copied().collect();
+        for id in ids {
+            self.capturer_icone_si_utile(id);
+        }
+    }
+
+    /// Image de l'icone d'un onglet : elle remplace l'adresse des acces et favoris de son site.
+    pub(super) fn icone_capturee(&mut self, onglet: TabId, donnees: String) {
+        let Some(h) = self.trouver(onglet).map(|o| carnet::hote(&o.url)) else { return };
+        if h.is_empty() {
+            return;
+        }
+        let mut acces = false;
+        for a in self.acces.iter_mut().filter(|a| carnet::hote(&a.url) == h && !carnet::icone_locale(&a.icone)) {
+            a.icone = Some(donnees.clone());
+            acces = true;
+        }
+        let mut favoris = false;
+        for f in self.favoris.iter_mut().filter(|f| carnet::hote(&f.url) == h && !carnet::icone_locale(&f.icone)) {
+            f.icone = Some(donnees.clone());
+            favoris = true;
+        }
+        if acces {
+            self.sauver_acces();
+        }
+        if favoris {
+            self.sauver_favoris();
+        }
+        if acces || favoris {
+            self.pousser_etat();
+        }
+    }
+
     fn signaler_rail_plein(&mut self) {
         self.signaler(&format!("Le rail tient {RAIL_MAX} accès rapides : retires-en un d'abord."));
     }
@@ -246,6 +296,28 @@ impl App {
                 self.basculer_favori();
                 true
             }
+            "favoriOuvrir" => {
+                // Un favori est une page precise : l'onglet ou elle est deja ouverte (meme adresse),
+                // sinon un nouvel onglet — jamais a la place de la page affichee.
+                if let Some(url) = v["url"].as_str().filter(|u| self.favoris.iter().any(|f| f.url == *u)) {
+                    let url = url.to_string();
+                    let ouvert = self
+                        .session
+                        .onglets
+                        .iter()
+                        .filter(|o| o.rendez_vous.is_none() && o.url == url)
+                        .max_by_key(|o| o.dernier_focus)
+                        .map(|o| o.id);
+                    match ouvert {
+                        Some(id) if Some(id) != self.actif => self.activer(id),
+                        Some(_) => {}
+                        None => {
+                            self.ouvrir_onglet(url, Declencheur::NouvelOnglet, None);
+                        }
+                    }
+                }
+                true
+            }
             "favoriRetirer" => {
                 let url = v["url"].as_str().unwrap_or("");
                 let avant = self.favoris.len();
@@ -334,6 +406,7 @@ impl App {
                 self.acces.retain(|f| vues.insert(f.url.clone()));
                 self.sauver_acces();
                 self.pousser_etat();
+                self.capturer_icones_ouvertes();
                 true
             }
             "accesDepuisOnglet" => {
@@ -373,6 +446,7 @@ impl App {
                 self.signaler(if rail { "Ajouté aux accès rapides du rail." } else { "Ajouté aux accès rapides." });
                 self.sauver_acces();
                 self.pousser_etat();
+                self.capturer_icones_ouvertes();
                 true
             }
             "accesRail" => {
@@ -451,6 +525,7 @@ impl App {
                 self.sauver_acces_groupes();
                 self.sauver_acces();
                 self.pousser_etat();
+                self.capturer_icones_ouvertes();
                 true
             }
             "imprimer" => {
@@ -712,6 +787,7 @@ impl App {
         }
         self.sauver_favoris();
         self.pousser_etat();
+        self.capturer_icones_ouvertes();
     }
 
     /// Favoris qui repondent a une saisie (pour la barre). Vide : les plus recents.

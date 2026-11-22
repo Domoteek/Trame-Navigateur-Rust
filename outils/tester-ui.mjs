@@ -1032,7 +1032,7 @@ async function suite() {
     egal(await p.$$eval("#tuiles .tuile:not(.ajout)", (n) => n.length), 0, "aucun accès rapide pour autant");
     await vider(p);
     await p.click("#favoris .fav");
-    verifier((await messages(p)).some((m) => m.m === "naviguer" && m.url === "https://www.youtube.com/watch?v=abc"), "le clic ouvre la page");
+    verifier((await messages(p)).some((m) => m.m === "favoriOuvrir" && m.url === "https://www.youtube.com/watch?v=abc"), "le clic ouvre la page dans un nouvel onglet");
     await vider(p);
     await p.hover("#favoris .fav");
     await p.click("#favoris .fav .x");

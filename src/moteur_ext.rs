@@ -186,6 +186,44 @@ pub fn suspendre(webview: &WebView, proxy: EventLoopProxy<UserEvent>, onglet: u3
     }
 }
 
+/// Lit l'image de l'icone de la page (PNG), telle que WebView2 l'a deja chargee pour l'onglet :
+/// aucune requete de plus, et rien que l'anti-pistage puisse bloquer (l'adresse de l'icone,
+/// rechargee depuis l'interface de Trame, est un tiers : celle d'Amazon y etait refusee).
+/// Le resultat revient en `UserEvent::IconeImage` ; rien si la page n'a pas d'icone.
+pub fn lire_icone(webview: &WebView, proxy: EventLoopProxy<UserEvent>, onglet: u32) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2_15, COREWEBVIEW2_FAVICON_IMAGE_FORMAT_PNG,
+    };
+    use webview2_com::GetFaviconCompletedHandler;
+    let fin = GetFaviconCompletedHandler::create(Box::new(move |resultat, flux| {
+        let Some(flux) = flux.filter(|_| resultat.is_ok()) else { return Ok(()) };
+        let mut octets = Vec::new();
+        let mut tampon = [0u8; 8192];
+        loop {
+            let mut lus = 0u32;
+            let r = unsafe { flux.Read(tampon.as_mut_ptr() as *mut _, tampon.len() as u32, Some(&mut lus)) };
+            if r.is_err() || lus == 0 {
+                break;
+            }
+            octets.extend_from_slice(&tampon[..lus as usize]);
+            if octets.len() > 512 * 1024 {
+                return Ok(()); // une icone, pas une affiche
+            }
+        }
+        if !octets.is_empty() {
+            let donnees = format!("data:image/png;base64,{}", crate::carnet::base64(&octets));
+            let _ = proxy.send_event(UserEvent::IconeImage { onglet, donnees });
+        }
+        Ok(())
+    }));
+    unsafe {
+        let _ = webview
+            .webview()
+            .cast::<ICoreWebView2_15>()
+            .and_then(|w| w.GetFavicon(COREWEBVIEW2_FAVICON_IMAGE_FORMAT_PNG, &fin));
+    }
+}
+
 /// Reprend une webview mise en pause (avant de l'afficher).
 pub fn reprendre(webview: &WebView) {
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_3;

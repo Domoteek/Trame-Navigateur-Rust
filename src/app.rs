@@ -68,6 +68,11 @@ pub enum UserEvent {
         onglet: TabId,
         url: String,
     },
+    /// L'image de l'icone d'un onglet, lue par WebView2 (`data:image/png;base64,…`).
+    IconeImage {
+        onglet: TabId,
+        donnees: String,
+    },
     NouvelleFenetre {
         onglet: TabId,
         url: String,
@@ -2878,7 +2883,9 @@ impl App {
                         self.pousser_etat();
                     }
                 }
+                self.capturer_icone_si_utile(onglet);
             }
+            UserEvent::IconeImage { onglet, donnees } => self.icone_capturee(onglet, donnees),
             UserEvent::NouvelleFenetre { onglet, url } => {
                 let url = urls::normaliser_avec(&url, &self.reglages.moteur);
                 // Depuis le panneau de droite (popup d'extension), il n'y a pas d'onglet

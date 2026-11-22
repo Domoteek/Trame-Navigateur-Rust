@@ -490,7 +490,7 @@
 
         function ligneFavori(f) {
           const d = elem("div", "fav");
-          d.title = `${f.titre}\n${f.url}\nClic : ouvrir ici · Ctrl+clic : nouvel onglet · clic droit : plus`;
+          d.title = `${f.titre}\n${f.url}\nClic : nouvel onglet (ou l'onglet où elle est déjà ouverte) · clic droit : plus`;
           const ico = elem("div", "ico");
           const lettre = (f.titre || f.domaine || "?").trim().charAt(0).toUpperCase();
           ico.style.background = teinte(f.domaine || f.url);
@@ -515,16 +515,17 @@
           x.title = "Retirer des favoris";
           x.onclick = (e) => { e.stopPropagation(); ipc({ m: "favoriRetirer", url: f.url }); };
           d.appendChild(x);
-          const ouvrir = (nouveau) => ipc(nouveau ? { m: "nouvelOnglet", url: f.url } : { m: "naviguer", url: f.url });
-          d.onclick = (e) => ouvrir(e.ctrlKey || e.shiftKey);
-          d.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); ouvrir(true); } };
+          // Un favori s'ouvre dans un nouvel onglet, ou va sur celui ou la page est deja ouverte.
+          const ouvrir = (ici) => ipc(ici ? { m: "naviguer", url: f.url } : { m: "favoriOuvrir", url: f.url });
+          d.onclick = () => ouvrir(false);
+          d.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); ouvrir(false); } };
           d.oncontextmenu = (e) => {
             e.preventDefault();
             let site = "";
             try { site = new URL(f.url).origin + "/"; } catch (err) {}
             const lignes = [
-              { texte: "Ouvrir ici", faire: () => ouvrir(false) },
-              { texte: "Ouvrir dans un nouvel onglet", faire: () => ouvrir(true) },
+              { texte: "Ouvrir (nouvel onglet)", faire: () => ouvrir(false) },
+              { texte: "Ouvrir à la place de cette page", faire: () => ouvrir(true) },
             ];
             if (site && /^https?:/.test(site)) {
               lignes.push("-", { texte: "Créer un accès rapide vers ce site", faire: () => ipc({ m: "accesEnregistrer", url: site, titre: "", groupe: "", rail: false, ancienne: "" }) });

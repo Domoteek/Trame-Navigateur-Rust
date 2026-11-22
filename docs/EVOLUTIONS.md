@@ -518,6 +518,17 @@ Demande de Clément : un **favori** est une page précise (une vidéo, un articl
 - Preuves : `cargo test --release` (171), `node outils/tester-ui.mjs` (58, dont les deux nouveaux cas
   « 10 places » et « favoris à part »), captures du rail déplié, du menu et du rail replié.
 
+### Suite, 18 h 25 — icônes gardées en image, favoris en nouvel onglet
+
+- L'icône d'Amazon ne s'affichait pas dans le rail : son adresse, rechargée depuis l'interface
+  de Trame, est un tiers (anti-pistage). Trame lit maintenant l'image que WebView2 a déjà pour
+  l'onglet (`ICoreWebView2_15::GetFavicon`, `moteur_ext::lire_icone`) et la garde en `data:` dans
+  `acces.json` / `favoris.json`, dès qu'un onglet du site charge son icône ou après un ajout.
+- Un favori s'ouvre dans un **nouvel onglet**, ou va sur l'onglet où cette page exacte est déjà
+  ouverte (`favoriOuvrir`). Un accès rapide garde son comportement : l'onglet déjà ouvert sur le site.
+- Vérifié chez Clément à 18 h 25 : YouTube, Wikipédia et les 2 favoris ont leur image ; Amazon
+  suivra à l'ouverture de son onglet (en veille).
+
 ## 11. L'état aujourd'hui
 
 ```
