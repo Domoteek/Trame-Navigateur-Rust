@@ -94,6 +94,8 @@ pub enum UserEvent {
         origine: String,
         propre: String,
     },
+    /// Une requete a ete refusee par le blocage d'une extension (`bloquer`).
+    AdresseBloquee { onglet: TabId, adresse: String },
     /// Une navigation vers une adresse interne de Chromium a ete refusee.
     NavigationRefusee(String),
     /// Un telechargement commence (destination choisie, suivi branche).
@@ -267,6 +269,9 @@ pub struct App {
     /// Nettoyage des adresses : (actif, garder l'affiliation), partage avec les gardes de
     /// navigation (qui vivent dans les webviews, hors de la boucle).
     nettoyage: std::sync::Arc<(std::sync::atomic::AtomicBool, std::sync::atomic::AtomicBool)>,
+    /// Adresses refusees au reseau (`bloquer` des extensions allumees), partagees avec le
+    /// gestionnaire `WebResourceRequested` de chaque onglet.
+    blocage: crate::moteur_ext::Blocage,
     /// Coup d'oeil : l'apercu flottant, son adresse courante, son ombre.
     apercu: Option<WebView>,
     /// Trame est-il le navigateur par defaut ? `None` tant que ce n'est pas verifie.
@@ -280,6 +285,9 @@ pub struct App {
     pause_demandee: std::collections::HashSet<TabId>,
     /// Adresses nettoyees depuis le demarrage (affiche dans les reglages).
     adresses_nettoyees: u64,
+    /// Requetes refusees par le blocage des extensions, et ce qui en a deja ete journalise.
+    adresses_bloquees: u64,
+    blocages_journalises: std::collections::HashSet<(TabId, String)>,
     /// Derniere mesure complete de la sonde (memoire, extensions, memoire libre).
     derniere_mesure: probe::Mesure,
     /// Nombre d'onglets ouverts permis par la memoire libre (voir `model::budget_adapte`),
@@ -604,7 +612,10 @@ impl App {
                 std::sync::atomic::AtomicBool::new(true),
                 std::sync::atomic::AtomicBool::new(true),
             )),
+            blocage: crate::moteur_ext::Blocage::default(),
             adresses_nettoyees: 0,
+            adresses_bloquees: 0,
+            blocages_journalises: std::collections::HashSet::new(),
             en_pause: std::collections::HashSet::new(),
             apercu: None,
             par_defaut: None,
@@ -721,6 +732,18 @@ impl App {
             self.extensions.len(),
             self.reglages.extensions_etat.len()
         );
+        self.appliquer_blocage();
+    }
+
+    /// Reporte les adresses a refuser (extensions allumees) dans l'etat partage avec les
+    /// onglets. Effet immediat sur les onglets ouverts, sans les recreer.
+    fn appliquer_blocage(&self) {
+        let motifs = extensions::motifs_bloques(&self.extensions);
+        let n = motifs.len();
+        if let Ok(mut m) = self.blocage.motifs.write() {
+            *m = motifs;
+        }
+        info!("blocage reseau : {n} motif(s) actif(s)");
     }
 
     /// Allume ou coupe une extension Trame, et **memorise le choix** dans `reglages.json`.
@@ -746,6 +769,9 @@ impl App {
             "extension {id} : {} (choix memorise)",
             if actif { "activee" } else { "coupee" }
         );
+        // Le blocage reseau suit tout de suite ; les scripts `js_debut`, eux, sont poses a la
+        // creation d'un onglet (ils valent pour les onglets suivants).
+        self.appliquer_blocage();
         // L'injection a lieu en fin de chargement : on recharge la page pour que le changement
         // se voie tout de suite, dans les deux sens.
         let suite = if self.recharger_page_active() {
@@ -1120,7 +1146,12 @@ impl App {
         let builder = if std::env::var("TRAME_SANS_AMORCE").is_ok() {
             builder
         } else {
-            builder.with_initialization_script(format!("{}\n{}", extensions::AMORCE, RACCOURCIS))
+            builder.with_initialization_script(format!(
+                "{}\n{}\n{}",
+                extensions::AMORCE,
+                RACCOURCIS,
+                extensions::script_de_debut(&self.extensions)
+            ))
         };
         let builder = if std::env::var("TRAME_SANS_PROTOCOLE").is_ok() {
             builder
@@ -1189,7 +1220,13 @@ impl App {
                 let interception = std::env::var("TRAME_SANS_INTERCEPTION").is_err();
                 if !interception {
                     info!("onglet {id} : interception reseau desactivee (sonde)");
-                } else if let Err(e) = crate::moteur_ext::intercepter_pistage(&w, self.nettoyage.clone(), self.proxy.clone(), id) {
+                } else if let Err(e) = crate::moteur_ext::intercepter_pistage(
+                    &w,
+                    self.nettoyage.clone(),
+                    self.blocage.avec_filtres(extensions::filtres_bloquer(&self.extensions)),
+                    self.proxy.clone(),
+                    id,
+                ) {
                     alerte!("onglet {id} : interception du pistage impossible ({e})");
                 }
                 if let Some(c) = &cloison {
@@ -1882,7 +1919,13 @@ impl App {
         match resultat {
             Ok(w) => {
                 info!("coup d'oeil : {}", urls::affichage_court(&url));
-                let _ = crate::moteur_ext::intercepter_pistage(&w, self.nettoyage.clone(), self.proxy.clone(), 0);
+                let _ = crate::moteur_ext::intercepter_pistage(
+                    &w,
+                    self.nettoyage.clone(),
+                    self.blocage.avec_filtres(extensions::filtres_bloquer(&self.extensions)),
+                    self.proxy.clone(),
+                    0,
+                );
                 self.apercu = Some(w);
                 self.apercu_url = url;
                 if self.panneau_ouvert {
@@ -2661,6 +2704,7 @@ impl App {
                 "lectureExclus": self.reglages.lecture_exclus.clone(),
                 "parDefaut": self.par_defaut,
                 "adressesNettoyees": self.adresses_nettoyees,
+                "adressesBloquees": self.adresses_bloquees,
                 "budget": self.reglages.budget_borne(),
                 "barreExtensions": self.reglages.barre_extensions,
                 "pleinEcran": self.reglages.plein_ecran.clone(),
@@ -3076,6 +3120,17 @@ impl App {
                 let retires = origine.len().saturating_sub(propre.len());
                 info!("onglet {onglet} : adresse nettoyee ({retires} caracteres de pistage retires)");
                 self.adresses_nettoyees = self.adresses_nettoyees.saturating_add(1);
+            }
+            UserEvent::AdresseBloquee { onglet, adresse } => {
+                self.adresses_bloquees = self.adresses_bloquees.saturating_add(1);
+                // Une ligne par hote et par onglet suffit au journal.
+                let hote = url::Url::parse(&adresse)
+                    .ok()
+                    .and_then(|u| u.host_str().map(|h| format!("{h}{}", u.path())))
+                    .unwrap_or_default();
+                if self.blocages_journalises.insert((onglet, hote.clone())) {
+                    info!("onglet {onglet} : adresse bloquee {}", urls::affichage_court(&hote));
+                }
             }
             UserEvent::NavigationRefusee(url) => {
                 info!("navigation refusee (adresse interne de Chromium) : {url}");
@@ -4301,6 +4356,7 @@ impl App {
             }
             "extensions" => {
                 self.extensions = extensions::charger(&self.profil.dossier_extensions());
+                self.appliquer_etat_extensions();
                 self.signaler(&format!("{} extension(s).", self.extensions.len()));
                 self.pousser_etat();
             }

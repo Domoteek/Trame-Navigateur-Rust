@@ -95,6 +95,18 @@ pub fn charger(dossier: &Path) -> Vec<Extension> {
                 Err(e) => alerte!("extension {id} : {fichier} illisible ({e})"),
             }
         }
+        let mut js_debut = Vec::new();
+        for fichier in &manifeste.js_debut {
+            match fs::read_to_string(chemin.join(fichier)) {
+                Ok(contenu) => js_debut.push(contenu),
+                Err(e) => alerte!("extension {id} : {fichier} illisible ({e})"),
+            }
+        }
+        let bloque: Vec<(String, Motif)> = manifeste
+            .bloquer
+            .iter()
+            .filter_map(|m| compiler_motif(m).map(|c| (m.clone(), c)))
+            .collect();
         let mut css = String::new();
         for fichier in &manifeste.css {
             match fs::read_to_string(chemin.join(fichier)) {
@@ -114,10 +126,12 @@ pub fn charger(dossier: &Path) -> Vec<Extension> {
             alerte!("extension {id} : aucun motif d'URL exploitable, elle ne s'appliquera jamais");
         }
         info!(
-            "extension chargee : {id} v{} ({} script(s), {} motif(s), active={})",
+            "extension chargee : {id} v{} ({} script(s), {} au debut, {} motif(s), {} blocage(s), active={})",
             manifeste.version,
             js.len(),
+            js_debut.len(),
             motifs.len(),
+            bloque.len(),
             manifeste.enabled_by_default
         );
         out.push(Extension {
@@ -128,8 +142,10 @@ pub fn charger(dossier: &Path) -> Vec<Extension> {
             active: manifeste.enabled_by_default,
             manifeste,
             js,
+            js_debut,
             css,
             motifs,
+            bloque,
         });
     }
     out
@@ -246,6 +262,115 @@ pub fn applicables<'a>(extensions: &'a [Extension], url: &str) -> Vec<&'a Extens
         .collect()
 }
 
+/// Traduit un motif en expression rationnelle JavaScript (texte de `new RegExp(...)`),
+/// avec la meme regle que `correspond` : `*.exemple.fr` couvre aussi `exemple.fr`.
+pub fn motif_en_regex(m: &Motif) -> String {
+    fn echapper(t: &str, etoile: &str) -> String {
+        let mut out = String::new();
+        for c in t.chars() {
+            match c {
+                '*' => out.push_str(etoile),
+                '.' | '+' | '?' | '^' | '$' | '{' | '}' | '(' | ')' | '|' | '[' | ']' | '\\' | '/' => {
+                    out.push('\\');
+                    out.push(c);
+                }
+                _ => out.push(c),
+            }
+        }
+        out
+    }
+    let schema = if m.tout_schema { "https?".to_string() } else { echapper(&m.schema, "") };
+    let hote = if m.hote == "*" {
+        "[^/:]+".to_string()
+    } else if let Some(base) = m.hote.strip_prefix("*.") {
+        format!(r"(?:[^/:]+\.)?{}", echapper(base, "[^/:]*"))
+    } else {
+        echapper(&m.hote, "[^/:]*")
+    };
+    // Dans le chemin, `*` traverse les `/` (comme `correspond_glob`).
+    let chemin = echapper(&m.chemin, ".*");
+    format!(r"^{schema}:\/\/{hote}(?::\d+)?{chemin}")
+}
+
+/// Script ajoute au debut de chaque document d'un onglet : les `js_debut` des extensions
+/// allumees, chacun garde par ses motifs (le script de debut s'applique a tous les documents,
+/// cadres compris). Vide si aucune extension n'en a.
+pub fn script_de_debut(extensions: &[Extension]) -> String {
+    let mut out = String::new();
+    for e in extensions.iter().filter(|e| e.active && !e.js_debut.is_empty()) {
+        let regex: Vec<String> = e
+            .motifs
+            .iter()
+            .map(|m| serde_json::to_string(&motif_en_regex(m)).unwrap_or_default())
+            .collect();
+        out.push_str(&format!("/* extension {} (debut) */\n", e.id));
+        out.push_str("(() => {\n  try {\n    const href = String(location.href);\n");
+        out.push_str(&format!(
+            "    if (![{}].some((r) => new RegExp(r).test(href))) return;\n",
+            regex.join(",")
+        ));
+        out.push_str("  } catch (e) { return; }\n");
+        for js in &e.js_debut {
+            out.push_str("  try {\n");
+            out.push_str(js);
+            out.push_str(&format!(
+                "\n  }} catch (e) {{ console.warn('[trame] extension {} :', e); }}\n",
+                e.id
+            ));
+        }
+        out.push_str("})();\n");
+    }
+    out
+}
+
+/// Motifs `bloquer` de toutes les extensions chargees (allumees ou non), sans doublon : ce sont
+/// les filtres poses sur le reseau d'un onglet. C'est l'etat allume qui decide ensuite.
+pub fn filtres_bloquer(extensions: &[Extension]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (texte, _) in extensions.iter().flat_map(|e| e.bloque.iter()) {
+        if !out.contains(texte) {
+            out.push(texte.clone());
+        }
+    }
+    out
+}
+
+/// Motifs a refuser maintenant : ceux des extensions allumees.
+pub fn motifs_bloques(extensions: &[Extension]) -> Vec<Motif> {
+    extensions
+        .iter()
+        .filter(|e| e.active)
+        .flat_map(|e| e.bloque.iter().map(|(_, m)| m.clone()))
+        .collect()
+}
+
+/// L'adresse doit-elle etre refusee ? Hote comme `correspond`, glob sur chemin ET requete
+/// (`/api/stats/ads?…`, `/pagead/*`).
+pub fn est_bloquee(motifs: &[Motif], url: &str) -> bool {
+    let Ok(u) = url::Url::parse(url) else {
+        return false;
+    };
+    let chemin_complet = match u.query() {
+        Some(q) => format!("{}?{q}", u.path()),
+        None => u.path().to_string(),
+    };
+    motifs
+        .iter()
+        .any(|m| correspond_hote(m, &u) && correspond_glob(&m.chemin, &chemin_complet))
+}
+
+fn correspond_hote(motif: &Motif, u: &url::Url) -> bool {
+    if !motif.tout_schema && motif.schema != u.scheme() {
+        return false;
+    }
+    let Some(hote) = u.host_str() else { return false };
+    if let Some(base) = motif.hote.strip_prefix("*.") {
+        hote == base || hote.ends_with(&format!(".{base}"))
+    } else {
+        motif.hote == "*" || hote == motif.hote
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -280,5 +405,32 @@ mod tests {
         assert!(correspond_glob("/wiki/*", "/wiki/Rust"));
         assert!(!correspond_glob("/wiki/*", "/blog/Rust"));
         assert!(correspond_glob("*lithium*", "/a/lithium-batterie/x"));
+    }
+
+    #[test]
+    fn le_blocage_regarde_aussi_la_requete() {
+        let motifs: Vec<Motif> = [
+            "*://*.doubleclick.net/*",
+            "*://www.youtube.com/api/stats/ads*",
+            "*://www.youtube.com/pagead/*",
+        ]
+        .iter()
+        .filter_map(|m| compiler_motif(m))
+        .collect();
+        assert!(est_bloquee(&motifs, "https://googleads.g.doubleclick.net/pagead/id"));
+        assert!(est_bloquee(&motifs, "https://www.youtube.com/api/stats/ads?ver=2&ns=yt"));
+        assert!(est_bloquee(&motifs, "https://www.youtube.com/pagead/viewthroughconversion/1"));
+        assert!(!est_bloquee(&motifs, "https://www.youtube.com/watch?v=abc"));
+        assert!(!est_bloquee(&motifs, "https://www.youtube.com/api/stats/watchtime?x=1"));
+        assert!(!est_bloquee(&motifs, "https://doubleclick.net.evil.com/a"));
+    }
+
+    #[test]
+    fn la_regex_js_suit_les_memes_regles() {
+        let m = compiler_motif("*://*.youtube.com/*").unwrap();
+        let r = motif_en_regex(&m);
+        assert_eq!(r, r"^https?:\/\/(?:[^/:]+\.)?youtube\.com(?::\d+)?\/.*");
+        let m = compiler_motif("https://exemple.fr/wiki/*").unwrap();
+        assert_eq!(motif_en_regex(&m), r"^https:\/\/exemple\.fr(?::\d+)?\/wiki\/.*");
     }
 }

@@ -1,11 +1,21 @@
 {
   "name": "Saute-pub YouTube",
-  "version": "1.0.0",
-  "description": "Quand une publicité démarre dans le lecteur YouTube : la coupe, la fait défiler jusqu'au bout et clique « Passer » dès que possible. Les encarts publicitaires du lecteur et de la page sont masqués.",
+  "version": "2.0.0",
+  "description": "Retire les pubs de la réponse du lecteur avant qu'il ne les voie, refuse les adresses publicitaires de YouTube, masque les encarts et saute les passages sponsorisés signalés sur SponsorBlock. Si une pub passe quand même : son coupé, ×16 et « Passer ».",
   "author": "Trame",
-  "matches": ["*://www.youtube.com/*", "*://m.youtube.com/*", "*://youtube.com/*"],
+  "matches": ["*://www.youtube.com/*", "*://m.youtube.com/*", "*://youtube.com/*", "*://www.youtube-nocookie.com/*"],
+  "js_debut": ["debut.js"],
   "js": ["contenu.js"],
   "css": ["style.css"],
+  "bloquer": [
+    "*://*.doubleclick.net/*",
+    "*://*.googlesyndication.com/*",
+    "*://*.googleadservices.com/*",
+    "*://www.youtube.com/pagead/*",
+    "*://www.youtube.com/api/stats/ads*",
+    "*://www.youtube.com/ptracking*",
+    "*://www.youtube.com/get_midroll_*"
+  ],
   "run_at": "document_end",
   "accent": "#f87171"
 }

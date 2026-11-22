@@ -5,7 +5,21 @@
 .ytp-ad-image-overlay,
 #player-ads,
 ytd-player-legacy-desktop-watch-ads-renderer,
-ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"] {
+ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"],
+/* Encarts sponsorises de l'accueil, des recherches et de la colonne de droite. */
+#masthead-ad,
+ytd-ad-slot-renderer,
+ytd-in-feed-ad-layout-renderer,
+ytd-promoted-sparkles-web-renderer,
+ytd-promoted-video-renderer,
+ytd-display-ad-renderer,
+ytd-banner-promo-renderer,
+ytd-statement-banner-renderer,
+ytd-rich-item-renderer:has(> #content > ytd-ad-slot-renderer),
+ytd-rich-section-renderer:has(ytd-statement-banner-renderer),
+ytd-reel-video-renderer:has(ytd-ad-slot-renderer),
+/* Fenetre « les bloqueurs de pub ne sont pas autorises ». */
+ytd-enforcement-message-view-model {
   display: none !important;
 }
 

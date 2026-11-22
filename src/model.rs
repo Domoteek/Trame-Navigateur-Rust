@@ -840,6 +840,15 @@ pub struct Manifeste {
     pub js: Vec<String>,
     #[serde(default)]
     pub css: Vec<String>,
+    /// Scripts injectes au **debut** de chaque document qui correspond (avant les scripts de la
+    /// page, dans son monde). Pour agir avant le site (ex. retirer les pubs d'une reponse avant
+    /// que le lecteur ne la lise). Pris en compte a la creation d'un onglet.
+    #[serde(default)]
+    pub js_debut: Vec<String>,
+    /// Adresses refusees au niveau reseau tant que l'extension est allumee
+    /// (motifs `*://*.exemple.fr/chemin*`, comme `matches`).
+    #[serde(default)]
+    pub bloquer: Vec<String>,
     /// Seul `document_end` est honore (cf. docs/FORMAT-EXTENSION.md).
     #[serde(default = "run_at_defaut")]
     pub run_at: String,
@@ -863,10 +872,14 @@ pub struct Extension {
     pub dossier: std::path::PathBuf,
     pub manifeste: Manifeste,
     pub js: Vec<String>,
+    /// Contenu des scripts `js_debut`.
+    pub js_debut: Vec<String>,
     pub css: String,
     pub active: bool,
     /// Motifs deja compiles (`hote`, `chemin`).
     pub motifs: Vec<Motif>,
+    /// Motifs `bloquer` compiles, avec leur texte d'origine (filtre WebView2).
+    pub bloque: Vec<(String, Motif)>,
 }
 
 #[derive(Clone, Debug)]

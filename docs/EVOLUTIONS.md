@@ -608,6 +608,31 @@ Seul le rail replié change (`@media (max-width: 130px)`), le rail déplié rest
 Preuve : `tester-ui.mjs` 62/62 (cas neuf : fils colorés, tuiles de 44 px, pile « +2 », clics),
 capture du rail replié en navigateur invisible. Pas encore vu dans la vraie fenêtre.
 
+## 10 septies. 2026-11-22, soir — saute-pub 2.0 : les pubs retirées avant le lecteur
+
+Demande de Clément : « est-ce que tu peux pas intégrer quelque chose de plus puissant ». Le
+saute-pub 1.0 ne faisait que réagir (pub chargée, puis son coupé, ×16, « Passer ») parce que le
+moteur maison n'injectait qu'en fin de chargement.
+
+| Ajout | Détail |
+|---|---|
+| **`js_debut`** (manifeste) | scripts ajoutés au script de début de document de chaque onglet (`extensions::script_de_debut`), gardés par les motifs de l'extension traduits en expressions rationnelles (`motif_en_regex`) |
+| **`debut.js` du saute-pub** | retire `adPlacements`, `adSlots`, `playerAds`, `adBreakHeartbeatParams` (et le message « bloqueurs interdits ») de `ytInitialPlayerResponse`, `ytInitialData`, `JSON.parse` et des réponses `fetch` de `/youtubei/v1/player`, `/next`, `reel_watch_sequence`. Le lecteur ne programme aucune pub |
+| **`bloquer`** (manifeste) | filtres `WebResourceRequested` étroits (pas `*` sur toutes les ressources) posés à la création de l'onglet ; l'état allumé est partagé (`moteur_ext::Blocage`) et suit l'interrupteur sans recréer l'onglet ; réponse 204. Le nettoyage des adresses ne s'applique plus qu'aux documents (`ResourceContext`) |
+| **Encarts** | accueil, recherches, colonne de droite (`ytd-ad-slot-renderer`, `#masthead-ad`…) masqués |
+| **SponsorBlock** | passages « sponsor », « autopromotion » et « rappel d'abonnement » sautés une fois chacun. Seuls les 4 premiers caractères du SHA-256 de l'identifiant de la vidéo partent vers `sponsor.ajay.app`, sans cookie ni référent |
+| **Mise à jour des livrées** | une extension livrée de version plus récente remplace celle du profil, l'ancienne est gardée dans `extensions-anciennes\` (sinon la 2.0 n'arrivait jamais chez Clément) |
+
+Preuves (Trame d'essai caché, profil jetable, vrai YouTube, `IVSe1InCSI4`, dont la page brute
+contient `adPlacements`) : réponse du lecteur `OK` **sans** `adPlacements` ni `playerAds`,
+11 réponses élaguées, aucune pub affichée ; `youtube.com/ptracking` refusé au réseau ; lecture
+à 26,7 s → **59,7 s** (sponsor 27 → 60 s), bulle « Sponsor sauté ». `cargo test --release`
+176/176 (4 nouveaux).
+
+Limites : une pub **cousue dans le flux** (essais de YouTube depuis 2025) n'est pas décrite
+dans la réponse : le filet de la 1.0 (son coupé, ×16, « Passer ») reste en place. YouTube peut
+afficher son avertissement anti-bloqueur ; ses CGU interdisent les bloqueurs.
+
 ## 11. L'état aujourd'hui
 
 ```

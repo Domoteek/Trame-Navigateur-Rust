@@ -39,6 +39,8 @@ dans `%LOCALAPPDATA%\Trame\extensions\<identifiant>\` — l'identifiant est le *
 | `matches` | non | `[]` | sans motif, l'extension ne s'applique **jamais** (signalé au journal) |
 | `js` / `css` | non | `[]` | un fichier absent est signalé, les autres sont chargés |
 | `run_at` | non | `document_end` | tout autre valeur est **consignée puis ignorée** |
+| `js_debut` | non | `[]` | scripts exécutés **au tout début** de chaque document qui correspond (cadres compris), dans le monde de la page, avant ses propres scripts. Pas d'objet `chrome` à ce moment-là. Posés à la **création d'un onglet** : allumer ou couper l'extension vaut pour les onglets suivants |
+| `bloquer` | non | `[]` | motifs d'adresses (même forme que `matches`, la requête `?…` comprise) **refusées au réseau** sur tous les onglets tant que l'extension est allumée (réponse 204 vide). Effet immédiat dans les deux sens. Une ligne par adresse et par onglet au journal (« adresse bloquee ») |
 | `accent` | non | — | couleur de la pastille dans l'interface |
 | `enabled_by_default` | non | `true` | mettre `false` pour une extension qui **modifie l'apparence des pages** |
 
@@ -119,7 +121,9 @@ profil : il survit aux redémarrages.
 ## 5. Cycle de vie
 
 1. Au démarrage, Trame lit `%LOCALAPPDATA%\Trame\extensions\*\manifest.json`.
-2. Si le dossier du profil est vide, les extensions livrées avec l'application y sont **copiées une fois**.
+2. Les extensions livrées avec l'application y sont **copiées une fois** (`extensions-livrees.json`).
+   Si une extension livrée porte ensuite une `version` **plus récente** que celle du profil, elle
+   la remplace ; l'ancienne est gardée dans `%LOCALAPPDATA%\Trame\extensions-anciennes\`.
 3. À la fin de chaque chargement de page, pour chaque extension active dont un motif correspond,
    le CSS puis les scripts sont injectés.
 4. Désactiver une extension dans l'interface prend effet **au chargement suivant** (les pages

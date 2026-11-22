@@ -549,6 +549,38 @@ impl Profil {
                 continue;
             };
             if proposees.contains(&nom) {
+                // Deja proposee : si elle est encore la et que la livree est plus recente, on la
+                // remplace, en gardant l'ancienne de cote (l'utilisateur a pu la retoucher).
+                let destination = cible.join(&nom);
+                let (Some(neuve), Some(ancienne)) =
+                    (version_manifeste(&chemin), version_manifeste(&destination))
+                else {
+                    continue;
+                };
+                if comparer_versions(&neuve, &ancienne) != std::cmp::Ordering::Greater {
+                    continue;
+                }
+                let garde = self
+                    .racine
+                    .join("extensions-anciennes")
+                    .join(format!("{nom}-{ancienne}-{}", crate::log::maintenant_ms()));
+                let deplacee = garde
+                    .parent()
+                    .map(|p| fs::create_dir_all(p).is_ok())
+                    .unwrap_or(false)
+                    && fs::rename(&destination, &garde).is_ok();
+                if deplacee && copier_dossier(&chemin, &destination).is_ok() {
+                    info!(
+                        "extension livree {nom} mise a jour : {ancienne} -> {neuve} (ancienne gardee dans {})",
+                        garde.display()
+                    );
+                    copies.push(format!("{nom} {neuve}"));
+                } else if deplacee {
+                    // La copie a echoue : on remet l'ancienne plutot que de laisser un trou.
+                    let _ = fs::remove_dir_all(&destination);
+                    let _ = fs::rename(&garde, &destination);
+                    alerte!("extension livree {nom} : mise a jour impossible, ancienne remise");
+                }
                 continue;
             }
             let destination = cible.join(&nom);
@@ -715,6 +747,28 @@ fn ecarter(chemin: &Path) -> Option<PathBuf> {
 }
 
 /// Copie recursive (extensions livrees -> profil).
+/// Version lue dans le `manifest.json` d'un dossier d'extension.
+fn version_manifeste(dossier: &Path) -> Option<String> {
+    let texte = fs::read_to_string(dossier.join("manifest.json")).ok()?;
+    let v: Value = serde_json::from_str(&texte).ok()?;
+    v.get("version")?.as_str().map(str::to_string)
+}
+
+/// Compare deux versions `1.2.10` nombre par nombre (une partie absente vaut 0).
+fn comparer_versions(a: &str, b: &str) -> std::cmp::Ordering {
+    let parties = |s: &str| -> Vec<u64> {
+        s.split('.').map(|p| p.trim().parse::<u64>().unwrap_or(0)).collect()
+    };
+    let (pa, pb) = (parties(a), parties(b));
+    for i in 0..pa.len().max(pb.len()) {
+        let o = pa.get(i).unwrap_or(&0).cmp(pb.get(i).unwrap_or(&0));
+        if o != std::cmp::Ordering::Equal {
+            return o;
+        }
+    }
+    std::cmp::Ordering::Equal
+}
+
 fn copier_dossier(source: &Path, destination: &Path) -> std::io::Result<()> {
     fs::create_dir_all(destination)?;
     for entree in fs::read_dir(source)?.flatten() {
@@ -1117,6 +1171,37 @@ mod tests {
         p.amorcer_extensions(&source);
         assert!(!p.dossier_extensions().join("nouvelle").exists());
         let _ = fs::remove_dir_all(p.racine());
+    }
+
+    #[test]
+    fn une_extension_livree_plus_recente_remplace_l_ancienne_et_la_garde() {
+        let p = profil("maj-livree");
+        let source = p.racine().join("source");
+        fs::create_dir_all(source.join("demo")).unwrap();
+        fs::write(source.join("demo").join("manifest.json"), r#"{"version":"1.0.0"}"#).unwrap();
+        p.amorcer_extensions(&source);
+        // Meme version : rien ne bouge, meme retouchee.
+        fs::write(p.dossier_extensions().join("demo").join("retouche.js"), "x").unwrap();
+        p.amorcer_extensions(&source);
+        assert!(p.dossier_extensions().join("demo").join("retouche.js").is_file());
+        // Version 1.10.0 livree : remplacee, l'ancienne gardee de cote.
+        fs::write(source.join("demo").join("manifest.json"), r#"{"version":"1.10.0"}"#).unwrap();
+        p.amorcer_extensions(&source);
+        assert_eq!(version_manifeste(&p.dossier_extensions().join("demo")).as_deref(), Some("1.10.0"));
+        assert!(!p.dossier_extensions().join("demo").join("retouche.js").exists());
+        let gardees: Vec<_> = fs::read_dir(p.racine().join("extensions-anciennes")).unwrap().flatten().collect();
+        assert_eq!(gardees.len(), 1);
+        assert!(gardees[0].path().join("retouche.js").is_file());
+        let _ = fs::remove_dir_all(p.racine());
+    }
+
+    #[test]
+    fn les_versions_se_comparent_nombre_par_nombre() {
+        use std::cmp::Ordering::*;
+        assert_eq!(comparer_versions("2.0.0", "1.0.0"), Greater);
+        assert_eq!(comparer_versions("1.10.0", "1.9"), Greater);
+        assert_eq!(comparer_versions("1.0", "1.0.0"), Equal);
+        assert_eq!(comparer_versions("0.9", "1"), Less);
     }
 
     #[test]

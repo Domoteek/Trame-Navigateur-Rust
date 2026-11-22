@@ -110,22 +110,43 @@ pub fn niveau_pistage(webview: &WebView, niveau: &str) -> Result<(), String> {
 /// La garde de navigation de wry n'y suffit pas : mesure du 2026-11-22 (scenario `w`), une page
 /// qui suivait elle-meme un lien sale envoyait la requete au serveur AVANT que la navigation soit
 /// refusee. `WebResourceRequested` intervient avant l'envoi.
+/// Adresses refusees au niveau reseau : les motifs `bloquer` des extensions allumees,
+/// remplaces d'un coup quand une extension change d'etat (`App::appliquer_blocage`).
+/// `filtres` : les motifs poses sur l'onglet a sa creation (toutes extensions chargees).
+#[derive(Clone, Default)]
+pub struct Blocage {
+    pub motifs: std::sync::Arc<std::sync::RwLock<Vec<crate::model::Motif>>>,
+    pub filtres: Vec<String>,
+}
+
+impl Blocage {
+    pub fn avec_filtres(&self, filtres: Vec<String>) -> Blocage {
+        Blocage { motifs: self.motifs.clone(), filtres }
+    }
+}
+
+/// Intercepte les requetes reseau d'un onglet AVANT leur envoi :
+/// - adresses `bloquer` des extensions allumees (toutes ressources) : reponse 204 vide ;
+/// - documents a parametres de pistage : redirection 307 vers l'adresse propre.
 pub fn intercepter_pistage(
     webview: &WebView,
     reglage: std::sync::Arc<(std::sync::atomic::AtomicBool, std::sync::atomic::AtomicBool)>,
+    blocage: Blocage,
     proxy: EventLoopProxy<UserEvent>,
     onglet: u32,
 ) -> Result<(), String> {
-    use webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_WEB_RESOURCE_CONTEXT, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+        COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT,
+    };
     use webview2_com::WebResourceRequestedEventHandler;
     let coeur = webview.webview();
     let environnement = webview.environment();
+    let filtres = blocage.filtres.clone();
+    let motifs = blocage.motifs.clone();
     let gestionnaire = WebResourceRequestedEventHandler::create(Box::new(move |_, args| {
         use std::sync::atomic::Ordering::Relaxed;
         let Some(args) = args else { return Ok(()) };
-        if !reglage.0.load(Relaxed) {
-            return Ok(());
-        }
         let mut brut = PWSTR::null();
         let uri = unsafe {
             match args.Request().and_then(|r| r.Uri(&mut brut)) {
@@ -133,6 +154,31 @@ pub fn intercepter_pistage(
                 Err(_) => return Ok(()),
             }
         };
+        let bloquee = motifs
+            .read()
+            .map(|m| !m.is_empty() && crate::extensions::est_bloquee(&m, &uri))
+            .unwrap_or(false);
+        if bloquee {
+            unsafe {
+                let reponse = environnement.CreateWebResourceResponse(
+                    None::<&windows::Win32::System::Com::IStream>,
+                    204,
+                    &HSTRING::from("No Content"),
+                    &HSTRING::from("Cache-Control: no-store"),
+                )?;
+                args.SetResponse(&reponse)?;
+            }
+            let _ = proxy.send_event(UserEvent::AdresseBloquee { onglet, adresse: uri });
+            return Ok(());
+        }
+        // Le nettoyage ne vaut que pour les documents (les filtres de blocage font aussi passer
+        // ici des images, scripts et appels).
+        let mut contexte = COREWEBVIEW2_WEB_RESOURCE_CONTEXT::default();
+        let document = unsafe { args.ResourceContext(&mut contexte) }.is_ok()
+            && contexte == COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT;
+        if !document || !reglage.0.load(Relaxed) {
+            return Ok(());
+        }
         let Some(propre) = crate::urls::nettoyer(&uri, reglage.1.load(Relaxed)) else {
             return Ok(());
         };
@@ -157,7 +203,16 @@ pub fn intercepter_pistage(
         let mut jeton = 0i64;
         coeur
             .AddWebResourceRequestedFilter(&HSTRING::from("*"), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT)
-            .and_then(|_| coeur.add_WebResourceRequested(&gestionnaire, &mut jeton))
+            .map_err(|e| e.message().to_string())?;
+        // Filtres etroits (une adresse publicitaire), pas `*` sur toutes les ressources : chaque
+        // requete filtree traverse le fil principal.
+        for f in &filtres {
+            if let Err(e) = coeur.AddWebResourceRequestedFilter(&HSTRING::from(f.as_str()), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL) {
+                crate::alerte!("onglet {onglet} : filtre de blocage {f} refuse ({})", e.message());
+            }
+        }
+        coeur
+            .add_WebResourceRequested(&gestionnaire, &mut jeton)
             .map_err(|e| e.message().to_string())
     }
 }

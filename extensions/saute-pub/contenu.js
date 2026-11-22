@@ -26,7 +26,7 @@
 
   const lecteur = () => document.querySelector(".html5-video-player");
 
-  function signaler() {
+  function signaler(texte = "Publicité sautée") {
     let bulle = document.getElementById("trame-saute-pub");
     if (!bulle) {
       bulle = document.createElement("div");
@@ -34,15 +34,15 @@
       document.body.appendChild(bulle);
     }
     bulle.classList.remove("parti");
-    bulle.textContent = "Publicité sautée";
+    bulle.textContent = texte;
     clearTimeout(signaler.minuterie);
     signaler.minuterie = setTimeout(() => bulle.classList.add("parti"), 1800);
   }
 
-  async function compter() {
+  async function compter(cle = "sautees", n = 1) {
     try {
-      const { sautees } = await chrome.storage.local.get(["sautees"]);
-      await chrome.storage.local.set({ sautees: (sautees || 0) + 1 });
+      const lu = await chrome.storage.local.get([cle]);
+      await chrome.storage.local.set({ [cle]: (lu[cle] || 0) + n });
     } catch (e) {
       /* stockage indisponible : on saute quand meme */
     }
@@ -96,9 +96,102 @@
   };
   new MutationObserver(surveillerLecteur).observe(document.documentElement, { childList: true, subtree: true });
   surveillerLecteur();
+  /* --- Passages sponsorises (SponsorBlock) ---------------------------------------------
+     Un sponsor lu par le createur fait partie de la video : aucun bloqueur ne le voit.
+     La base collaborative SponsorBlock (sponsor.ajay.app) en donne les bornes. Pour ne pas
+     dire quelle video est regardee, on n'envoie que les 4 premiers caracteres de l'empreinte
+     SHA-256 de son identifiant : le serveur renvoie les segments de toutes les videos de ce
+     prefixe, on garde ceux de la notre. Chaque segment est saute une fois : revenir en arriere
+     dedans le laisse jouer. */
+  const CATEGORIES = {
+    sponsor: "Sponsor sauté",
+    selfpromo: "Autopromotion sautée",
+    interaction: "Rappel d'abonnement sauté",
+  };
+  let sbVideo = null; // identifiant de la video dont on a les segments
+  let sbSegments = []; // [{ debut, fin, categorie, uuid }]
+  const sbSautes = new Set();
+
+  const idVideo = () => {
+    try {
+      const u = new URL(location.href);
+      if (u.pathname === "/watch") return u.searchParams.get("v");
+      const m = u.pathname.match(/^\/(?:embed|live)\/([\w-]{11})/);
+      return m ? m[1] : null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  async function chargerSegments(id) {
+    sbVideo = id;
+    sbSegments = [];
+    sbSautes.clear();
+    try {
+      const empreinte = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(id));
+      const hex = Array.from(new Uint8Array(empreinte), (o) => o.toString(16).padStart(2, "0")).join("");
+      const adresse =
+        "https://sponsor.ajay.app/api/skipSegments/" + hex.slice(0, 4) +
+        "?categories=" + encodeURIComponent(JSON.stringify(Object.keys(CATEGORIES))) +
+        "&actionTypes=" + encodeURIComponent(JSON.stringify(["skip"]));
+      const rep = await fetch(adresse, { credentials: "omit", referrerPolicy: "no-referrer" });
+      if (!rep.ok || sbVideo !== id) return; // 404 = aucun segment connu
+      const liste = await rep.json();
+      const la = Array.isArray(liste) ? liste.find((v) => v.videoID === id) : null;
+      if (!la || sbVideo !== id) return;
+      sbSegments = (la.segments || [])
+        .filter((s) => Array.isArray(s.segment) && s.segment[1] - s.segment[0] >= 1)
+        .map((s) => ({ debut: s.segment[0], fin: s.segment[1], categorie: s.category, uuid: s.UUID }));
+    } catch (e) {
+      /* hors ligne ou service indisponible : la video joue normalement */
+    }
+  }
+
+  function suivreSponsors() {
+    const id = idVideo();
+    if (id !== sbVideo) {
+      if (id) chargerSegments(id);
+      else { sbVideo = null; sbSegments = []; }
+      return;
+    }
+    if (!sbSegments.length || pubEnCours) return;
+    const p = lecteur();
+    const video = p && p.querySelector("video");
+    if (!video || video.paused) return;
+    const t = video.currentTime;
+    for (const s of sbSegments) {
+      if (sbSautes.has(s.uuid)) continue;
+      if (t >= s.debut && t < s.fin - 0.5) {
+        sbSautes.add(s.uuid);
+        video.currentTime = Math.min(s.fin, Number.isFinite(video.duration) ? video.duration : s.fin);
+        signaler(CATEGORIES[s.categorie] || "Passage sauté");
+        compter("sponsors");
+        break;
+      }
+    }
+  }
+  setInterval(suivreSponsors, 300);
+
+  // Pubs retirees par debut.js avant le lecteur : comptees ici (le stockage n'existe pas au
+  // debut du document).
+  let retireesVues = 0;
+  setInterval(() => {
+    const n = window.__trameSansPub && window.__trameSansPub.etat ? window.__trameSansPub.etat().retirees : 0;
+    if (n > retireesVues) {
+      compter("retirees", n - retireesVues);
+      retireesVues = n;
+    }
+  }, 5000);
+
   // Point de controle (essais) : etat courant et passage a la main.
   window.__trameSautePub = {
-    etat: () => ({ pubEnCours, lecteurObserve: !!observe, avant }),
+    etat: () => ({
+      pubEnCours,
+      lecteurObserve: !!observe,
+      avant,
+      sponsor: { video: sbVideo, segments: sbSegments.length, sautes: sbSautes.size },
+      avantLecteur: window.__trameSansPub && window.__trameSansPub.etat ? window.__trameSansPub.etat() : null,
+    }),
     traiter,
   };
   // Filet : une verification par seconde, si un changement passait entre les mailles.
