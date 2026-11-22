@@ -21,6 +21,87 @@
     }
   };
 
+  // Reprise de la lecture apres un rechargement (F5, Ctrl+R, menu « Recharger », secours) :
+  // la position de la video principale est notee dans `sessionStorage` (qui survit a un
+  // rechargement de l'onglet) et remise au chargement suivant, si c'est la meme adresse et
+  // que la note date de moins de 30 s. Sur YouTube, l'adresse recoit en plus `t=` avant le
+  // rechargement : son lecteur s'y place lui-meme, publicite comprise (demande de Clement,
+  // 2026-11-22 : F5 reprenait la video au debut).
+  const CLE_REPRISE = "__trame_reprise";
+  const sansT = (u) => {
+    try {
+      const x = new URL(u);
+      x.searchParams.delete("t");
+      x.hash = "";
+      return x.toString();
+    } catch (e) {
+      return u;
+    }
+  };
+  const videoPrincipale = () => {
+    let meilleure = null;
+    let aire = 0;
+    for (const v of document.querySelectorAll("video")) {
+      if (!(v.currentTime > 0) || !isFinite(v.duration)) continue;
+      const r = v.getBoundingClientRect();
+      const a = r.width * r.height;
+      if (a > aire) {
+        aire = a;
+        meilleure = v;
+      }
+    }
+    return meilleure;
+  };
+  const youtube = () => /(^|\.)youtube\.com$/.test(location.hostname) && location.pathname === "/watch";
+  const noterLecture = (pourRecharger) => {
+    try {
+      const v = videoPrincipale();
+      if (!v || v.currentTime < 3) return;
+      const t = Math.floor(v.currentTime);
+      sessionStorage.setItem(
+        CLE_REPRISE,
+        JSON.stringify({ url: sansT(location.href), t: t, lecture: !v.paused, quand: Date.now() })
+      );
+      if (pourRecharger && youtube()) {
+        const x = new URL(location.href);
+        x.searchParams.set("t", t + "s");
+        history.replaceState(history.state, "", x.toString());
+      }
+    } catch (e) {
+      /* stockage refuse : rien a reprendre */
+    }
+  };
+  window.addEventListener("pagehide", () => noterLecture(false));
+  window.__trame_noter_lecture = noterLecture;
+  (() => {
+    let note = null;
+    try {
+      note = JSON.parse(sessionStorage.getItem(CLE_REPRISE) || "null");
+      sessionStorage.removeItem(CLE_REPRISE);
+    } catch (e) {
+      return;
+    }
+    if (!note || Date.now() - note.quand > 30000 || note.url !== sansT(location.href)) return;
+    // YouTube se place seul grace a `t=` ; ailleurs, on place la video des qu'elle est prete.
+    if (youtube() && new URL(location.href).searchParams.has("t")) return;
+    const fin = Date.now() + 20000;
+    const essayer = () => {
+      const v = [...document.querySelectorAll("video")].find((x) => isFinite(x.duration) && x.duration > note.t);
+      if (!v) {
+        if (Date.now() < fin) setTimeout(essayer, 300);
+        return;
+      }
+      try {
+        v.currentTime = note.t;
+        if (note.lecture && v.paused) v.play().catch(() => {});
+      } catch (e) {
+        /* lecteur qui refuse : tant pis */
+      }
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", essayer);
+    else essayer();
+  })();
+
   window.addEventListener(
     "keydown",
     (e) => {
@@ -51,6 +132,7 @@
       if (action) {
         e.preventDefault();
         e.stopPropagation();
+        if (action === "recharger") noterLecture(true);
         envoi({ m: "raccourci", action: action });
       }
     },

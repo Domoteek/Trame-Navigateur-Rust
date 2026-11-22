@@ -1112,7 +1112,7 @@ impl App {
             .with_bounds(geo.contenu)
             .with_visible(visible)
             .with_focused(false)
-            .with_background_color((255, 255, 255, 255))
+            .with_background_color(COULEUR_FOND)
             .with_devtools(true)
             .with_navigation_handler(garde);
         // Sondes de diagnostic (comparaison) : `TRAME_SANS_AMORCE` n'injecte pas les scripts de
@@ -1858,7 +1858,7 @@ impl App {
             .with_bounds(geo.contenu)
             .with_visible(true)
             .with_focused(true)
-            .with_background_color((255, 255, 255, 255))
+            .with_background_color(COULEUR_FOND)
             .with_navigation_handler(garde)
             .with_initialization_script(APERCU)
             .with_on_page_load_handler(move |_, url| {

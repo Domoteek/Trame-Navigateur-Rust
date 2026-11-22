@@ -556,6 +556,21 @@ Preuve : `cargo test --release` 172/172 ; `tester-ui.mjs` 60/60, dont un cas neu
 glisser, double-clic, bord du haut, agrandie, les quatre styles, rail replié). **Pas encore
 éprouvé dans une vraie fenêtre** : le profil est unique et le Trame de Clément était ouvert.
 
+### Suite, nuit — F5 reprend la vidéo, plus de flash blanc
+
+Deux remarques de Clément : sur YouTube, F5 repartait du début ; et chaque onglet qui charge
+faisait un éclair blanc d'une seconde.
+
+| Évolution | Pourquoi |
+|---|---|
+| `ui/raccourcis.js` note la position de la vidéo principale (la plus grande, déjà lancée) dans `sessionStorage` à F5/Ctrl+R et à `pagehide`, et la remet au chargement suivant (même adresse, note de moins de 30 s, lecture relancée si elle tournait) | `sessionStorage` survit au rechargement d'un onglet ; `pagehide` couvre aussi le menu « Recharger » et le rechargement de secours |
+| Sur `youtube.com/watch`, F5 réécrit d'abord l'adresse avec `t=…s` (`history.replaceState`) | le lecteur de YouTube s'y place lui-même, publicité comprise ; poser `currentTime` à la main risquait de viser la pub |
+| Fond des onglets web et du coup d'œil : `COULEUR_FOND` (sombre) au lieu du blanc | un onglet naît sur `about:blank` avant de charger sa page : ce blanc était l'éclair |
+
+Preuve : `cargo test --release` 172/172, `tester-ui.mjs` 60/60 ; essai dans Edge invisible avec
+une vraie vidéo : à 8 s, F5 → reprise à 8 s ; menu « Recharger » → reprise aussi. Le cas
+YouTube (`t=`) n'est pas éprouvé hors ligne.
+
 ## 11. L'état aujourd'hui
 
 ```
