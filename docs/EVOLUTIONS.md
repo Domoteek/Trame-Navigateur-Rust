@@ -710,6 +710,53 @@ Pas encore essayé à la main dans la fenêtre de Clément.
 Limite dite franchement : au **doigt**, le geste fait défiler le rail (le navigateur garde le
 panoramique) ; il faudrait un appui long pour l'empêcher, et ce n'est pas fait.
 
+## 10 decies. 2026-11-22, nuit — la reprise de la lecture après F5 (0.4.8)
+
+Demande de Clément : « quand je lis une vidéo YouTube et que je rafraîchis le navigateur, la vidéo
+ne reprend pas vraiment là où j'en étais. Moi j'ai une avance d'une quarantaine de secondes, et sur
+un autre PC il revient toujours à 27 secondes de lecture. »
+
+Le mécanisme livré en 0.4.1 (réécrire `t=…s` dans l'adresse et laisser YouTube se placer) n'a
+**jamais fonctionné sur YouTube**. Mesuré, pas supposé — banc d'essai neuf
+`outils/eprouver-reprise.mjs` : Trame d'essai, profil jetable, fenêtre cachée, port CDP, **vraie
+page YouTube**, position posée à 95 s, puis un **vrai F5** (`Input.dispatchKeyEvent`) reçu par
+`ui/raccourcis.js` comme sous un doigt humain.
+
+| Cas | Avant F5 | Après F5, 0.4.6 | Après F5, 0.4.8 |
+|---|---|---|---|
+| YouTube, vidéo **en pause** à 95 s | 95 s | **0 s**, en pause | **95 s**, en pause |
+| YouTube, vidéo **en lecture** à 95 s | 95 s | **0 s**, en pause | **95 s**, en lecture |
+| page ordinaire, pause à 5 s | 5 s | 5 s puis elle joue | **5 s**, en pause |
+
+| Défaut trouvé | Mesure |
+|---|---|
+| **YouTube ne lit `t=` qu'au démarrage de la lecture** | après le F5 la vidéo reste à 0 s ; elle ne saute à 95 s qu'une fois la lecture relancée à la main |
+| **La note de Trame était jetée dès que `t=` était là** (`if (youtube() && has("t")) return;`) | dans ce cas précis **personne** ne reposait la position : ni YouTube (pas encore), ni Trame (par construction) — d'où le 0 s |
+| **`t=` restait dans l'adresse**, jamais nettoyé | l'adresse après F5 : `…/watch?v=…&t=95s` ; un lien copié ou un onglet rouvert repartait de là |
+| **La note n'était écrite qu'à `pagehide`** | un onglet tué, une veille, ou une **publicité** en cours de lecture : rien à reprendre (une pub n'a pas la durée de la vidéo) |
+| **Rien ne vérifiait le résultat** | la valeur choisie par le lecteur était définitive |
+
+| Évolution | Pourquoi |
+|---|---|
+| Le `t=` **n'est plus écrit** | une seule source de vérité : la note. Un `t=` **déjà présent** au chargement (lien partagé) reste respecté — c'est une intention, pas une note |
+| **La note suit la lecture** : rechargement demandé, `pagehide`, `beforeunload`, page masquée, et **toutes les 2 s** tant qu'elle est visible | un onglet tué n'a pas de `pagehide` |
+| **Jamais pendant une publicité** (`.ad-showing` / `.ad-interrupting`) | une pub n'est pas la vidéo |
+| **Même page, même vidéo** : adresse (moins `t`) ou identifiant YouTube `v`, **et** durée à ±1,5 s ; note valable **2 minutes** | une autre vidéo du même site ne reçoit pas la position |
+| **Pose puis vérification** : position reposée, puis contrôlée pendant 25 s (prolongée tant que dure une pub, 3 min au plus). La position attendue avance avec la lecture (et son `playbackRate`), ce qui distingue « la vidéo avance » de « le lecteur l'a déplacée » | un lecteur qui replace sa vidéo est corrigé ; mesuré : sans cela, YouTube laisse la vidéo à 0 |
+| **Un geste de Clément annule la reprise** (`pointerdown`, `keydown` capturés pendant la fenêtre) | son geste prime toujours sur la reprise |
+
+Preuves : `outils/eprouver-reprise.mjs` — YouTube en pause **95 s → 95 s**, YouTube en lecture
+**95 s → 95 s**, page ordinaire **5 s → 5 s**, écart 0 dans les trois cas, adresse sans `t=` et
+note consommée ; `cargo test --release` **177/177** ; `node outils/tester-ui.mjs` **73/73**.
+
+Ce qui n'est **pas** vérifié : le symptôme des deux PC de Clément (40 s d'un côté, 27 s de
+l'autre) n'est pas reproduit — Trame ne calcule ni l'un ni l'autre, et il rendait 0 s. Ce qu'il
+voyait était donc la reprise **de YouTube**, qui dépend du compte et de la machine ; Trame bloque
+en plus `ptracking` (relevé dans le journal de Clément), le point où YouTube enregistre la
+progression, ce qui fige la position mémorisée. Le correctif supprime la dépendance, il ne
+démontre pas les deux nombres. Le cas d'un YouTube **connecté** n'a pas été mesuré (profils
+d'essai déconnectés).
+
 ## 11. L'état aujourd'hui
 
 ```

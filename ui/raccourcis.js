@@ -21,58 +21,96 @@
     }
   };
 
-  // Reprise de la lecture apres un rechargement (F5, Ctrl+R, menu « Recharger », secours) :
-  // la position de la video principale est notee dans `sessionStorage` (qui survit a un
-  // rechargement de l'onglet) et remise au chargement suivant, si c'est la meme adresse et
-  // que la note date de moins de 30 s. Sur YouTube, l'adresse recoit en plus `t=` avant le
-  // rechargement : son lecteur s'y place lui-meme, publicite comprise (demande de Clement,
-  // 2026-11-22 : F5 reprenait la video au debut).
+  // Reprise de la lecture apres un rechargement (F5, Ctrl+R, menu « Recharger », secours).
+  //
+  // La position de la video principale est notee dans `sessionStorage` (qui survit au
+  // rechargement d'un onglet) : a chaque rechargement demande, a la sortie de la page, et
+  // toutes les 2 s tant que la page est visible — un onglet tue ou endormi n'a pas toujours de
+  // `pagehide`. Au chargement suivant, si c'est la meme page, la MEME VIDEO, et que la note a
+  // moins de 2 minutes, la position est reposee **puis verifiee** : un lecteur qui replace sa
+  // video ailleurs est corrige, sauf si Clément touche la page entre-temps (son geste prime).
+  //
+  // Mesure du 2026-11-22 (outils/eprouver-reprise.mjs, vraie application, vrai YouTube) : la
+  // version precedente reecrivait l'adresse avec `t=…s` et sautait la reprise des que ce
+  // parametre etait la. Or YouTube ne s'y place **qu'au demarrage de la lecture** — apres un
+  // rechargement la video reste a 0 s tant qu'on n'appuie pas sur lecture —, et `t=` restait
+  // ensuite dans l'adresse (un lien copie, un onglet rouvert, repartaient de la). Le `t=` n'est
+  // donc plus ecrit : une seule source de verite, verifiee. Un `t=` deja present au chargement
+  // (lien partage) est respecte : c'est une intention, pas une note.
   const CLE_REPRISE = "__trame_reprise";
-  const sansT = (u) => {
+  const NOTE_VALABLE_MS = 120000;
+  const adresse = () => {
     try {
-      const x = new URL(u);
+      const x = new URL(location.href);
       x.searchParams.delete("t");
       x.hash = "";
       return x.toString();
     } catch (e) {
-      return u;
+      return location.href;
     }
   };
-  const videoPrincipale = () => {
+  // Identifiant de la video sur YouTube : l'adresse y gagne des parametres en cours de vie
+  // (`pp`, `si`…), donc comparer l'adresse entiere refuserait la reprise sur la meme video.
+  const videoDuSite = () => {
+    try {
+      const x = new URL(location.href);
+      return x.pathname === "/watch" ? x.searchParams.get("v") : null;
+    } catch (e) {
+      return null;
+    }
+  };
+  const aire = (v) => {
+    const r = v.getBoundingClientRect();
+    return r.width * r.height;
+  };
+  const enPub = () => !!document.querySelector(".ad-showing, .ad-interrupting");
+  /** La video principale : la plus grande a l'ecran. `enCours` exige qu'elle ait deja joue. */
+  const videoPrincipale = (enCours) => {
     let meilleure = null;
-    let aire = 0;
+    let plus = 0;
     for (const v of document.querySelectorAll("video")) {
-      if (!(v.currentTime > 0) || !isFinite(v.duration)) continue;
-      const r = v.getBoundingClientRect();
-      const a = r.width * r.height;
-      if (a > aire) {
-        aire = a;
+      if (!isFinite(v.duration) || v.duration <= 0) continue;
+      if (enCours && v.currentTime < 3) continue;
+      const a = aire(v);
+      if (a >= plus) {
+        plus = a;
         meilleure = v;
       }
     }
     return meilleure;
   };
-  const youtube = () => /(^|\.)youtube\.com$/.test(location.hostname) && location.pathname === "/watch";
-  const noterLecture = (pourRecharger) => {
+  const noterLecture = () => {
     try {
-      const v = videoPrincipale();
-      if (!v || v.currentTime < 3) return;
-      const t = Math.floor(v.currentTime);
+      const v = videoPrincipale(true);
+      if (!v || v.currentTime < 3 || enPub()) return;
       sessionStorage.setItem(
         CLE_REPRISE,
-        JSON.stringify({ url: sansT(location.href), t: t, lecture: !v.paused, quand: Date.now() })
+        JSON.stringify({
+          url: adresse(),
+          video: videoDuSite(),
+          duree: isFinite(v.duration) ? Math.round(v.duration * 10) / 10 : null,
+          t: Math.round(v.currentTime * 10) / 10,
+          lecture: !v.paused,
+          quand: Date.now(),
+        })
       );
-      if (pourRecharger && youtube()) {
-        const x = new URL(location.href);
-        x.searchParams.set("t", t + "s");
-        history.replaceState(history.state, "", x.toString());
-      }
     } catch (e) {
       /* stockage refuse : rien a reprendre */
     }
   };
-  window.addEventListener("pagehide", () => noterLecture(false));
+  window.addEventListener("pagehide", noterLecture);
+  window.addEventListener("beforeunload", noterLecture);
+  // Point de controle (essais, diagnostic) : noter la lecture a la demande.
   window.__trame_noter_lecture = noterLecture;
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) noterLecture();
+  });
+  // Filet : la note suit la lecture, pour survivre a un onglet tue sans `pagehide`.
+  setInterval(() => {
+    if (!document.hidden) noterLecture();
+  }, 2000);
+
+  // La reprise elle-meme.
   (() => {
     let note = null;
     try {
@@ -81,22 +119,101 @@
     } catch (e) {
       return;
     }
-    if (!note || Date.now() - note.quand > 30000 || note.url !== sansT(location.href)) return;
-    // YouTube se place seul grace a `t=` ; ailleurs, on place la video des qu'elle est prete.
-    if (youtube() && new URL(location.href).searchParams.has("t")) return;
-    const fin = Date.now() + 20000;
+    if (!note || typeof note.t !== "number") return;
+    if (!(Date.now() - note.quand < NOTE_VALABLE_MS)) return;
+    const memePage = note.url === adresse() || (note.video && note.video === videoDuSite());
+    if (!memePage) return;
+    // Lien partage avec `t=` : l'adresse dit ou se placer, la note n'a pas a s'en meler.
+    try {
+      if (new URL(location.href).searchParams.has("t")) return;
+    } catch (e) {
+      /* adresse illisible : on continue */
+    }
+
+    // Un geste de Clement pendant la reprise annule la reprise : il a decide autre chose.
+    let touche = false;
+    const surGeste = () => {
+      touche = true;
+    };
+    window.addEventListener("pointerdown", surGeste, true);
+    window.addEventListener("keydown", surGeste, true);
+
+    const debut = Date.now();
+    let fin = debut + 25000;
+    // La position attendue avance avec la lecture : on retient quand on l'a posee, pour
+    // distinguer « la video avance normalement » de « le lecteur l'a deplacee ».
+    let poseA = 0;
+    let poseT = note.t;
+    let dAccord = 0;
+
+    const choisir = () => {
+      let meilleure = null;
+      let plus = 0;
+      for (const v of document.querySelectorAll("video")) {
+        if (!isFinite(v.duration) || v.duration <= note.t + 1) continue;
+        // Une autre video du meme site (ou une pub) a une autre duree : on ne s'y place pas.
+        if (typeof note.duree === "number" && Math.abs(v.duration - note.duree) > 1.5) continue;
+        const a = aire(v);
+        if (a >= plus) {
+          plus = a;
+          meilleure = v;
+        }
+      }
+      return meilleure;
+    };
+
+    const terminer = () => {
+      window.removeEventListener("pointerdown", surGeste, true);
+      window.removeEventListener("keydown", surGeste, true);
+    };
+
     const essayer = () => {
-      const v = [...document.querySelectorAll("video")].find((x) => isFinite(x.duration) && x.duration > note.t);
-      if (!v) {
-        if (Date.now() < fin) setTimeout(essayer, 300);
+      if (touche) {
+        terminer();
         return;
       }
-      try {
-        v.currentTime = note.t;
-        if (note.lecture && v.paused) v.play().catch(() => {});
-      } catch (e) {
-        /* lecteur qui refuse : tant pis */
+      if (Date.now() >= fin) {
+        // Une publicite tient l'element : ce n'est pas la video, on patiente (3 minutes au plus).
+        if (enPub() && Date.now() < debut + 180000) {
+          fin = Date.now() + 15000;
+        } else {
+          terminer();
+          return;
+        }
       }
+      const v = choisir();
+      if (!v) {
+        // Un lecteur qui n'est pas encore pret, ou une publicite qui tient l'element : on attend.
+        setTimeout(essayer, 300);
+        return;
+      }
+      const vitesse = isFinite(v.playbackRate) && v.playbackRate > 0 ? v.playbackRate : 1;
+      const attendu = poseT + (poseA ? ((Date.now() - poseA) / 1000) * vitesse : 0);
+      const ecart = v.currentTime - attendu;
+      if (!poseA || ecart < -3 || ecart > 3) {
+        // Le lecteur ne s'est pas (ou plus) place la ou la note le dit : on repose. Cas mesure :
+        // apres un rechargement, YouTube laisse la video a 0 tant que la lecture n'a pas demarre.
+        try {
+          v.currentTime = note.t;
+          poseT = note.t;
+          poseA = Date.now();
+          dAccord = 0;
+        } catch (e) {
+          /* lecteur qui refuse : on reessaie au tour suivant */
+        }
+        if (note.lecture && v.paused) v.play().catch(() => {});
+      } else if (!v.paused) {
+        // La lecture avance et la position suit : la reprise tient.
+        dAccord += 1;
+        if (dAccord >= 6) {
+          terminer();
+          return;
+        }
+      } else if (note.lecture) {
+        // Elle jouait : on relance (un rechargement n'a pas toujours le droit de demarrer seul).
+        v.play().catch(() => {});
+      }
+      setTimeout(essayer, 400);
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", essayer);
     else essayer();
@@ -132,7 +249,7 @@
       if (action) {
         e.preventDefault();
         e.stopPropagation();
-        if (action === "recharger") noterLecture(true);
+        if (action === "recharger") noterLecture();
         envoi({ m: "raccourci", action: action });
       }
     },
