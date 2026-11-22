@@ -68,6 +68,7 @@ window.trame = {
   etat(nouvelEtat) {
     pret = true;
     etat = nouvelEtat;
+    rendreFenetre(etat);
     if (surface === "rail") rendreRail(etat);
     else rendreBarre(etat);
   },
@@ -108,6 +109,100 @@ window.trame = {
     ouvrirPanneau();
   },
 };
+
+/* ===================================================== BARRE DE LA FENETRE */
+/* Reglage « Barre de la fenetre » : hors du style « windows », la fenetre n'a pas de barre de
+   titre. Les boutons (reduire, agrandir, fermer) sont dessines ici ; les zones vides du haut
+   deplacent la fenetre, un double-clic l'agrandit, et la bande de 4 px tout en haut la
+   redimensionne par le bord du haut. Le reste (bords gauche, droit et bas) est celui de Windows. */
+
+const BOUTONS_FENETRE = [
+  ["reduire", "f-reduire", "Réduire"],
+  ["agrandir", "f-agrandir", "Agrandir"],
+  ["fermer", "f-fermer", "Fermer"],
+];
+
+/** Zones qui deplacent la fenetre quand on les attrape dans le vide. */
+const ZONES_GLISSER = ".titre-fenetre, .barre-ligne, .rail-tete";
+/** Ce qui, dans ces zones, garde son propre clic. */
+const PAS_GLISSER = "button, input, select, a, .couture, .pin-chips, .pastilles, .badge";
+
+let styleFenetre = "";
+let fenetreAgrandie = null;
+let minuterieDispositions = 0;
+
+function rendreFenetre(s) {
+  const f = s.fenetre || {};
+  const style = f.style || "windows";
+  const agrandie = !!f.agrandie;
+  if (style !== styleFenetre) {
+    styleFenetre = style;
+    document.body.dataset.fenetre = style;
+  }
+  if (agrandie !== fenetreAgrandie) {
+    fenetreAgrandie = agrandie;
+    if (agrandie) document.body.dataset.agrandie = "1";
+    else delete document.body.dataset.agrandie;
+    for (const b of document.querySelectorAll('button[data-fenetre="agrandir"]')) {
+      b.title = agrandie ? "Restaurer" : "Agrandir";
+      const use = b.querySelector("use");
+      if (use) use.setAttribute("href", agrandie ? "#i-f-restaurer" : "#i-f-agrandir");
+    }
+  }
+  const titre = document.getElementById("titre-texte");
+  if (titre && style === "bandeau") {
+    const t = s.interne ? "Trame" : (s.titre || "Trame");
+    if (titre.textContent !== t) titre.textContent = t;
+  }
+}
+
+function initFenetre() {
+  for (const zone of document.querySelectorAll(".boutons-fenetre")) {
+    for (const [action, ic, titre] of BOUTONS_FENETRE) {
+      const b = elem("button", action);
+      b.dataset.fenetre = action;
+      b.title = titre;
+      b.appendChild(icone(ic));
+      zone.appendChild(b);
+    }
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-fenetre]");
+    if (!b) return;
+    clearTimeout(minuterieDispositions);
+    ipc({ m: "fenetre", action: b.dataset.fenetre });
+  });
+  // Survol du bouton agrandir : les dispositions d'ancrage de Windows 11, comme sur une vraie
+  // barre de titre (ouvertes par Win+Z, voir app/fenetre.rs).
+  document.addEventListener("mouseover", (e) => {
+    const b = e.target.closest('.boutons-fenetre [data-fenetre="agrandir"]');
+    if (!b) return;
+    clearTimeout(minuterieDispositions);
+    minuterieDispositions = setTimeout(() => {
+      if (b.matches(":hover")) ipc({ m: "fenetre", action: "dispositions" });
+    }, 700);
+  });
+  document.addEventListener("mouseout", (e) => {
+    if (e.target.closest('.boutons-fenetre [data-fenetre="agrandir"]')) clearTimeout(minuterieDispositions);
+  });
+  document.addEventListener("mousedown", (e) => {
+    if (e.button !== 0 || styleFenetre === "windows" || !styleFenetre) return;
+    const bord = e.target.closest(".bord-haut");
+    if (bord) {
+      e.preventDefault();
+      // Les coins du haut : le rail tient le coin gauche, la barre le coin droit.
+      const coin = 10;
+      let direction = "haut";
+      if (surface === "rail" && e.clientX < coin) direction = "haut-gauche";
+      if (surface === "barre" && e.clientX > window.innerWidth - coin) direction = "haut-droite";
+      ipc({ m: "fenetre", action: "bord", bord: direction });
+      return;
+    }
+    if (!e.target.closest(ZONES_GLISSER) || e.target.closest(PAS_GLISSER)) return;
+    e.preventDefault();
+    ipc({ m: "fenetre", action: e.detail === 2 ? "agrandir" : "deplacer" });
+  });
+}
 
 /* ==================================================================== RAIL */
 
@@ -1919,6 +2014,7 @@ if (surface === "rail") {
   document.getElementById("barre").hidden = false;
   brancherBarre();
 }
+initFenetre();
 
   // Handshake : le premier message peut se perdre si la page s'annonce trop tot.
   let essais = 0;

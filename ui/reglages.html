@@ -457,6 +457,22 @@
       </section>
 
       <section>
+        <h2>Fenêtre</h2>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Barre de la fenêtre</b>
+            <span>Où sont les boutons réduire, agrandir et fermer. Sans la barre de Windows, on déplace la fenêtre en attrapant le vide en haut, et un double-clic l'agrandit.</span>
+          </div>
+          <select id="barre-fenetre">
+            <option value="bande">Une seule bande (au bout de la barre d'adresse)</option>
+            <option value="bandeau">Bandeau Trame fin, au-dessus</option>
+            <option value="rail">Boutons dans le rail</option>
+            <option value="windows">Barre de Windows</option>
+          </select>
+        </div>
+      </section>
+
+      <section>
         <h2>Vidéos</h2>
         <div class="ligne">
           <div class="libelle">
@@ -811,6 +827,8 @@
             "bascule" + (r.barreExtensions ? " on" : "");
           const selPlein = document.getElementById("plein-ecran");
           if (document.activeElement !== selPlein) selPlein.value = r.pleinEcran || "fenetre";
+          const selBarre = document.getElementById("barre-fenetre");
+          if (document.activeElement !== selBarre) selBarre.value = r.barreFenetre || "bande";
           document.getElementById("bascule-memoire-basse").className =
             "bascule" + (r.memoireBasse ? " on" : "");
           document.getElementById("bascule-budget-auto").className =
@@ -867,6 +885,8 @@
           ipc({ m: "barreExtensions", visible: !((etat && etat.reglages && etat.reglages.barreExtensions) || false) });
         document.getElementById("plein-ecran").addEventListener("change", (e) =>
           ipc({ m: "pleinEcran", mode: e.target.value }));
+        document.getElementById("barre-fenetre").addEventListener("change", (e) =>
+          ipc({ m: "barreFenetre", mode: e.target.value }));
         document.getElementById("btn-recharger").onclick = () => ipc({ m: "extensionsRecharger" });
         document.getElementById("btn-dossier-ext").onclick = () => ipc({ m: "dossierExtensions" });
         document.getElementById("btn-chercher-chrome").addEventListener("click", () => ipc({ m: "chromeScan" }));

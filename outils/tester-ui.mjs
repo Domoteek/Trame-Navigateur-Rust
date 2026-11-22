@@ -1529,6 +1529,76 @@ async function suite() {
     await p.close();
   });
 
+  await cas("fenêtre : boutons, glisser, double-clic, bord du haut, selon le style", async () => {
+    const b = await page("chrome.html", { query: "?surface=barre" });
+    const avec = (style, agrandie = false) => ({ ...etatDeBase(), titre: "YouTube", fenetre: { style, agrandie } });
+    const visibles = () =>
+      b.$$eval("button[data-fenetre]", (l) => l.filter((n) => n.offsetParent !== null).map((n) => n.dataset.fenetre));
+
+    // Une seule bande : les trois boutons au bout de la barre d'adresse.
+    await pousser(b, avec("bande"));
+    egal(await visibles(), ["reduire", "agrandir", "fermer"], "bande : trois boutons visibles");
+    const coin = await b.$eval(".boutons-fenetre.bande button.fermer", (n) => n.getBoundingClientRect().right);
+    verifier(Math.abs(coin - 1280) <= 1, `la croix touche le bord droit (${coin})`);
+    await vider(b);
+    await b.click(".boutons-fenetre.bande button.reduire");
+    await b.click(".boutons-fenetre.bande button.fermer");
+    egal((await messages(b)).map((m) => m.action), ["reduire", "fermer"], "les boutons commandent la fenêtre");
+
+    // Le vide de la barre deplace la fenetre ; un double-clic l'agrandit ; un bouton, non.
+    const vide = await b.$eval(".barre-ligne", (n) => {
+      const r = n.getBoundingClientRect();
+      const btn = document.getElementById("btn-reglages").getBoundingClientRect();
+      return { x: btn.right + 2, y: r.top + r.height / 2 };
+    });
+    await vider(b);
+    await b.mouse.click(vide.x, vide.y);
+    await b.mouse.dblclick(vide.x, vide.y);
+    await b.click("#btn-recharger");
+    const actions = (await messages(b)).filter((m) => m.m === "fenetre").map((m) => m.action);
+    verifier(actions.includes("deplacer") && actions.includes("agrandir"), `glisser et double-clic : ${actions}`);
+
+    // Bord du haut : redimensionne ; coin droit dans la barre.
+    await vider(b);
+    await b.mouse.click(600, 1);
+    await b.mouse.click(1278, 1);
+    egal((await messages(b)).filter((m) => m.m === "fenetre").map((m) => m.bord), ["haut", "haut-droite"], "bord du haut");
+
+    // Agrandie : plus de bord du haut, l'icone devient « restaurer ».
+    await pousser(b, avec("bande", true));
+    verifier(!(await b.isVisible(".bord-haut")), "pas de bord du haut quand la fenêtre est agrandie");
+    egal(await b.$eval(".boutons-fenetre.bande button.agrandir", (n) => n.title), "Restaurer", "bouton restaurer");
+
+    // Bandeau : petite bande au-dessus avec le titre de l'onglet ; la barre d'adresse dessous.
+    await pousser(b, avec("bandeau"));
+    egal(await b.$eval(".titre-barre", (n) => Math.round(n.getBoundingClientRect().height)), 28, "bandeau de 28 px");
+    egal(await b.$eval("#titre-texte", (n) => n.textContent), "YouTube", "titre de l'onglet dans le bandeau");
+    egal(await visibles(), ["reduire", "agrandir", "fermer"], "bandeau : les boutons sont dans la bande");
+
+    // Rail et Windows : aucun bouton dans la barre ; Windows : rien ne glisse.
+    await pousser(b, avec("rail"));
+    egal(await visibles(), [], "style rail : pas de bouton dans la barre");
+    await pousser(b, avec("windows"));
+    egal(await visibles(), [], "style windows : pas de bouton");
+    await vider(b);
+    await b.mouse.click(vide.x, vide.y);
+    egal((await messages(b)).filter((m) => m.m === "fenetre").length, 0, "style windows : la barre ne déplace rien");
+
+    // Rail : trois pastilles en haut du rail, deplie et replie.
+    const r = await page("chrome.html", { query: "?surface=rail" });
+    await r.setViewportSize({ width: 292, height: 700 });
+    await pousser(r, avec("rail"));
+    await vider(r);
+    await r.click(".pastille.fermer");
+    egal((await messages(r)).filter((m) => m.m === "fenetre").map((m) => m.action), ["fermer"], "pastille fermer");
+    await r.setViewportSize({ width: 64, height: 700 });
+    const p = await r.$eval(".pastilles", (n) => {
+      const b = n.getBoundingClientRect();
+      return { visible: n.offsetParent !== null, droite: b.right };
+    });
+    verifier(p.visible && p.droite <= 64, `pastilles dans le rail replié : ${JSON.stringify(p)}`);
+  });
+
   await cas("logo : clic droit = menu des commandes, dessiné par la barre", async () => {
     const r = await page("chrome.html", { query: "?surface=rail" });
     await pousser(r, etatDeBase());
@@ -1619,8 +1689,9 @@ async function suite() {
       const texte = fs.readFileSync(path.join(UI, f), "utf8");
       for (const m of texte.matchAll(/m:\s*["']([a-zA-Z]+)["']/g)) envoyes.add(m[1]);
     }
-    // Le coeur et ses outils (favoris, rendez-vous, cote a cote, guets : `src/app/outils.rs`).
-    const app = ["app.rs", path.join("app", "outils.rs")]
+    // Le coeur, ses outils (favoris, rendez-vous, cote a cote, guets : `src/app/outils.rs`) et
+    // la barre de la fenetre (`src/app/fenetre.rs`).
+    const app = ["app.rs", path.join("app", "outils.rs"), path.join("app", "fenetre.rs")]
       .map((f) => fs.readFileSync(path.join(RACINE, "src", f), "utf8"))
       .join("\n");
     const traites = new Set();

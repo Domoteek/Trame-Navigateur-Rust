@@ -271,6 +271,12 @@ pub struct Reglages {
     /// fenetre garde sa taille) ou `ecran` (en plus, la fenetre passe en plein ecran Windows).
     #[serde(default = "plein_ecran_defaut")]
     pub plein_ecran: String,
+    /// Barre de la fenetre : `bande` (boutons reduire, agrandir, fermer au bout de la barre
+    /// d'adresse, comme Opera GX), `bandeau` (bande fine aux couleurs de Trame au-dessus de
+    /// tout), `rail` (trois pastilles en haut du rail) ou `windows` (la barre de titre de
+    /// Windows). Les trois premiers retirent la barre de Windows.
+    #[serde(default = "barre_fenetre_defaut")]
+    pub barre_fenetre: String,
     /// Endormir automatiquement les onglets refroidis.
     #[serde(default = "vrai")]
     pub veille_auto: bool,
@@ -334,6 +340,24 @@ pub struct Reglages {
 
 fn plein_ecran_defaut() -> String {
     "fenetre".into()
+}
+
+fn barre_fenetre_defaut() -> String {
+    "bande".into()
+}
+
+/// Les styles de barre de fenetre acceptes (`Reglages::barre_fenetre`).
+pub const BARRES_FENETRE: [&str; 4] = ["bande", "bandeau", "rail", "windows"];
+
+impl Reglages {
+    /// Le style de barre de fenetre, ramene a une valeur connue.
+    pub fn barre_fenetre(&self) -> &str {
+        if BARRES_FENETRE.contains(&self.barre_fenetre.as_str()) {
+            &self.barre_fenetre
+        } else {
+            "bande"
+        }
+    }
 }
 
 fn pistage_defaut() -> String {
@@ -423,6 +447,7 @@ impl Default for Reglages {
             moteur: moteur_defaut(),
             barre_extensions: true,
             plein_ecran: plein_ecran_defaut(),
+            barre_fenetre: barre_fenetre_defaut(),
             veille_auto: true,
             budget: budget_defaut(),
             extensions_etat: BTreeMap::new(),

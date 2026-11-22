@@ -529,6 +529,33 @@ Demande de Clément : un **favori** est une page précise (une vidéo, un articl
 - Vérifié chez Clément à 18 h 25 : YouTube, Wikipédia et les 2 favoris ont leur image ; Amazon
   suivra à l'ouverture de son onglet (en veille).
 
+## 10 quinquies. 2026-11-22, soir — la barre de la fenêtre dans l'interface (0.4.0)
+
+Demande de Clément (et de son fils) : comme Opera GX, plus de barre de titre Windows au-dessus
+de Trame. Trois maquettes proposées, la 1 choisie, puis « tous les cas de figure dans les
+paramètres ». Nouveau réglage **Réglages › Fenêtre › Barre de la fenêtre**
+(`reglages.barre_fenetre`) :
+
+| Style | Ce qu'on voit |
+|---|---|
+| `bande` (défaut) | réduire, agrandir, fermer au bout de la barre d'adresse ; la croix touche le coin |
+| `bandeau` | une bande de 28 px au-dessus de tout, titre de l'onglet au milieu, boutons à droite |
+| `rail` | trois pastilles en haut du rail (au-dessus du « + » quand le rail est replié) |
+| `windows` | la barre de titre de Windows, comme avant (secours) |
+
+| Évolution | Pourquoi |
+|---|---|
+| `with_decorations(false)` + `with_undecorated_shadow(true)` (tao) | tao garde alors les bords invisibles de Windows à gauche, à droite et en bas : on redimensionne comme avant, avec l'ombre ; agrandie, la fenêtre ne couvre pas la barre des tâches |
+| Le vide de la barre et du haut du rail → `drag_window` ; double-clic → agrandir | les surfaces de Trame couvrent tout le haut : c'est l'interface qui joue la barre de titre (`src/app/fenetre.rs`, message `fenetre`) |
+| Bande de 4 px tout en haut → `drag_resize_window(North)` ; coins dans le rail et la barre | le bord du haut est sous les webviews, Windows ne le voit pas |
+| Survol du bouton agrandir 0,7 s → Win+Z (seulement si Trame est au premier plan) | les dispositions d'ancrage de Windows 11 ne s'ouvrent seules que sur un vrai `HTMAXBUTTON`, qu'une page WebView2 ne peut pas présenter |
+| Fermer = `WM_CLOSE` | même chemin que la croix de Windows : la session est sauvée |
+| Changer de style ne redémarre rien | `set_decorations` à chaud, géométrie recalculée (le bandeau décale la barre et la page de 28 px) |
+
+Preuve : `cargo test --release` 172/172 ; `tester-ui.mjs` 60/60, dont un cas neuf (boutons,
+glisser, double-clic, bord du haut, agrandie, les quatre styles, rail replié). **Pas encore
+éprouvé dans une vraie fenêtre** : le profil est unique et le Trame de Clément était ouvert.
+
 ## 11. L'état aujourd'hui
 
 ```

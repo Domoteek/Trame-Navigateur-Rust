@@ -1160,3 +1160,78 @@ input {
 .attente:hover { color: var(--texte); background: rgba(255, 255, 255, 0.06); }
 .resultat .genre.favori { background: rgba(251, 191, 36, 0.18); color: #fbd36a; }
 .resultat .genre.lecture { background: rgba(94, 234, 212, 0.14); color: #9df0e0; }
+
+/* ------------------------------------------------- barre de la fenetre */
+/* Reglage « Barre de la fenetre » : `body[data-fenetre]` vaut bande, bandeau, rail ou windows.
+   Hors du style windows, la fenetre n'a plus de barre de titre : les zones vides de la barre
+   et du haut du rail la deplacent (double-clic : agrandir), et une bande de 4 px tout en haut
+   la redimensionne par le bord du haut. */
+
+.bord-haut {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  z-index: 60;
+  cursor: ns-resize;
+}
+body:not([data-fenetre="windows"]):not([data-agrandie]) .bord-haut { display: block; }
+
+.titre-fenetre {
+  display: none;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  background: var(--fond);
+  border-bottom: 1px solid var(--bord);
+}
+body[data-fenetre="bandeau"] .titre-fenetre { display: flex; }
+.titre-texte {
+  flex: 1;
+  min-width: 0;
+  padding-left: 138px; /* les trois boutons, pour que le titre reste au milieu */
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--texte-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.boutons-fenetre { display: none; align-self: stretch; flex: 0 0 auto; }
+body[data-fenetre="bande"] .boutons-fenetre.bande { display: flex; margin: 0 -10px 0 4px; }
+body[data-fenetre="bandeau"] .boutons-fenetre.petits { display: flex; }
+.boutons-fenetre button {
+  width: 46px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #c3cde0;
+  border-radius: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.boutons-fenetre button:hover { background: rgba(255, 255, 255, 0.08); color: #f2f6ff; }
+.boutons-fenetre button.fermer:hover { background: #c42b1c; color: #fff; }
+.boutons-fenetre .ic { width: 16px; height: 16px; stroke-width: 1.25; }
+.boutons-fenetre.petits .ic { width: 14px; height: 14px; }
+
+.pastilles { display: none; gap: 7px; align-items: center; padding-left: 2px; }
+body[data-fenetre="rail"] .pastilles { display: flex; }
+.pastille {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  padding: 0;
+  transition: filter 0.12s, transform 0.12s;
+}
+.pastille.reduire { background: #fbbf24; }
+.pastille.agrandir { background: #34d399; }
+.pastille.fermer { background: #f87171; }
+.pastille:hover { filter: brightness(1.18); transform: scale(1.12); }
+
+@media (max-width: 130px) {
+  /* Rail replie : les pastilles passent en premier, au-dessus du « + ». */
+  .pastilles { order: -1; gap: 6px; padding: 2px 0 6px; }
+}

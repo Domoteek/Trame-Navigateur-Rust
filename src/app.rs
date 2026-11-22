@@ -307,6 +307,8 @@ pub struct App {
     demarrage_ms: u64,
     surfaces_verifiees: bool,
     derniere_taille: (u32, u32),
+    /// La fenetre etait agrandie au dernier redimensionnement (bouton agrandir / restaurer).
+    agrandie: bool,
     dernier_tick: u64,
     derniere_sauvegarde: u64,
     modifie: bool,
@@ -339,6 +341,7 @@ pub struct App {
     sonde_ipc: std::collections::VecDeque<String>,
 }
 
+mod fenetre;
 mod outils;
 
 const COULEUR_FOND: (u8, u8, u8, u8) = (13, 16, 22, 255);
@@ -628,6 +631,7 @@ impl App {
             demarrage_ms: maintenant_ms(),
             surfaces_verifiees: false,
             derniere_taille: (0, 0),
+            agrandie: false,
             dernier_tick: maintenant_ms(),
             derniere_sauvegarde: 0,
             modifie: false,
@@ -1257,11 +1261,13 @@ impl App {
 
     pub fn geometrie_courante(&self) -> Geometrie {
         let taille = self.window.inner_size();
-        let base = if self.reglages.barre_extensions {
-            shell::BARRE_H + shell::EXT_H
-        } else {
-            shell::BARRE_H
-        };
+        // Style « bandeau » : la barre commence par la bande de la fenetre (28 px).
+        let base = self.hauteur_titre()
+            + if self.reglages.barre_extensions {
+                shell::BARRE_H + shell::EXT_H
+            } else {
+                shell::BARRE_H
+            };
         let barre = if self.panneau_ouvert { self.panneau_hauteur.max(base) } else { base };
         let echelle = self.window.scale_factor();
         let mut geo = shell::geometrie(
@@ -1513,6 +1519,7 @@ impl App {
         let taille = self.window.inner_size();
         self.derniere_taille = (taille.width, taille.height);
         self.appliquer_geometrie();
+        self.suivre_agrandissement();
     }
 
     /// La fenetre vient de reprendre le focus (alt-tab, clic sur la barre de titre) : on le
@@ -2657,6 +2664,7 @@ impl App {
                 "budget": self.reglages.budget_borne(),
                 "barreExtensions": self.reglages.barre_extensions,
                 "pleinEcran": self.reglages.plein_ecran.clone(),
+                "barreFenetre": self.reglages.barre_fenetre(),
                 "moteur": self.reglages.moteur.clone(),
             },
             "profil": self.profil.racine().display().to_string(),
@@ -2668,6 +2676,7 @@ impl App {
             "panneauExtension": self.panneau_extension.clone(),
             "chromeDisponibles": self.chrome_disponibles,
             "version": env!("CARGO_PKG_VERSION"),
+            "fenetre": { "style": self.reglages.barre_fenetre(), "agrandie": self.window.is_maximized() },
             "carnet": self.carnet_json(),
             "historique": self.historique.len(),
             "telechargements": self.telechargements_json(),
@@ -3272,7 +3281,7 @@ impl App {
             self.fermer_apercu();
         }
 
-        if self.traiter_ipc_outils(source, m, &v) {
+        if self.traiter_ipc_outils(source, m, &v) || self.traiter_ipc_fenetre(source, m, &v) {
             return;
         }
 

@@ -136,6 +136,15 @@ fn main() {
     if std::env::var("TRAME_CACHEE").is_ok() {
         constructeur = constructeur.with_visible(false).with_focused(false);
     }
+    // Barre de la fenetre : sauf le style « windows », Trame dessine ses propres boutons
+    // (reduire, agrandir, fermer) et retire la barre de titre de Windows. L'ombre de tao garde
+    // les bords invisibles de Windows : on redimensionne par la gauche, la droite et le bas
+    // comme avant ; le bord du haut passe par l'interface (`fenetre` dans app.rs).
+    let sans_barre = profil.charger_reglages().barre_fenetre() != "windows";
+    {
+        use tao::platform::windows::WindowBuilderExtWindows;
+        constructeur = constructeur.with_decorations(!sans_barre).with_undecorated_shadow(true);
+    }
     let window = constructeur
         .with_title("Trame")
         // Le fond de la fenetre ne se voit qu'entre deux pages du cote a cote (la separation
