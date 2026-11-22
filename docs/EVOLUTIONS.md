@@ -651,9 +651,12 @@ clic sans pause ni clic transmis au lecteur) ; vrai WebView2 (Trame caché, prof
 vidéo de canevas) : `pictureInPictureEnabled` vrai, clic → vidéo flottante, lecture continue,
 Alt+P la ramène puis la ressort. `cargo test --release` 176/176. Pas encore installé chez Clément.
 
-Limites : la fenêtre de Chromium n'a que lecture/pause et retour ; une vidéo dans un cadre
-d'un autre site (lecteur YouTube intégré) n'a pas de pastille si le script ne court pas dans
-ce cadre.
+Le script est injecté aussi dans les cadres (`with_initialization_script_for_main_only(…, false)`,
+car `with_initialization_script` de wry ne vise que la page principale) : un lecteur YouTube
+intégré à un autre site a sa pastille. Vérifié dans le vrai WebView2 avec un cadre d'une autre
+origine.
+
+Limite : la fenêtre de Chromium n'a que lecture/pause et retour, d'où l'étape 3.
 
 ## 11. L'état aujourd'hui
 

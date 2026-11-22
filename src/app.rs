@@ -1147,12 +1147,14 @@ impl App {
             builder
         } else {
             builder.with_initialization_script(format!(
-                "{}\n{}\n{}\n{}",
+                "{}\n{}\n{}",
                 extensions::AMORCE,
                 RACCOURCIS,
-                INCRUSTATION,
                 extensions::script_de_debut(&self.extensions)
             ))
+            // Aussi dans les cadres : un lecteur YouTube integre a un autre site doit avoir sa
+            // pastille (`with_initialization_script` ne vise que la page principale).
+            .with_initialization_script_for_main_only(INCRUSTATION, false)
         };
         let builder = if std::env::var("TRAME_SANS_PROTOCOLE").is_ok() {
             builder
