@@ -696,8 +696,16 @@ dépôts sans effet, un fil inconnu et la relecture depuis le disque) ; `node ou
 **73/73** (5 cas neufs : le trait et le message unique au relâchement, le dépôt sous le dernier
 `avant: 0`, l'appui qui ne range rien, le rail replié qui ne replie pas, et la carte saisie qui
 survit à une poussée de l'hôte) ; binaire de **release** : rail `[1,2,3]` → un vrai glissement →
-`[3,1,2]`, groupe non replié, `session.json` `[3,1,2]`. Pas encore essayé à la main dans la
-fenêtre de Clément.
+`[3,1,2]`, groupe non replié, `session.json` `[3,1,2]`.
+
+Livrables (2026-11-22, même soir) : `node outils/faire-setup.mjs` a compilé, **signé
+l'exécutable** (Azure Trusted Signing), fabriqué l'installation Inno Setup puis **signé le setup**.
+Les deux sont `Valid`, horodatés, signataire `CN=CAHAGNE CLEMENT` ; `Trame-0.4.7-setup.exe`
+(2,8 Mo) et `Trame-0.4.7-portable.zip` (1,2 Mo) sont dans `dist\`, avec `SHA256SUMS.txt`. Version
+étiquetée `v0.4.7`. `verifier-setup.mjs` n'a pas été rejoué (l'installation 0.4.6 tournait) : il
+installe et désinstalle une copie, donc il touche HKCU — à lancer autour de l'installation.
+
+Pas encore essayé à la main dans la fenêtre de Clément.
 
 Limite dite franchement : au **doigt**, le geste fait défiler le rail (le navigateur garde le
 panoramique) ; il faudrait un appui long pour l'empêcher, et ce n'est pas fait.
