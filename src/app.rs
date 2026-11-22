@@ -3495,6 +3495,21 @@ impl App {
                     self.pousser_etat();
                 }
             }
+            "filDeplacer" => {
+                // Ranger les groupes : `avant` est le fil devant lequel poser, 0 (ou absent)
+                // voulant dire « en dernier » — meme convention que `fil: 0` de « tisser ».
+                let id = v["id"].as_u64().map(|n| n as ThreadId);
+                let avant = v["avant"]
+                    .as_u64()
+                    .map(|n| n as ThreadId)
+                    .filter(|n| *n != 0);
+                if let Some(id) = id {
+                    if self.session.deplacer_fil(id, avant) {
+                        self.marquer_modifie();
+                        self.pousser_etat();
+                    }
+                }
+            }
             "tisser" => {
                 let onglet = v["onglet"].as_u64().map(|n| n as TabId);
                 let fil = v["fil"].as_u64().map(|n| n as ThreadId);

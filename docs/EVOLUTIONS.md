@@ -675,11 +675,38 @@ d'avant (`[16, 68, 765, 430]`) une fois l'onglet réaffiché. `tester-ui.mjs` 67
 `cargo test --release` 176/176. Pas encore installé chez Clément ; déplacement à la souris et
 redimensionnement par les bords pas encore essayés à la main.
 
+## 10 nonies. 2026-11-22, nuit — ranger les groupes du rail (0.4.7)
+
+Demande de Clément, capture du rail à l'appui : « je voudrais pouvoir réorganiser les groupes
+d'onglets ». Jusque-là l'ordre était celui de la création des fils et rien ne le changeait
+(l'heure du fil, `actif_le`, ne servait qu'à la fraîcheur du tissage).
+
+| Ajout | Pourquoi, et où |
+|---|---|
+| **`Session::deplacer_fil(id, avant)`** (`src/model.rs`) | l'ordre des fils **est** `session.fils` : il tient donc au redémarrage, et c'est la même liste qui ordonne les cartes du rail et les bandes de la trame — une seule vérité, deux vues qui ne peuvent pas diverger. Rend `false` quand rien ne bouge (dépôt devant soi-même ou juste après soi) : ni session salie, ni redessin inutile. Un `avant` disparu (fil fermé entre-temps) vaut « en dernier » plutôt que de perdre le groupe |
+| **Message `filDeplacer`** (`{ id, avant }`, `avant: 0` = en dernier, même convention que `fil: 0` de « tisser ») | le rail n'écrit pas la session : il demande, l'hôte décide, marque et sauve |
+| **Le geste** (`ui/chrome.js`) | on glisse la **tête** du groupe (chevron, nom, compteur) au pointeur. Un trait turquoise dit où il tombera — moitié haute d'une carte = devant elle, moitié basse = après. Un seuil de 6 px distingue l'appui du glissement, et le clic qui suit un glissement est avalé : dans le rail replié, ranger ne replie pas le groupe |
+| **Pourquoi le pointeur et pas le glisser-déposer HTML** | sur ces mêmes cartes, le dépôt d'un onglet (`tisser`) lit déjà `text/plain` ; distinguer un groupe d'un onglet au dépôt aurait empilé deux gestes sur une cible. Et le glisser HTML n'existe pas au doigt. Le pointeur capturé couvre souris, stylet et doigt, et un relâchement hors de la fenêtre n'y laisse pas de geste ouvert (`pointercancel` et `blur` remettent la carte en place) |
+| **Gel du redessin pendant le geste** | le rail est reconstruit à chaque poussée qui change sa signature (une toutes les 400 ms pendant un défilement) : sans gel, la carte saisie serait détruite au milieu du mouvement. C'est le même verrou que la bande d'accès rapides (`glisseRail`) |
+| **Le trait, dessiné dans la carte** | premier essai : un trait de 2 px posé dans l'interstice, à `top: -6px`. La classe était bien posée, le trait invisible — `#fils` défile (`overflow: auto`) et coupe tout ce qui dépasse au-dessus de la **première** carte, c'est-à-dire le rang le plus demandé. Trouvé à la capture, pas par le test (qui ne vérifiait que la classe) : le trait est passé à `top: 0` / `bottom: 0`, dans la carte, et le test vérifie désormais cette position |
+| **`outils/eprouver-rangement.mjs`** | banc d'essai du **vrai geste** : un glissement de souris envoyé par CDP dans le rail du binaire, profil jetable, fenêtre cachée, puis relecture de l'ordre des cartes **et** de `session.json` |
+
+Preuves : `cargo test --release` **177/177** (le cas neuf vérifie les quatre rangs, les deux
+dépôts sans effet, un fil inconnu et la relecture depuis le disque) ; `node outils/tester-ui.mjs`
+**73/73** (5 cas neufs : le trait et le message unique au relâchement, le dépôt sous le dernier
+`avant: 0`, l'appui qui ne range rien, le rail replié qui ne replie pas, et la carte saisie qui
+survit à une poussée de l'hôte) ; binaire de **release** : rail `[1,2,3]` → un vrai glissement →
+`[3,1,2]`, groupe non replié, `session.json` `[3,1,2]`. Pas encore essayé à la main dans la
+fenêtre de Clément.
+
+Limite dite franchement : au **doigt**, le geste fait défiler le rail (le navigateur garde le
+panoramique) ; il faudrait un appui long pour l'empêcher, et ce n'est pas fait.
+
 ## 11. L'état aujourd'hui
 
 ```
-cargo test --release            154/154
-node outils/tester-ui.mjs        53/53
+cargo test --release            177/177
+node outils/tester-ui.mjs        73/73
 node outils/verifier-app.mjs     --reseau : 25/25 (dont magasin, « Ajouter a Chrome », liens externes, outils)
 node outils/verifier-setup.mjs   tout vert, inscription navigateur posee puis retiree   (2026-11-22)
 ```

@@ -222,6 +222,42 @@ async function vider(p) {
   });
 }
 
+// Un geste de pointeur, etape par etape : `[selecteur, type, clientX, clientY]`.
+// Le rangement d'un groupe se fait au pointeur (voir « ranger les groupes » dans chrome.js),
+// pas au glisser-deposer HTML : les evenements sont donc synthetises ici, avec de vraies
+// coordonnees tirees des rectangles.
+async function geste(p, etapes) {
+  await p.evaluate((liste) => {
+    for (const [selecteur, type, x, y] of liste) {
+      const cible = selecteur === null ? document : document.querySelector(selecteur);
+      cible.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerType: "mouse",
+          button: 0,
+          buttons: type === "pointerup" ? 0 : 1,
+          clientX: x,
+          clientY: y,
+        })
+      );
+    }
+  }, etapes);
+}
+
+// Le point de saisie d'un groupe (sa tete) et une hauteur dans une carte.
+async function pointsRail(p, idSaisi) {
+  return p.evaluate((id) => {
+    const tete = document.querySelector(`.fil[data-fil="${id}"] .fil-tete`).getBoundingClientRect();
+    const cartes = [...document.querySelectorAll("#fils .fil")].map((f) => {
+      const r = f.getBoundingClientRect();
+      return { id: Number(f.dataset.fil), haut: r.top, milieu: r.top + r.height / 2, bas: r.bottom };
+    });
+    return { x: Math.round(tete.left + 40), y: Math.round(tete.top + tete.height / 2), cartes };
+  }, idSaisi);
+}
+
 // ------------------------------------------------------------------ suite
 
 async function suite() {
@@ -1817,6 +1853,156 @@ async function suite() {
     await vider(r);
     await r.click(`.fil[data-fil="${f0.id}"] .fil-pile`);
     verifier((await messages(r)).some((x) => x.m === "filReplier" && x.replie === false), "un clic sur la pile déplie le fil");
+  });
+
+  // ------------------------------------------------------- ranger les groupes
+
+  // Trois groupes comme dans le rail de Clément : leur ordre est celui de `session.fils`.
+  const filsARanger = () => {
+    const e = etatDeBase();
+    e.fils = [
+      { id: 1, nom: "Login Home", replie: false },
+      { id: 2, nom: "Amazon Dvd", replie: false },
+      { id: 3, nom: "Automated Day", replie: false },
+    ];
+    e.onglets = [
+      onglet(10, 1, "localhost", "http://localhost/"),
+      onglet(11, 2, "Amazon", "https://amazon.fr/"),
+      onglet(12, 3, "YouTube", "https://youtube.com/"),
+    ];
+    return e;
+  };
+
+  await cas("rail : glisser la tête d'un groupe le range devant un autre", async () => {
+    const p = await page("chrome.html", { query: "?surface=rail" });
+    await p.setViewportSize({ width: 292, height: 700 });
+    await pousser(p, filsARanger());
+    await vider(p);
+    const pts = await pointsRail(p, 3);
+    const devant = pts.cartes.find((c) => c.id === 1);
+    await geste(p, [
+      ['.fil[data-fil="3"] .fil-tete', "pointerdown", pts.x, pts.y],
+      [null, "pointermove", pts.x, devant.haut + 4],
+    ]);
+    // Le trait dit où le groupe tombera ; rien n'est encore demandé à l'hôte.
+    verifier(await p.$('.fil[data-fil="1"].avant'), "la carte de destination porte le trait");
+    // Il doit rester DANS la carte : `#fils` défile (`overflow: auto`) et coupe ce qui dépasse en
+    // haut — un trait posé dans l'interstice au-dessus de la PREMIÈRE carte serait invisible, et
+    // c'est justement le rang le plus demandé (constaté sur la capture du 2026-11-22).
+    const trait = await p.$eval('.fil[data-fil="1"]', (c) => {
+      const s = getComputedStyle(c, "::before");
+      return { top: s.top, height: s.height, fond: s.backgroundColor };
+    });
+    egal(trait.top, "0px", "le trait de la première carte est dessiné dedans, pas au-dessus");
+    verifier(parseFloat(trait.height) >= 2, `trait visible : ${JSON.stringify(trait)}`);
+    egal(
+      (await messages(p)).filter((m) => m.m === "filDeplacer"),
+      [],
+      "aucun rangement demandé pendant le geste"
+    );
+    await geste(p, [[null, "pointerup", pts.x, devant.haut + 4]]);
+    egal(
+      (await messages(p)).filter((m) => m.m === "filDeplacer"),
+      [{ m: "filDeplacer", id: 3, avant: 1 }],
+      "un seul message, au relâchement"
+    );
+    await p.close();
+  });
+
+  await cas("rail : glisser un groupe sous le dernier le range en dernier", async () => {
+    const p = await page("chrome.html", { query: "?surface=rail" });
+    await p.setViewportSize({ width: 292, height: 700 });
+    await pousser(p, filsARanger());
+    await vider(p);
+    const pts = await pointsRail(p, 1);
+    const sousTout = Math.max(...pts.cartes.map((c) => c.bas)) + 12;
+    await geste(p, [
+      ['.fil[data-fil="1"] .fil-tete', "pointerdown", pts.x, pts.y],
+      [null, "pointermove", pts.x, sousTout],
+    ]);
+    verifier(await p.$('.fil[data-fil="3"].apres'), "le trait se pose sous la dernière carte");
+    await geste(p, [[null, "pointerup", pts.x, sousTout]]);
+    egal(
+      (await messages(p)).filter((m) => m.m === "filDeplacer"),
+      [{ m: "filDeplacer", id: 1, avant: 0 }],
+      "avant: 0 veut dire « en dernier »"
+    );
+    await p.close();
+  });
+
+  await cas("rail : un appui sur la tête d'un groupe ne range rien", async () => {
+    const p = await page("chrome.html", { query: "?surface=rail" });
+    await p.setViewportSize({ width: 292, height: 700 });
+    await pousser(p, filsARanger());
+    await vider(p);
+    const pts = await pointsRail(p, 2);
+    // Appui et relâchement au même endroit, puis 3 px de tremblement : c'est un clic.
+    await geste(p, [
+      ['.fil[data-fil="2"] .fil-tete', "pointerdown", pts.x, pts.y],
+      [null, "pointermove", pts.x, pts.y + 3],
+      [null, "pointerup", pts.x, pts.y],
+    ]);
+    egal((await messages(p)).filter((m) => m.m === "filDeplacer"), [], "un appui ne range rien");
+    await p.close();
+  });
+
+  await cas("rail replié : un glissement range sans replier le groupe", async () => {
+    const r = await page("chrome.html", { query: "?surface=rail" });
+    await r.setViewportSize({ width: 64, height: 700 });
+    await pousser(r, filsARanger());
+    await vider(r);
+    const pts = await pointsRail(r, 3);
+    const devant = pts.cartes.find((c) => c.id === 1);
+    await geste(r, [
+      ['.fil[data-fil="3"] .fil-tete', "pointerdown", pts.x, pts.y],
+      [null, "pointermove", pts.x, devant.haut + 4],
+      [null, "pointerup", pts.x, devant.haut + 4],
+    ]);
+    // Le clic que le navigateur emet apres un glissement ne doit pas replier le groupe.
+    await r.evaluate(() => document.querySelector('.fil[data-fil="3"] .fil-tete').click());
+    const recus = await messages(r);
+    egal(recus.filter((m) => m.m === "filReplier"), [], "un glissement ne replie pas le groupe");
+    egal(
+      recus.filter((m) => m.m === "filDeplacer"),
+      [{ m: "filDeplacer", id: 3, avant: 1 }],
+      "le groupe est rangé dans le rail replié"
+    );
+    await r.close();
+  });
+
+  await cas("rail : le groupe saisi survit à une poussée de l'hôte pendant le geste", async () => {
+    const p = await page("chrome.html", { query: "?surface=rail" });
+    await p.setViewportSize({ width: 292, height: 700 });
+    await pousser(p, filsARanger());
+    await vider(p);
+    const pts = await pointsRail(p, 3);
+    const devant = pts.cartes.find((c) => c.id === 1);
+    await p.evaluate(() => {
+      window.__carte = document.querySelector('.fil[data-fil="3"]');
+    });
+    await geste(p, [
+      ['.fil[data-fil="3"] .fil-tete', "pointerdown", pts.x, pts.y],
+      [null, "pointermove", pts.x, devant.haut + 4],
+    ]);
+    // Une poussee de l'hote change la signature du rail (titre d'onglet) : sans le gel du
+    // redessin, la carte saisie serait detruite au milieu du geste.
+    const etat2 = filsARanger();
+    etat2.onglets[0].titre = "localhost (changé)";
+    await pousser(p, etat2);
+    const vu = await p.evaluate(() => ({
+      meme: window.__carte === document.querySelector('.fil[data-fil="3"]'),
+      saisi: !!document.querySelector('.fil[data-fil="3"].en-glissement'),
+      titre: document.querySelector('.fil[data-fil="1"] .onglet .titre').textContent,
+    }));
+    verifier(vu.meme && vu.saisi, `la carte saisie survit à la poussée : ${JSON.stringify(vu)}`);
+    egal(vu.titre, "localhost", "le rail n'est pas redessiné pendant le geste");
+    await geste(p, [[null, "pointerup", pts.x, devant.haut + 4]]);
+    egal(
+      (await messages(p)).filter((m) => m.m === "filDeplacer"),
+      [{ m: "filDeplacer", id: 3, avant: 1 }],
+      "le relâchement range le groupe malgré la poussée"
+    );
+    await p.close();
   });
 
   await cas("logo : clic droit = menu des commandes, dessiné par la barre", async () => {

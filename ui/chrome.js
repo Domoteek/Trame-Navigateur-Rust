@@ -605,6 +605,101 @@ function teinteAcces(texte) {
   return TEINTES_ACCES[h % TEINTES_ACCES.length];
 }
 
+/* ------------------------------------------------ ranger les groupes du rail
+
+   Ranger un groupe, c'est deplacer `session.fils` : c'est la MEME liste qui ordonne les cartes du
+   rail et les bandes de la trame, donc l'ordre tient d'un redemarrage a l'autre et les deux vues
+   restent d'accord. Le geste est un glissement du pointeur sur la tete du groupe.
+
+   Pourquoi le pointeur et pas le glisser-deposer HTML des onglets : sur les memes cartes, il
+   faudrait distinguer un onglet d'un groupe au depot, et le glisser HTML n'existe pas au doigt.
+   Rien n'est envoye pendant le mouvement : un seul message au relachement, l'hote reste seul
+   juge de l'ordre. */
+let rangeFil = null; // { id, x0, y0, actif } — le groupe saisi, tant qu'on ne l'a pas relache
+let vientDeRanger = false; // avale le clic qui suit un glissement (rail replie : replier)
+
+/** Ou tomberait le groupe lache a cette hauteur.
+ *  `avant` = l'identifiant du groupe devant lequel le poser, 0 voulant dire « apres le dernier ». */
+function cibleRangement(y) {
+  const blocs = Array.from(document.querySelectorAll("#fils .fil"));
+  if (!blocs.length) return null;
+  for (const bloc of blocs) {
+    const r = bloc.getBoundingClientRect();
+    // La moitie haute d'une carte : devant elle. La moitie basse : on continue, donc derriere.
+    if (y < r.top + r.height / 2) return { bloc, avant: Number(bloc.dataset.fil), apres: false };
+  }
+  const dernier = blocs[blocs.length - 1];
+  return { bloc: dernier, avant: 0, apres: true };
+}
+
+function peindreRangement(cible) {
+  for (const bloc of document.querySelectorAll("#fils .fil")) {
+    bloc.classList.toggle("avant", !!cible && bloc === cible.bloc && !cible.apres);
+    bloc.classList.toggle("apres", !!cible && bloc === cible.bloc && !!cible.apres);
+  }
+}
+
+function saisirRangement(evenement, fil) {
+  // Les commandes du groupe (replier, cloisonner, sceller, fermer, renommer) restent des clics.
+  if (evenement.target.closest("button, input")) return;
+  if (evenement.pointerType === "mouse" && evenement.button !== 0) return;
+  // Capture du pointeur : sans elle, un relachement hors de la fenetre n'arrive jamais, le geste
+  // resterait ouvert et le rail cesserait de se redessiner. `blur` est le second filet.
+  try {
+    evenement.currentTarget.setPointerCapture(evenement.pointerId);
+  } catch (e) {
+    /* capture impossible : le geste marche encore dans la fenetre */
+  }
+  vientDeRanger = false;
+  rangeFil = { id: fil.id, x0: evenement.clientX, y0: evenement.clientY, actif: false };
+}
+
+function suivreRangement(evenement) {
+  if (!rangeFil) return;
+  if (!rangeFil.actif) {
+    // Un seuil, sinon un simple appui sur la tete se lirait comme un rangement.
+    if (Math.hypot(evenement.clientX - rangeFil.x0, evenement.clientY - rangeFil.y0) < 6) return;
+    rangeFil.actif = true;
+    const conteneur = document.getElementById("fils");
+    if (conteneur) conteneur.classList.add("rangement");
+    const pris = document.querySelector(`#fils .fil[data-fil="${rangeFil.id}"]`);
+    if (pris) pris.classList.add("en-glissement");
+  }
+  peindreRangement(cibleRangement(evenement.clientY));
+}
+
+function relacherRangement(evenement) {
+  const range = rangeFil;
+  if (!range) return;
+  rangeFil = null;
+  const conteneur = document.getElementById("fils");
+  if (conteneur) conteneur.classList.remove("rangement");
+  for (const bloc of document.querySelectorAll("#fils .fil")) {
+    bloc.classList.remove("en-glissement", "avant", "apres");
+  }
+  if (!range.actif) return; // simple appui : c'est un clic, laisse le faire son oeuvre
+  vientDeRanger = true;
+  const cible = cibleRangement(evenement.clientY);
+  if (!cible) {
+    if (etat) rendreRail(etat);
+    return;
+  }
+  // Meme un depot sur sa propre place part : l'hote est seul juge, et il ne salira rien.
+  ipc({ m: "filDeplacer", id: range.id, avant: cible.avant });
+}
+
+/** Geste interrompu (pointercancel) : on remet la carte en place sans rien demander a l'hote. */
+function annulerRangement() {
+  if (!rangeFil) return;
+  rangeFil = null;
+  const conteneur = document.getElementById("fils");
+  if (conteneur) conteneur.classList.remove("rangement");
+  for (const bloc of document.querySelectorAll("#fils .fil")) {
+    bloc.classList.remove("en-glissement", "avant", "apres");
+  }
+  if (etat) rendreRail(etat);
+}
+
 function rendreRail(s) {
   rendreSuggestion(s);
   rendreBandeAcces(s);
@@ -615,6 +710,14 @@ function rendreRail(s) {
 
   const conteneur = document.getElementById("fils");
   const signature = signatureDuRail(s);
+  // Pendant un rangement, on ne reconstruit rien : la carte saisie doit survivre au geste. Les
+  // poussees de l'hote (une toutes les 400 ms) sont rattrapees au relachement, parce que
+  // `signatureRail` n'a pas ete mis a jour.
+  if (rangeFil) {
+    rendreBudget();
+    if (!document.getElementById("volet").hidden) rendreVolet(s);
+    return;
+  }
   if (signature === signatureRail && conteneur.childElementCount > 0) {
     // Rien de visible n'a change : on rafraichit seulement ce qui vit a cote du rail.
     rendreBudget();
@@ -638,8 +741,12 @@ function rendreRail(s) {
     const tete = elem("div", "fil-tete");
     // Rail replie : le chevron est cache, la tete (pastille + nom) replie et deplie le fil.
     tete.onclick = () => {
+      // Apres un glissement, un clic sur la tete ne doit pas replier le groupe par surprise.
+      if (vientDeRanger) return;
       if (window.innerWidth < 130) ipc({ m: "filReplier", id: f.id, replie: !f.replie });
     };
+    tete.title = "Glisser pour ranger ce groupe";
+    tete.addEventListener("pointerdown", (e) => saisirRangement(e, f));
     const chev = elem("button", "chev");
     chev.title = f.replie ? "Déplier" : "Replier";
     chev.appendChild(icone("chevron", "petit"));
@@ -2101,6 +2208,14 @@ function brancherRail() {
     const id = Number(e.dataTransfer.getData("text/plain"));
     if (id) ipc({ m: "tisser", onglet: id, fil: 0 });
   });
+  // Ranger les groupes du rail : le pointeur est suivi sur le document, parce que la carte
+  // saisie ne recoit plus les evenements des qu'on la fait glisser hors de sa tete.
+  document.addEventListener("pointermove", suivreRangement);
+  document.addEventListener("pointerup", relacherRangement);
+  // Un geste interrompu par le systeme (perte de capture, fenetre inactive) n'est pas un depot :
+  // on range a la hauteur 0, ce qui mettrait le groupe en tete sans l'avoir demande.
+  document.addEventListener("pointercancel", annulerRangement);
+  window.addEventListener("blur", annulerRangement);
 }
 
 /* ------------------------------------------------------------------ depart */

@@ -257,6 +257,33 @@ fn ratio_defaut() -> f64 {
     0.5
 }
 
+impl Session {
+    /// Range un fil juste avant `avant` (`None` : en dernier).
+    ///
+    /// L'ordre des fils n'est pas un detail d'affichage : c'est `session.fils` lui-meme, donc il
+    /// survit au redemarrage, et c'est lui qui ordonne **les deux** surfaces — les groupes du rail
+    /// et les bandes de la trame. Une seule liste, une seule verite.
+    ///
+    /// Rend `true` si l'ordre a reellement change : un depot sur place (devant le fil lui-meme, ou
+    /// juste apres lui) ne doit ni salir la session ni faire redessiner l'interface.
+    pub fn deplacer_fil(&mut self, id: ThreadId, avant: Option<ThreadId>) -> bool {
+        if avant == Some(id) {
+            return false;
+        }
+        let Some(index) = self.fils.iter().position(|f| f.id == id) else {
+            return false;
+        };
+        let fil = self.fils.remove(index);
+        // Un `avant` qui ne designe plus rien (fil ferme entre-temps) vaut « en dernier » :
+        // deposer un groupe ne doit jamais le faire disparaitre.
+        let cible = avant
+            .and_then(|a| self.fils.iter().position(|f| f.id == a))
+            .unwrap_or(self.fils.len());
+        self.fils.insert(cible, fil);
+        cible != index
+    }
+}
+
 /// Reglages du navigateur, persistes dans `reglages.json`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Reglages {
@@ -930,6 +957,35 @@ mod tests {
         let relu: Fil = serde_json::from_str(&serde_json::to_string(&f).unwrap()).unwrap();
         assert_eq!(relu.cloison, Some(c));
         assert_eq!(relu.cloison.unwrap().profil, "cloison-7");
+    }
+
+    #[test]
+    fn ranger_un_fil_change_l_ordre_et_le_range_devant_le_fil_vise() {
+        let mut s = Session::default();
+        for id in [1, 2, 3] {
+            s.fils.push(Fil::neuf(id, format!("Fil {id}"), 1_000 + id as u64));
+        }
+        let ordre = |s: &Session| s.fils.iter().map(|f| f.id).collect::<Vec<_>>();
+
+        // Le dernier devant le premier, comme on glisse un groupe en haut du rail.
+        assert!(s.deplacer_fil(3, Some(1)));
+        assert_eq!(ordre(&s), vec![3, 1, 2]);
+        // Vers le bas : `None` = en dernier.
+        assert!(s.deplacer_fil(3, None));
+        assert_eq!(ordre(&s), vec![1, 2, 3]);
+        // Deposer sur sa propre place ne change rien et le dit.
+        assert!(!s.deplacer_fil(1, Some(1)), "devant soi-meme : aucun changement");
+        assert!(!s.deplacer_fil(1, Some(2)), "juste apres soi : aucun changement");
+        assert_eq!(ordre(&s), vec![1, 2, 3]);
+        // Un fil inconnu n'invente rien ; un `avant` disparu vaut « en dernier ».
+        assert!(!s.deplacer_fil(99, Some(1)));
+        assert!(s.deplacer_fil(1, Some(99)));
+        assert_eq!(ordre(&s), vec![2, 3, 1]);
+
+        // L'ordre vit dans la session : il survit a un redemarrage, et c'est la meme liste qui
+        // ordonne le rail et les bandes de la trame.
+        let relu: Session = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(ordre(&relu), vec![2, 3, 1]);
     }
 
     #[test]
