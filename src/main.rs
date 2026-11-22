@@ -49,7 +49,7 @@ use app::{App, UserEvent};
 /// Le meme dessin est integre a l'executable sous forme de `.ico` multi-tailles par `build.rs`
 /// (barre des taches, explorateur, alt-tab). Ici, c'est la fenetre elle-meme : sans cela, la
 /// barre de titre et le bouton de barre des taches prennent l'icone par defaut du runtime.
-fn icone_fenetre() -> tao::window::Icon {
+pub(crate) fn icone_fenetre() -> tao::window::Icon {
     const COTES: u32 = 64;
     let pixels = include_bytes!("../ressources/trame-64.rgba").to_vec();
     tao::window::Icon::from_rgba(pixels, COTES, COTES).expect("icone 64x64 RGBA embarquee")
@@ -209,8 +209,21 @@ fn main() {
                     info!("sonde : boucle figee pendant 60 s");
                     std::thread::sleep(Duration::from_secs(60));
                 }
-                application.traiter(evenement)
+                application.traiter(evenement);
+                // Une page a demande sa mini-fenetre : seule la boucle peut la creer.
+                if let Some(onglet) = application.prendre_demande_flottant() {
+                    application.ouvrir_flottant(onglet, _cible);
+                }
             }
+            // La mini-fenetre d'un onglet (video flottante) : la page suit sa taille, et la
+            // fermer ramene l'onglet dans la fenetre principale (sans quitter Trame).
+            Event::WindowEvent { event, window_id, .. } if application.est_flottant(window_id) => match event {
+                WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                    application.flottant_redimensionne()
+                }
+                WindowEvent::CloseRequested => application.ramener_flottant(),
+                _ => {}
+            },
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::Resized(_) => application.redimensionner(),
                 WindowEvent::Moved(_) => application.deplacee(),

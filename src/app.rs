@@ -347,9 +347,16 @@ pub struct App {
     echo_defilement: Option<(TabId, f64)>,
     /// Sonde `TRAME_IPC` (diagnostic) : messages de la barre a rejouer, un par battement.
     sonde_ipc: std::collections::VecDeque<String>,
+    /// Onglet sorti dans sa mini-fenetre (video flottante avec ses commandes), voir `flottant.rs`.
+    flottant: Option<flottant::Flottant>,
+    /// Demande de mini-fenetre en attente : seule la boucle d'evenements peut creer la fenetre.
+    flottant_demande: Option<TabId>,
+    /// Derniere place de la mini-fenetre (position, taille), reprise a la sortie suivante.
+    flottant_place: Option<(tao::dpi::PhysicalPosition<i32>, tao::dpi::PhysicalSize<u32>)>,
 }
 
 mod fenetre;
+mod flottant;
 mod outils;
 
 const COULEUR_FOND: (u8, u8, u8, u8) = (13, 16, 22, 255);
@@ -569,6 +576,9 @@ impl App {
             vue: None,
             zap: None,
             webviews: std::collections::HashMap::new(),
+            flottant: None,
+            flottant_demande: None,
+            flottant_place: None,
             zap_regles: Vec::new(),
             zap_comptes: std::collections::HashMap::new(),
             zap_ajouts: Vec::new(),
@@ -1725,6 +1735,10 @@ impl App {
         if self.trouver(id).is_none() {
             return;
         }
+        // Activer l'onglet en mini-fenetre le ramene dans la fenetre principale.
+        if self.onglet_flottant() == Some(id) {
+            self.ramener_flottant();
+        }
         // Changer d'onglet referme le coup d'oeil : il appartient a la page qu'on quitte.
         if self.actif != Some(id) {
             self.fermer_apercu();
@@ -2047,7 +2061,8 @@ impl App {
     }
 
     fn reveiller(&mut self, id: TabId) {
-        if self.webviews.contains_key(&id) {
+        // L'onglet en mini-fenetre est eveille, ailleurs : ne pas lui creer une seconde page.
+        if self.webviews.contains_key(&id) || self.onglet_flottant() == Some(id) {
             return;
         }
         if let Some(defilement) = self.trouver(id).map(|o| o.defilement) {
@@ -2097,6 +2112,10 @@ impl App {
     }
 
     fn fermer_onglet(&mut self, id: TabId) {
+        // Fermer l'onglet ferme aussi sa mini-fenetre (page puis fenetre).
+        if self.onglet_flottant() == Some(id) {
+            self.flottant = None;
+        }
         if matches!(self.session.cote, Some((g, d)) if g == id || d == id) {
             self.session.cote = None;
         }
@@ -3311,7 +3330,7 @@ impl App {
         let interne = self.source_interne(source);
         let autorise = match m {
             "extCall" | "defilement" | "raccourci" | "pret" | "hello" | "clicPage" | "zapChoisi"
-            | "zapCompte" | "coupDoeil" => !matches!(source, Source::Apercu),
+            | "zapCompte" | "coupDoeil" | "flottant" => !matches!(source, Source::Apercu),
             // L'apercu n'a droit qu'a ses deux boutons.
             "apercuOuvrir" | "apercuFermer" => true,
             _ => !matches!(source, Source::Onglet(_) | Source::Apercu) || interne,
@@ -4190,7 +4209,16 @@ impl App {
             "raccourci" => {
                 let action = v["action"].as_str().unwrap_or("").to_string();
                 info!("raccourci recu : {action} (depuis {:?})", source);
-                self.raccourci(&action);
+                // Depuis la mini-fenetre, les raccourcis viseraient l'onglet actif de la fenetre
+                // principale : seul Ctrl+W (fermer cet onglet) y garde un sens.
+                match source {
+                    Source::Onglet(id) if self.onglet_flottant() == Some(id) => {
+                        if action == "fermerOnglet" {
+                            self.fermer_onglet(id);
+                        }
+                    }
+                    _ => self.raccourci(&action),
+                }
             }
             "erreurUi" => {
                 let message = v["message"].as_str().unwrap_or("");
@@ -4213,6 +4241,7 @@ impl App {
                     self.ouvrir_apercu(&url);
                 }
             }
+            "flottant" => self.traiter_ipc_flottant(source, &v),
             "apercuFermer" => self.fermer_apercu(),
             "apercuOuvrir" => {
                 let url = self.apercu_url.clone();

@@ -1,15 +1,21 @@
 /**
- * Video flottante (incrustation), injectee dans chaque page visitee.
+ * Video flottante, injectee dans chaque page visitee (et dans ses cadres).
  *
- * Au survol d'une video, une petite pastille apparait en haut de l'image : un clic sort la
- * video dans la fenetre flottante de Chromium (toujours au premier plan, deplacable sur
- * n'importe quel ecran, redimensionnable). Un second clic, ou Alt+P, la ramene dans la page.
+ * Au survol d'une video, une pastille apparait en haut de l'image, en deux parties :
+ * - « Sortir la vidéo » (Alt+P) : la fenetre d'incrustation de Chromium, toujours au premier
+ *   plan, deplacable sur n'importe quel ecran ; lecture/pause seulement. Un second clic, ou
+ *   Alt+P, la ramene ;
+ * - l'icone de fenetre (Alt+Maj+P) : l'onglet entier part dans une mini-fenetre de Trame
+ *   (`src/app/flottant.rs`), le lecteur y garde toutes ses commandes. Page principale seulement.
  * Alt+P sans survol prend la video principale (celle qui joue, sinon la plus grande).
  * Demande de Clement (2026-11-22), sur le modele de l'icone d'Opera GX.
  *
+ * Dans la mini-fenetre, l'hote appelle `__trame_flottant(true)` : le lecteur remplit la
+ * fenetre, et une barre au survol permet de la deplacer ou de ramener l'onglet.
+ *
  * Contraintes de page hostile :
  * - YouTube impose les Trusted Types : aucune affectation de HTML brut, tout est construit par le DOM ;
- * - la pastille vit dans une racine fantome fermee, pour que le CSS du site ne la touche pas ;
+ * - tout vit dans une racine fantome fermee, pour que le CSS du site ne le touche pas ;
  * - un clic sur la pastille ne doit pas atteindre le lecteur (YouTube mettrait en pause).
  *
  * Embarque a la compilation (`include_str!` dans `app.rs`), teste par `outils/tester-ui.mjs`.
@@ -17,18 +23,32 @@
 (() => {
   if (window.__trame_incrustation) return;
   window.__trame_incrustation = true;
-  if (!("pictureInPictureEnabled" in document)) return;
 
   const LARGEUR_MIN = 200;
   const HAUTEUR_MIN = 120;
   const DELAI_MASQUE = 2500;
   const NS = "http://www.w3.org/2000/svg";
+  const PRINCIPALE = window.top === window;
+  const incrustable = "pictureInPictureEnabled" in document;
+
+  const envoi = (o) => {
+    try {
+      window.ipc.postMessage(JSON.stringify(o));
+    } catch (e) {
+      /* page sans pont (cadre) */
+    }
+  };
 
   let hote = null;
-  let bouton = null;
+  let pastille = null;
+  let principal = null;
   let libelle = null;
+  let barre = null;
   let cible = null;
+  // Video choisie a la pastille, gardee pour la mini-fenetre (la pastille se cache avant).
+  let derniere = null;
   let minuterie = 0;
+  let enVol = false;
 
   const utilisable = (v) => {
     if (!v || !v.isConnected) return false;
@@ -59,6 +79,42 @@
     return null;
   };
 
+  const icone = (formes) => {
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.8");
+    for (const [nom, attributs] of formes) {
+      const f = document.createElementNS(NS, nom);
+      for (const [k, v] of Object.entries(attributs)) f.setAttribute(k, v);
+      svg.append(f);
+    }
+    return svg;
+  };
+  // Petite video dans un grand cadre : l'incrustation.
+  const ICONE_INCRUSTATION = [
+    ["rect", { x: "2.5", y: "4.5", width: "19", height: "15", rx: "2.5" }],
+    ["rect", { x: "12", y: "11.5", width: "7", height: "5.5", rx: "1", fill: "currentColor", stroke: "none" }],
+  ];
+  // Fenetre avec sa barre : l'onglet en mini-fenetre.
+  const ICONE_FENETRE = [
+    ["rect", { x: "3", y: "4", width: "18", height: "16", rx: "2.5" }],
+    ["path", { d: "M3 8.5h18" }],
+    ["path", { d: "M10 13.5l2 2 2-2", "stroke-linecap": "round", "stroke-linejoin": "round" }],
+  ];
+  const ICONE_RAMENER = [
+    ["path", { d: "M9 14L4 9l5-5", "stroke-linecap": "round", "stroke-linejoin": "round" }],
+    ["path", { d: "M4 9h10.5a5.5 5.5 0 010 11H11", "stroke-linecap": "round" }],
+  ];
+
+  // Ni appui ni clic ne doivent atteindre le lecteur (pause, plein ecran au double clic…).
+  const isoler = (el) => {
+    for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "dblclick"]) {
+      el.addEventListener(type, (e) => e.stopPropagation());
+    }
+  };
+
   const construire = () => {
     hote = document.createElement("trame-incrustation");
     hote.style.cssText =
@@ -66,80 +122,136 @@
     const racine = hote.attachShadow({ mode: "closed" });
     const style = document.createElement("style");
     style.textContent = `
-      button {
-        position: fixed; display: none; align-items: center; gap: 6px;
-        height: 30px; padding: 0 11px 0 9px; border: 0; border-radius: 15px;
-        background: rgba(12, 14, 20, .78); color: #f2f4f8; cursor: pointer;
-        font: 600 12px/1 "Segoe UI", system-ui, sans-serif; letter-spacing: .01em;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, .35); pointer-events: auto;
+      .pastille {
+        position: fixed; display: none; align-items: stretch; height: 30px;
+        border-radius: 15px; overflow: hidden; pointer-events: auto;
+        background: rgba(12, 14, 20, .78); box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
         opacity: 0; transform: translate(-50%, -4px);
-        transition: opacity .15s ease, transform .15s ease, background .15s ease;
+        transition: opacity .15s ease, transform .15s ease;
         -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
       }
-      button.vu { opacity: 1; transform: translate(-50%, 0); }
-      button:hover { background: rgba(12, 14, 20, .94); }
-      button:active { transform: translate(-50%, 1px); }
+      .pastille.vu { opacity: 1; transform: translate(-50%, 0); }
+      button {
+        all: unset; display: flex; align-items: center; gap: 6px; cursor: pointer;
+        color: #f2f4f8; font: 600 12px/1 "Segoe UI", system-ui, sans-serif; letter-spacing: .01em;
+        transition: background .15s ease;
+      }
+      button:hover { background: rgba(255, 255, 255, .12); }
+      button:active { background: rgba(255, 255, 255, .2); }
+      button:focus-visible { outline: 2px solid #7aa7ff; outline-offset: -2px; }
+      .principal { padding: 0 11px 0 9px; }
+      .onglet { padding: 0 9px; border-left: 1px solid rgba(255, 255, 255, .16); }
       svg { width: 16px; height: 16px; flex: none; }
+      .barre {
+        position: fixed; left: 0; right: 0; top: 0; height: 34px; display: flex;
+        align-items: center; gap: 8px; padding: 0 6px 0 12px; box-sizing: border-box;
+        background: linear-gradient(rgba(0, 0, 0, .72), rgba(0, 0, 0, 0));
+        color: #f2f4f8; font: 600 12px/1 "Segoe UI", system-ui, sans-serif;
+        pointer-events: auto; cursor: grab; opacity: 0; transition: opacity .15s ease;
+      }
+      .barre.vu { opacity: 1; }
+      .barre .titre { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: .85; }
+      .barre button { height: 26px; padding: 0 9px; border-radius: 13px; background: rgba(12, 14, 20, .6); }
     `;
-    bouton = document.createElement("button");
-    bouton.type = "button";
-    const svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("fill", "none");
-    svg.setAttribute("stroke", "currentColor");
-    svg.setAttribute("stroke-width", "1.8");
-    const cadre = document.createElementNS(NS, "rect");
-    for (const [k, v] of [["x", "2.5"], ["y", "4.5"], ["width", "19"], ["height", "15"], ["rx", "2.5"]]) {
-      cadre.setAttribute(k, v);
-    }
-    const mini = document.createElementNS(NS, "rect");
-    for (const [k, v] of [["x", "12"], ["y", "11.5"], ["width", "7"], ["height", "5.5"], ["rx", "1"]]) {
-      mini.setAttribute(k, v);
-    }
-    mini.setAttribute("fill", "currentColor");
-    mini.setAttribute("stroke", "none");
-    svg.append(cadre, mini);
-    libelle = document.createElement("span");
-    bouton.append(svg, libelle);
-    racine.append(style, bouton);
 
-    // Le lecteur ne doit voir ni l'appui ni le clic (pause, plein ecran au double clic…).
-    for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup", "dblclick"]) {
-      bouton.addEventListener(type, (e) => e.stopPropagation());
-    }
-    bouton.addEventListener("click", (e) => {
+    pastille = document.createElement("div");
+    pastille.className = "pastille";
+    principal = document.createElement("button");
+    principal.type = "button";
+    principal.className = "principal";
+    libelle = document.createElement("span");
+    principal.append(icone(ICONE_INCRUSTATION), libelle);
+    principal.addEventListener("click", (e) => {
       e.preventDefault();
-      e.stopPropagation();
       basculer(cible);
     });
-    bouton.addEventListener("pointerenter", () => clearTimeout(minuterie));
-    bouton.addEventListener("pointerleave", () => armer());
+    pastille.append(principal);
+    if (PRINCIPALE) {
+      const onglet = document.createElement("button");
+      onglet.type = "button";
+      onglet.className = "onglet";
+      onglet.title = "Mini-fenêtre avec les commandes du lecteur (Alt+Maj+P)";
+      onglet.setAttribute("aria-label", onglet.title);
+      onglet.append(icone(ICONE_FENETRE));
+      onglet.addEventListener("click", (e) => {
+        e.preventDefault();
+        derniere = cible;
+        cacher();
+        envoi({ m: "flottant", action: "ouvrir" });
+      });
+      pastille.append(onglet);
+    }
+    if (!incrustable) principal.style.display = "none";
+    isoler(pastille);
+    pastille.addEventListener("pointerenter", () => clearTimeout(minuterie));
+    pastille.addEventListener("pointerleave", () => armer());
+
+    barre = document.createElement("div");
+    barre.className = "barre";
+    barre.style.display = "none";
+    const titre = document.createElement("span");
+    titre.className = "titre";
+    const ramener = document.createElement("button");
+    ramener.type = "button";
+    ramener.append(icone(ICONE_RAMENER), document.createTextNode("Ramener"));
+    ramener.title = "Remettre la page dans son onglet";
+    ramener.addEventListener("click", (e) => {
+      e.preventDefault();
+      envoi({ m: "flottant", action: "ramener" });
+    });
+    isoler(ramener);
+    barre.append(titre, ramener);
+    // La barre deplace la fenetre, comme une barre de titre.
+    barre.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      if (e.button === 0 && (e.target === barre || e.target === titre)) envoi({ m: "flottant", action: "deplacer" });
+    });
+    barre.addEventListener("pointerenter", () => clearTimeout(minuterie));
+    barre.addEventListener("pointerleave", () => armer());
+
+    racine.append(style, pastille, barre);
     (document.documentElement || document).appendChild(hote);
   };
 
+  const pret = () => {
+    if (!hote || !hote.isConnected) construire();
+  };
+
   const placer = () => {
-    if (!cible || !bouton) return;
+    if (!cible || !pastille) return;
     const r = cible.getBoundingClientRect();
-    bouton.style.left = Math.round(r.left + r.width / 2) + "px";
-    bouton.style.top = Math.round(Math.max(r.top, 0) + 12) + "px";
+    pastille.style.left = Math.round(r.left + r.width / 2) + "px";
+    pastille.style.top = Math.round(Math.max(r.top, 0) + 12) + "px";
     libelle.textContent = document.pictureInPictureElement === cible ? "Ramener" : "Sortir la vidéo";
   };
 
   const montrer = (v) => {
     if (document.fullscreenElement) return;
-    if (!hote || !hote.isConnected) construire();
+    pret();
+    if (enVol) {
+      barre.firstChild.textContent = document.title || location.hostname;
+      barre.style.display = "flex";
+      requestAnimationFrame(() => barre && barre.classList.add("vu"));
+      armer();
+      return;
+    }
     cible = v;
     placer();
-    bouton.style.display = "flex";
-    requestAnimationFrame(() => bouton && bouton.classList.add("vu"));
+    pastille.style.display = "flex";
+    requestAnimationFrame(() => pastille && pastille.classList.add("vu"));
     armer();
   };
 
   const cacher = () => {
     clearTimeout(minuterie);
-    if (!bouton) return;
-    bouton.classList.remove("vu");
-    bouton.style.display = "none";
+    if (pastille) {
+      pastille.classList.remove("vu");
+      pastille.style.display = "none";
+    }
+    if (barre) {
+      barre.classList.remove("vu");
+      barre.style.display = "none";
+    }
     cible = null;
   };
 
@@ -159,18 +271,67 @@
         await v.requestPictureInPicture();
       }
     } catch (e) {
-      try {
-        window.ipc.postMessage(
-          JSON.stringify({ m: "erreurUi", message: "incrustation : " + String((e && e.message) || e), source: "", ligne: 0 })
-        );
-      } catch (e2) {
-        /* page sans pont */
-      }
+      envoi({ m: "erreurUi", message: "incrustation : " + String((e && e.message) || e), source: "", ligne: 0 });
     }
     placer();
   };
 
-  // Survol : un message par image d'animation au plus.
+  // ---------------------------------------------------------------- mini-fenetre
+
+  // Le lecteur a etirer : sur YouTube, son conteneur (les commandes vivent dedans) ; ailleurs,
+  // le plus haut ancetre de la video qui ne la deborde pas de plus de 48 px.
+  const lecteurDe = (v) => {
+    const yt = v.closest("#movie_player, .html5-video-player");
+    if (yt) return yt;
+    const r = v.getBoundingClientRect();
+    let meilleur = v;
+    for (let a = v.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) {
+      const q = a.getBoundingClientRect();
+      if (q.width - r.width > 48 || q.height - r.height > 48) break;
+      meilleur = a;
+    }
+    return meilleur;
+  };
+
+  let styleVol = null;
+  const MARQUE = "data-trame-flottant";
+  window.__trame_flottant = (actif) => {
+    for (const el of document.querySelectorAll("[" + MARQUE + "]")) el.removeAttribute(MARQUE);
+    if (styleVol) styleVol.remove();
+    styleVol = null;
+    enVol = !!actif;
+    cacher();
+    if (enVol) {
+      const v = [cible, derniere].find((x) => utilisable(x)) || videoPrincipale();
+      if (v) {
+        const lecteur = lecteurDe(v);
+        lecteur.setAttribute(MARQUE, "lecteur");
+        // YouTube taille lui-meme sa video dans son conteneur : on n'y touche pas.
+        if (lecteur !== v && !lecteur.matches("#movie_player, .html5-video-player")) v.setAttribute(MARQUE, "video");
+        styleVol = document.createElement("style");
+        styleVol.textContent = `
+          html, body { overflow: hidden !important; background: #000 !important; }
+          [${MARQUE}="lecteur"] {
+            position: fixed !important; inset: 0 !important; width: 100vw !important;
+            height: 100vh !important; max-width: none !important; max-height: none !important;
+            margin: 0 !important; transform: none !important; z-index: 2147483646 !important;
+            background: #000 !important;
+          }
+          [${MARQUE}="video"] {
+            width: 100% !important; height: 100% !important; object-fit: contain !important;
+          }
+        `;
+        (document.head || document.documentElement).appendChild(styleVol);
+      }
+    }
+    // Le lecteur de YouTube recalcule sa taille au redimensionnement de la fenetre.
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 400);
+  };
+
+  // ---------------------------------------------------------------- evenements
+
+  // Survol : un calcul par image d'animation au plus.
   let enAttente = false;
   window.addEventListener(
     "pointermove",
@@ -181,9 +342,13 @@
       const y = e.clientY;
       requestAnimationFrame(() => {
         enAttente = false;
+        if (enVol) {
+          montrer(null);
+          return;
+        }
         const v = sous(x, y);
         if (v) montrer(v);
-        else if (cible && !(bouton && bouton.matches(":hover"))) cacher();
+        else if (cible && !(pastille && pastille.matches(":hover"))) cacher();
       });
     },
     { capture: true, passive: true }
@@ -197,8 +362,16 @@
   window.addEventListener(
     "keydown",
     (e) => {
-      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (!e.altKey || e.ctrlKey || e.metaKey) return;
       if ((e.key || "").toLowerCase() !== "p" && e.code !== "KeyP") return;
+      if (e.shiftKey) {
+        if (!PRINCIPALE) return;
+        e.preventDefault();
+        e.stopPropagation();
+        envoi({ m: "flottant", action: enVol ? "ramener" : "ouvrir" });
+        return;
+      }
+      if (!incrustable) return;
       const v = (cible && utilisable(cible) && cible) || document.pictureInPictureElement || videoPrincipale();
       if (!v) return;
       e.preventDefault();

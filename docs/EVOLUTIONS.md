@@ -658,6 +658,23 @@ origine.
 
 Limite : la fenêtre de Chromium n'a que lecture/pause et retour, d'où l'étape 3.
 
+### Étape 3 : l'onglet entier en mini-fenêtre (même soir)
+
+| Ajout | Détail |
+|---|---|
+| **Pastille en deux parties** | « Sortir la vidéo » (incrustation de Chromium, Alt+P) et une icône de fenêtre (Alt+Maj+P, page principale seulement) qui envoie `{m:"flottant", action:"ouvrir"}` |
+| **`src/app/flottant.rs`** | fenêtre tao sans barre, toujours au premier plan, hors barre des tâches, 480 × 270 en bas à droite de l'écran de Trame (puis la dernière place et taille). La webview de l'onglet y est **reparentée** (`WebViewExtWindows::reparent`) et **retirée de `webviews`** pendant le vol : placement, visibilité, veille et empilement de la fenêtre principale l'ignorent sans exception à écrire partout ; `reveiller` refuse de lui créer une seconde page |
+| **Création de la fenêtre** | seule la boucle a la cible : `traiter_ipc` note `flottant_demande`, `main.rs` appelle `ouvrir_flottant` juste après ; les événements de la mini-fenêtre sont triés par `window_id` (taille → la page suit ; Alt+F4 → la page revient sans fermer Trame) |
+| **Dans la page** | `__trame_flottant(true)` étire le lecteur (`#movie_player` sur YouTube, sinon le plus haut ancêtre de la vidéo qui ne la déborde pas de plus de 48 px) en `position: fixed` plein cadre ; barre au survol : la tirer déplace la fenêtre (`drag_window`), « Ramener » remet la page dans son onglet et l'affiche |
+| **Garde-fous** | l'onglet actif qui part est remplacé par son voisin le plus proche du même fil (ou un nouvel onglet) ; l'activer depuis le rail le ramène ; le fermer ferme sa mini-fenêtre ; depuis la mini-fenêtre, seul Ctrl+W reste un raccourci (les autres viseraient l'onglet actif) ; côte à côte défait |
+
+Preuves (vrai WebView2, Trame caché, profil jetable) : page d'essai 1148 × 810 → **480 × 270**
+en vol, lecture continue, barre sous le pointeur, retour à 1148 × 810 ; vrai YouTube : lecteur et
+vidéo à `[0, 0, 480, 270]`, barre de commandes à l'intérieur, retour exactement à la mise en page
+d'avant (`[16, 68, 765, 430]`) une fois l'onglet réaffiché. `tester-ui.mjs` 67/67,
+`cargo test --release` 176/176. Pas encore installé chez Clément ; déplacement à la souris et
+redimensionnement par les bords pas encore essayés à la main.
+
 ## 11. L'état aujourd'hui
 
 ```

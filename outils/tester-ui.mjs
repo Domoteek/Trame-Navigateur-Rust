@@ -1287,6 +1287,34 @@ async function suite() {
     await p.close();
   });
 
+  await cas("incrustation : Alt+Maj+P demande la mini-fenetre, la page s'y etire puis revient", async () => {
+    const p = await page("newtab.html");
+    await p.setContent(PAGE_VIDEO);
+    await p.waitForFunction(() => document.getElementById("v").readyState > 0);
+    await p.addScriptTag({ path: path.join(UI, "incrustation.js") });
+    await vider(p);
+    await p.keyboard.press("Alt+Shift+P");
+    const recus = await messages(p);
+    verifier(
+      recus.some((m) => m.m === "flottant" && m.action === "ouvrir"),
+      `message flottant/ouvrir attendu, recu ${JSON.stringify(recus)}`
+    );
+    // L'hote appelle ensuite __trame_flottant(true) : la video remplit la fenetre.
+    const vol = await p.evaluate(() => {
+      window.__trame_flottant(true);
+      const r = document.getElementById("v").getBoundingClientRect();
+      return [r.left, r.top, r.width, r.height, innerWidth, innerHeight];
+    });
+    egal(vol, [0, 0, vol[4], vol[5], vol[4], vol[5]], "la video doit couvrir toute la fenetre");
+    const retour = await p.evaluate(() => {
+      window.__trame_flottant(false);
+      const r = document.getElementById("v").getBoundingClientRect();
+      return [r.left, r.top, r.width, r.height];
+    });
+    egal(retour, [100, 80, 640, 360], "la video retrouve sa place dans la page");
+    await p.close();
+  });
+
   // ---------------------------------------------------------------- recherche dans la page
 
   await cas("recherche : Ctrl+F installe la barre, une seule fois", async () => {
