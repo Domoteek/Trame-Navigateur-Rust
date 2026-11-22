@@ -587,6 +587,22 @@ input {
 .nav:hover { background: rgba(255, 255, 255, 0.08); color: #f2f6ff; }
 .nav:disabled { opacity: 0.28; cursor: default; }
 .nav:disabled:hover { background: transparent; }
+/* Bouton dont le panneau (ou la page) est ouvert : fond bleu leger, icone bleue et trait
+   dessous, comme un onglet choisi (maquettes 1 et 2, choix de Clement du 2026-11-22). */
+.nav { position: relative; }
+.nav.ouvert,
+.nav.ouvert:hover { background: rgba(96, 165, 250, 0.16); color: var(--accent); }
+.nav.ouvert::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -4px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
 
 .couture {
   flex: 1;
@@ -652,6 +668,20 @@ input {
 #btn-dl.actif .ic { color: var(--accent); }
 #btn-dl.arrive .ic { color: #86efac; animation: dl-arrive 0.9s ease-out 2; }
 @keyframes dl-arrive { 50% { transform: translateY(3px); } }
+/* Point vert : un fichier est arrive et la page des telechargements n'a pas encore ete vue. */
+#btn-dl.nonvu::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 2px var(--fond);
+  pointer-events: none;
+}
+#btn-dl.actif.nonvu::before { display: none; }
 
 .panneau {
   flex: 1 1 auto;

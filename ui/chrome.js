@@ -1419,6 +1419,51 @@ function rendreTelechargements(t) {
     setTimeout(() => b.classList.remove("arrive"), 2000);
   }
   dernierTermineVu = t.dernierTermine || 0;
+  // Point vert jusqu'a ce que la page des telechargements soit ouverte. Le dernier fichier vu
+  // est garde d'un lancement a l'autre ; au tout premier lancement, rien n'est « non vu ».
+  const recu = t.dernierTermine || 0;
+  let vu = lireNombre(CLE_DL_VU);
+  if (vu === null || pageInterneOuverte("telechargements")) {
+    vu = recu;
+    ecrireNombre(CLE_DL_VU, vu);
+  }
+  b.classList.toggle("nonvu", recu > vu);
+}
+
+const CLE_DL_VU = "trame.telechargements.vu";
+function lireNombre(cle) {
+  try {
+    const v = localStorage.getItem(cle);
+    return v === null ? null : Number(v) || 0;
+  } catch {
+    return 0;
+  }
+}
+function ecrireNombre(cle, v) {
+  try {
+    localStorage.setItem(cle, String(v));
+  } catch {}
+}
+
+/// La page affichee est-elle la page interne `nom` (reglages, telechargements) ?
+function pageInterneOuverte(nom) {
+  const u = (etat && etat.urlBrute) || "";
+  return new RegExp("^(trame://localhost|https?://trame\\.localhost)/" + nom + "\\.html").test(u);
+}
+
+/// Allume le bouton de la barre dont le panneau ou la page est ouvert (maquettes 1 et 2).
+function marquerBoutons() {
+  const allumer = (id, oui) => {
+    const b = document.getElementById(id);
+    if (b) b.classList.toggle("ouvert", !!oui);
+  };
+  const panneau = document.getElementById("panneau");
+  const montre = (id) => panneau && !panneau.hidden && !document.getElementById(id).hidden;
+  allumer("btn-ext", montre("extensions"));
+  allumer("btn-page", montre("menu-page"));
+  allumer("btn-zap", etat && etat.zap && etat.zap.ouvert);
+  allumer("btn-reglages", pageInterneOuverte("reglages"));
+  allumer("btn-dl", pageInterneOuverte("telechargements"));
 }
 
 function rendreBarre(s) {
@@ -1462,6 +1507,7 @@ function rendreBarre(s) {
   }
   if (extensionsVisibles) rendreExtensions(s);
   if (pageVisible) rendreMenuPage(s);
+  marquerBoutons();
 }
 
 /* ---------------------------------------------------------- menu de la page */
@@ -1971,6 +2017,10 @@ function brancherBarre() {
   });
   document.getElementById("btn-zap").onclick = () => ipc({ m: "zap" });
   document.getElementById("btn-dl").onclick = () => ipc({ m: "ouvrirTelechargements" });
+  // Le panneau s'ouvre et se ferme a plusieurs endroits : on suit ses `hidden` pour allumer
+  // le bon bouton, plutot que d'appeler marquerBoutons() partout.
+  const panneau = document.getElementById("panneau");
+  if (panneau) new MutationObserver(marquerBoutons).observe(panneau, { attributes: true, attributeFilter: ["hidden"], subtree: true });
   document.getElementById("btn-moteur").onclick = () => ipc({ m: "ouvrirReglages" });
   document.getElementById("btn-dossier-ext").onclick = () => ipc({ m: "dossierExtensions" });
 

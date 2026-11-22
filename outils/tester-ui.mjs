@@ -713,6 +713,41 @@ async function suite() {
     await p.close();
   });
 
+  await cas("barre : le bouton du panneau ou de la page ouverte est allume", async () => {
+    const p = await page("chrome.html", { query: "?surface=barre" });
+    const allumes = () => p.evaluate(() => [...document.querySelectorAll(".nav.ouvert")].map((b) => b.id));
+    await pousser(p, etatDeBase());
+    verifier((await allumes()).length === 0, `aucun bouton ne devrait etre allume, vu ${await allumes()}`);
+    await pousser(p, { ...etatDeBase(), zap: { ouvert: true, regles: [] } });
+    verifier(JSON.stringify(await allumes()) === '["btn-zap"]', `zap ouvert : vu ${await allumes()}`);
+    await pousser(p, { ...etatDeBase(), urlBrute: "http://trame.localhost/reglages.html" });
+    verifier(JSON.stringify(await allumes()) === '["btn-reglages"]', `reglages : vu ${await allumes()}`);
+    await pousser(p, etatDeBase());
+    await p.click("#btn-ext");
+    await p.waitForTimeout(50);
+    verifier(JSON.stringify(await allumes()) === '["btn-ext"]', `puzzle ouvert : vu ${await allumes()}`);
+    await p.click("#btn-ext");
+    await p.waitForTimeout(50);
+    verifier((await allumes()).length === 0, `puzzle referme : vu ${await allumes()}`);
+    await p.close();
+  });
+
+  await cas("barre : un telechargement fini laisse un point vert jusqu'a la page des telechargements", async () => {
+    const p = await page("chrome.html", { query: "?surface=barre" });
+    await p.evaluate(() => localStorage.clear());
+    const nonvu = () => p.evaluate(() => document.getElementById("btn-dl").classList.contains("nonvu"));
+    const dl = (n) => ({ actifs: 0, liste: [], dernierTermine: n });
+    await pousser(p, { ...etatDeBase(), telechargements: dl(100) });
+    verifier(!(await nonvu()), "premier lancement : pas de point");
+    await pousser(p, { ...etatDeBase(), telechargements: dl(200) });
+    verifier(await nonvu(), "fichier arrive : point vert attendu");
+    await pousser(p, { ...etatDeBase(), telechargements: dl(200), urlBrute: "trame://localhost/telechargements.html" });
+    verifier(!(await nonvu()), "page des telechargements ouverte : le point s'efface");
+    await pousser(p, { ...etatDeBase(), telechargements: dl(200) });
+    verifier(!(await nonvu()), "deja vu : pas de point");
+    await p.close();
+  });
+
   await cas("barre : apres un clic dans la page, l'adresse suit la navigation", async () => {
     // Cas reel du 2026-11-21 : champ d'adresse actif, clic dans la page Amazon (autre webview),
     // connexion -> la page change, la barre montrait encore l'adresse de connexion.
