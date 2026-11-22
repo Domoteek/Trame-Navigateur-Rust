@@ -980,7 +980,7 @@ async function suite() {
     await p.close();
   });
 
-  await cas("rail : la bande ne montre que les accès cochés « rail »", async () => {
+  await cas("rail : 10 places sous le logo, seulement les accès cochés « rail »", async () => {
     const p = await page("chrome.html", { query: "?surface=rail" });
     const etat = etatDeBase();
     etat.carnet = Object.assign({}, etat.carnet, {
@@ -991,13 +991,52 @@ async function suite() {
       accesGroupes: [],
     });
     await pousser(p, etat);
-    egal(await p.$$eval("#bande-acces .acces", (n) => n.length), 1, "une pastille");
+    egal(await p.$$eval("#bande-acces .acces:not(.ajout):not(.libre)", (n) => n.length), 1, "une pastille");
+    egal(await p.$$eval("#bande-acces .acces", (n) => n.length), 10, "10 places en tout");
     await vider(p);
-    await p.click("#bande-acces .acces");
+    await p.click("#bande-acces .acces >> nth=0");
     verifier((await messages(p)).some((m) => m.m === "accesOuvrir" && m.nouveau === true), "le clic ouvre dans un nouvel onglet");
+    // « + » : le site de la page affichée rejoint le rail.
+    await vider(p);
+    await p.click("#bande-acces .acces.ajout");
+    verifier((await messages(p)).some((m) => m.m === "accesDepuisOnglet" && m.actif === true && m.rail === true), "« + » ajoute le site affiché");
+    // Clic droit : menu, puis modification du nom.
+    await p.click("#bande-acces .acces >> nth=0", { button: "right" });
+    verifier(await p.$("#menu-acces-rail"), "le menu s'ouvre");
+    await p.click("#menu-acces-rail button >> nth=1");
+    await p.fill("#menu-acces-rail input >> nth=0", "YT");
+    await vider(p);
+    await p.click("#menu-acces-rail .ok");
+    const envoi = (await messages(p)).find((m) => m.m === "accesEnregistrer");
+    verifier(envoi && envoi.titre === "YT" && envoi.ancienne === "https://www.youtube.com/" && envoi.rail === true, `modification inattendue: ${JSON.stringify(envoi)}`);
+    verifier(!(await p.$("#menu-acces-rail")), "le menu se referme");
+    // Sans accès au rail : la bande reste là, avec « + ».
     etat.carnet.acces[0].rail = false;
     await pousser(p, etat);
-    verifier(await p.$eval("#bande-acces", (n) => n.hidden), "bande cachée sans accès du rail");
+    verifier(await p.$eval("#bande-acces", (n) => !n.hidden), "bande toujours visible");
+    egal(await p.$$eval("#bande-acces .acces.ajout", (n) => n.length), 1, "« + » présent");
+    await p.close();
+  });
+
+  await cas("accueil : les favoris (pages) sont à part des accès rapides (sites)", async () => {
+    const p = await page("newtab.html");
+    const etat = etatDeBase();
+    await pousser(p, etat);
+    verifier(await p.$eval("#bloc-favoris", (n) => n.hidden), "pas de section sans favori");
+    etat.carnet = Object.assign({}, etat.carnet, {
+      favoris: [{ url: "https://www.youtube.com/watch?v=abc", titre: "Une vidéo", domaine: "youtube.com", icone: null }],
+    });
+    await pousser(p, etat);
+    verifier(await p.$eval("#bloc-favoris", (n) => !n.hidden), "la section Favoris apparaît");
+    egal(await p.$$eval("#favoris .fav", (n) => n.length), 1, "un favori");
+    egal(await p.$$eval("#tuiles .tuile:not(.ajout)", (n) => n.length), 0, "aucun accès rapide pour autant");
+    await vider(p);
+    await p.click("#favoris .fav");
+    verifier((await messages(p)).some((m) => m.m === "naviguer" && m.url === "https://www.youtube.com/watch?v=abc"), "le clic ouvre la page");
+    await vider(p);
+    await p.hover("#favoris .fav");
+    await p.click("#favoris .fav .x");
+    verifier((await messages(p)).some((m) => m.m === "favoriRetirer"), "× retire le favori");
     await p.close();
   });
 
@@ -1510,11 +1549,11 @@ async function suite() {
   });
 
   await cas("accueil : sans accès rapide, la section invite à en ajouter", async () => {
-    // Les favoris sont devenus les accès rapides (2026-11-22) : la section est toujours là.
+    // Les accès rapides (sites) ont leur section, toujours là ; les favoris (pages) à part.
     const p = await page("newtab.html");
     await pousser(p, etatDeBase());
     verifier(await p.$eval("#bloc-acces", (n) => !n.hidden), "la section des accès rapides est visible");
-    verifier((await p.$eval("#tuiles", (n) => n.textContent)).includes("Ctrl+D"), "l'invite cite Ctrl+D");
+    verifier((await p.$eval("#tuiles", (n) => n.textContent)).includes("Ajouter"), "l'invite cite « Ajouter »");
     egal(await p.$$eval("#tuiles .tuile.ajout", (n) => n.length), 1, "tuile Ajouter");
     await p.close();
   });

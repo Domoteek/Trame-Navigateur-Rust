@@ -16,10 +16,26 @@ use std::collections::HashSet;
 use std::io::{BufRead, Write};
 use std::path::Path;
 
-/// Un favori. Les favoris sont aussi les **acces rapides** de la page « Nouvel onglet » :
-/// une seule liste, dans l'ordre choisi par l'utilisateur.
+/// Un favori : **une page precise** (un article, une video, un chemin), gardee pour y revenir
+/// (`favoris.json`, Ctrl+D). A ne pas confondre avec un acces rapide, qui mene a un site.
+/// Distincts depuis le 2026-11-22 (demande de Clement) : avant, c'etait une seule liste.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Favori {
+    pub url: String,
+    #[serde(default)]
+    pub titre: String,
+    #[serde(default)]
+    pub ajoute_le: u64,
+    /// Adresse de l'icone du site, reprise de l'onglet au moment de l'ajout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icone: Option<String>,
+}
+
+/// Un acces rapide : un bouton qui mene **a un site** (`acces.json`), sur la page « Nouvel
+/// onglet » et, pour au plus [`RAIL_MAX`] d'entre eux, dans la bande sous le logo du rail.
+/// Une seule liste, dans l'ordre choisi par l'utilisateur.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Acces {
     pub url: String,
     #[serde(default)]
     pub titre: String,
@@ -36,9 +52,46 @@ pub struct Favori {
     pub icone: Option<String>,
 }
 
+/// Places de la bande d'acces rapides du rail.
+pub const RAIL_MAX: usize = 10;
+
 /// Une adresse qui peut devenir un favori / acces rapide (page web ou fichier local).
 pub fn favorisable(url: &str) -> bool {
     url.starts_with("http://") || url.starts_with("https://") || url.starts_with("file:")
+}
+
+/// La racine du site d'une page (`https://www.youtube.com/watch?v=…` → `https://www.youtube.com/`) :
+/// un acces rapide cree depuis un onglet mene au site, pas a la page.
+pub fn racine_du_site(url: &str) -> String {
+    match url::Url::parse(url) {
+        Ok(u) if u.scheme() == "http" || u.scheme() == "https" => match u.host_str() {
+            Some(h) => match u.port() {
+                Some(p) => format!("{}://{h}:{p}/", u.scheme()),
+                None => format!("{}://{h}/", u.scheme()),
+            },
+            None => url.to_string(),
+        },
+        _ => url.to_string(),
+    }
+}
+
+/// Nom court d'un site pour un acces rapide : `youtube.com` → « Youtube », une adresse IP ou un
+/// nom sans point (avec son port) reste tel quel.
+pub fn nom_du_site(url: &str) -> String {
+    let h = hote(url);
+    let sans_port = h.split(':').next().unwrap_or("");
+    if sans_port.is_empty() || sans_port.parse::<std::net::IpAddr>().is_ok() || !sans_port.contains('.') {
+        return h;
+    }
+    let parties: Vec<&str> = sans_port.split('.').collect();
+    // Le nom avant le suffixe : « amazon » de amazon.fr, « bbc » de bbc.co.uk.
+    let i = if parties.len() >= 3 && parties[parties.len() - 2].len() <= 3 { parties.len() - 3 } else { parties.len() - 2 };
+    let mot = parties[i];
+    let mut c = mot.chars();
+    match c.next() {
+        Some(p) => p.to_uppercase().collect::<String>() + c.as_str(),
+        None => h,
+    }
 }
 
 /// Hote d'une adresse, sans `www.`, avec le port s'il y en a un. Sert a dire si un acces
@@ -382,6 +435,17 @@ mod tests {
         ));
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn acces_rapide_depuis_une_page() {
+        assert_eq!(racine_du_site("https://www.youtube.com/watch?v=abc"), "https://www.youtube.com/");
+        assert_eq!(racine_du_site("http://192.168.1.23:8720/courbes/"), "http://192.168.1.23:8720/");
+        assert_eq!(nom_du_site("https://www.youtube.com/watch?v=abc"), "Youtube");
+        assert_eq!(nom_du_site("https://www.amazon.fr/dp/123"), "Amazon");
+        assert_eq!(nom_du_site("https://www.bbc.co.uk/news"), "Bbc");
+        assert_eq!(nom_du_site("http://192.168.1.23:8720/"), "192.168.1.23:8720");
+        assert_eq!(nom_du_site("http://localhost:3000/"), "localhost:3000");
     }
 
     #[test]

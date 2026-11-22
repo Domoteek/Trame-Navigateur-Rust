@@ -274,44 +274,191 @@ function signatureDuRail(s) {
   return fils + "#" + onglets + "#" + (c ? c.gauche + ":" + c.droite + ":" + c.affiche : "");
 }
 
-/* Bande d'acces rapides du rail : seulement ceux marques « Afficher aussi dans le rail ».
-   Ils se creent et se rangent sur la page Nouvel onglet ; ici, un clic y va (ou les ouvre
-   dans un nouvel onglet), et deposer un onglet sur la bande l'y ajoute. */
+/* Bande d'acces rapides du rail, sous le logo : 10 places (carnet.accesRailMax).
+   Un clic va sur le site (l'onglet deja ouvert, sinon un nouvel onglet) ; « + » ajoute le site
+   de la page affichee ; glisser une icone sur une autre la range devant elle ; deposer un
+   onglet sur la bande ajoute son site ; clic droit : ouvrir, renommer, changer l'adresse,
+   retirer du rail, supprimer. Tous les acces rapides se gerent aussi sur le Nouvel onglet. */
 let signatureBande = null;
+let glisseRail = null; // url de l'icone deplacee dans la bande
 function rendreBandeAcces(s) {
   const bande = document.getElementById("bande-acces");
   if (!bande) return;
-  const liste = ((s.carnet && s.carnet.acces) || []).filter((a) => a.rail);
-  const signature = JSON.stringify(liste.map((a) => [a.url, a.titre, a.icone, a.ouvert]));
-  if (signature === signatureBande) return;
+  const tous = (s.carnet && s.carnet.acces) || [];
+  const liste = tous.filter((a) => a.rail);
+  const max = (s.carnet && s.carnet.accesRailMax) || 10;
+  const pageWeb = !!(s.carnet && s.carnet.pageWeb);
+  const signature = JSON.stringify([tous.map((a) => [a.url, a.titre, a.icone, a.ouvert, a.rail]), max, pageWeb]);
+  if (signature === signatureBande || glisseRail) return;
   signatureBande = signature;
   bande.textContent = "";
-  bande.hidden = !liste.length;
-  for (const a of liste) {
-    const b = elem("button", "acces");
-    b.title = `${a.titre}\n${a.domaine || a.url}` + (a.ouvert ? "\nDéjà ouvert : un clic y va" : "");
-    const lettre = elem("span", "lettre", (a.titre || a.domaine || "?").trim().charAt(0).toUpperCase());
-    lettre.style.background = teinteAcces(a.domaine || a.url);
-    if (a.icone) {
-      const img = document.createElement("img");
-      img.alt = "";
-      img.draggable = false;
-      img.referrerPolicy = "no-referrer";
-      img.onerror = () => img.replaceWith(lettre);
-      img.src = a.icone;
-      b.appendChild(img);
-    } else {
-      b.appendChild(lettre);
-    }
-    if (a.ouvert) b.appendChild(elem("i", "ouvert"));
-    b.onclick = () => ipc({ m: "accesOuvrir", url: a.url, nouveau: true });
-    b.oncontextmenu = (e) => {
+  bande.hidden = false;
+  for (const a of liste.slice(0, max)) bande.appendChild(iconeRail(a, tous));
+  if (liste.length < max) {
+    const plus = elem("button", "acces ajout");
+    plus.appendChild(icone("plus", "petit"));
+    plus.title = pageWeb
+      ? "Ajouter le site de cette page au rail\n(ou déposer un onglet ici)"
+      : "Ouvre une page web, puis « + » pour ajouter son site\n(ou déposer un onglet ici)";
+    plus.onclick = () => ipc({ m: "accesDepuisOnglet", actif: true, rail: true });
+    plus.oncontextmenu = (e) => {
       e.preventDefault();
-      ipc({ m: "accesRail", url: a.url, rail: false });
+      ipc({ m: "nouvelOnglet" });
     };
-    b.title += "\nClic droit : retirer du rail";
-    bande.appendChild(b);
+    bande.appendChild(plus);
+    // Les places libres restantes, en pointille : on voit qu'il y en a 10.
+    for (let i = liste.length + 1; i < max; i++) bande.appendChild(elem("span", "acces libre"));
   }
+}
+
+function iconeRail(a, tous) {
+  const b = elem("button", "acces");
+  b.title = `${a.titre}\n${a.url}` + (a.ouvert ? "\nDéjà ouvert : un clic y va" : "") + "\nClic droit : modifier · glisser : ranger";
+  const lettre = elem("span", "lettre", (a.titre || a.domaine || "?").trim().charAt(0).toUpperCase());
+  lettre.style.background = teinteAcces(a.domaine || a.url);
+  if (a.icone) {
+    const img = document.createElement("img");
+    img.alt = "";
+    img.draggable = false;
+    img.referrerPolicy = "no-referrer";
+    img.onerror = () => img.replaceWith(lettre);
+    img.src = a.icone;
+    b.appendChild(img);
+  } else {
+    b.appendChild(lettre);
+  }
+  if (a.ouvert) b.appendChild(elem("i", "ouvert"));
+  b.onclick = () => ipc({ m: "accesOuvrir", url: a.url, nouveau: true });
+  b.oncontextmenu = (e) => {
+    e.preventDefault();
+    if (window.innerWidth < 180) {
+      // Rail replie : trop etroit pour le menu, la page Nouvel onglet gere les acces.
+      ipc({ m: "nouvelOnglet" });
+      return;
+    }
+    ouvrirMenuAccesRail(a, b);
+  };
+  b.draggable = true;
+  b.addEventListener("dragstart", (e) => {
+    glisseRail = a.url;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/x-trame-acces", a.url);
+    setTimeout(() => b.classList.add("glisse"), 0);
+  });
+  b.addEventListener("dragend", () => {
+    glisseRail = null;
+    b.classList.remove("glisse");
+    signatureBande = null;
+    if (etat) rendreBandeAcces(etat);
+  });
+  b.addEventListener("dragover", (e) => {
+    if (!glisseRail || glisseRail === a.url) return;
+    e.preventDefault();
+    e.stopPropagation();
+    b.classList.add("cible");
+  });
+  b.addEventListener("dragleave", () => b.classList.remove("cible"));
+  b.addEventListener("drop", (e) => {
+    b.classList.remove("cible");
+    if (!glisseRail || glisseRail === a.url) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const ordre = tous.map((x) => x.url).filter((u) => u !== glisseRail);
+    ordre.splice(ordre.indexOf(a.url), 0, glisseRail);
+    glisseRail = null;
+    ipc({ m: "accesOrdre", urls: ordre });
+  });
+  return b;
+}
+
+/* Menu d'un acces du rail (rail deplie) : par-dessus les fils, comme les commandes du logo. */
+function fermerMenuAccesRail() {
+  const m = document.getElementById("menu-acces-rail");
+  if (m) m.remove();
+  document.removeEventListener("pointerdown", clicHorsMenuAcces, true);
+  document.removeEventListener("keydown", echapMenuAcces, true);
+  window.removeEventListener("blur", fermerMenuAccesRail);
+}
+function clicHorsMenuAcces(e) {
+  const m = document.getElementById("menu-acces-rail");
+  if (m && !m.contains(e.target)) fermerMenuAccesRail();
+}
+function echapMenuAcces(e) {
+  if (e.key === "Escape") fermerMenuAccesRail();
+}
+function ouvrirMenuAccesRail(a, ancre) {
+  fermerMenuAccesRail();
+  fermerCommandesRail();
+  const m = elem("div", "menu-acces-rail");
+  m.id = "menu-acces-rail";
+  const r = ancre.getBoundingClientRect();
+  m.style.top = Math.round(r.bottom + 6) + "px";
+  const tete = elem("div", "mar-tete");
+  tete.appendChild(elem("b", null, a.titre));
+  tete.appendChild(elem("span", null, a.url));
+  m.appendChild(tete);
+  const ligne = (texte, faire, classe) => {
+    const b = elem("button", classe || "", texte);
+    b.onclick = (e) => {
+      e.stopPropagation();
+      faire();
+    };
+    m.appendChild(b);
+  };
+  ligne(a.ouvert ? "Aller sur l'onglet ouvert" : "Ouvrir dans un nouvel onglet", () => {
+    fermerMenuAccesRail();
+    ipc({ m: "accesOuvrir", url: a.url, nouveau: true });
+  });
+  ligne("Modifier le nom ou l'adresse…", () => formulaireAccesRail(m, a));
+  ligne("Retirer du rail (reste sur le Nouvel onglet)", () => {
+    fermerMenuAccesRail();
+    ipc({ m: "accesRail", url: a.url, rail: false });
+  });
+  ligne("Supprimer l'accès rapide", () => {
+    fermerMenuAccesRail();
+    ipc({ m: "accesRetirer", url: a.url });
+  }, "rouge");
+  document.getElementById("rail").appendChild(m);
+  document.addEventListener("pointerdown", clicHorsMenuAcces, true);
+  document.addEventListener("keydown", echapMenuAcces, true);
+  window.addEventListener("blur", fermerMenuAccesRail);
+}
+
+function formulaireAccesRail(m, a) {
+  m.textContent = "";
+  const f = document.createElement("form");
+  f.className = "mar-form";
+  const champ = (libelle, valeur) => {
+    const l = elem("label", null, libelle);
+    const i = document.createElement("input");
+    i.type = "text";
+    i.spellcheck = false;
+    i.value = valeur || "";
+    l.appendChild(i);
+    f.appendChild(l);
+    return i;
+  };
+  const iNom = champ("Nom", a.titre);
+  const iUrl = champ("Adresse", a.url);
+  const boutons = elem("div", "mar-boutons");
+  const annuler = elem("button", null, "Annuler");
+  annuler.type = "button";
+  annuler.onclick = fermerMenuAccesRail;
+  const ok = elem("button", "ok", "Enregistrer");
+  ok.type = "submit";
+  boutons.appendChild(annuler);
+  boutons.appendChild(ok);
+  f.appendChild(boutons);
+  f.onsubmit = (e) => {
+    e.preventDefault();
+    const url = iUrl.value.trim();
+    if (!url) return iUrl.focus();
+    ipc({ m: "accesEnregistrer", url, titre: iNom.value.trim(), groupe: a.groupe || "", rail: true, ancienne: a.url });
+    fermerMenuAccesRail();
+  };
+  m.appendChild(f);
+  iNom.focus();
+  iNom.select();
 }
 
 const TEINTES_ACCES = ["#ef4444", "#f59e0b", "#18bcf2", "#0f766e", "#3b82f6", "#22c55e", "#8b5cf6", "#e11d48", "#c2410c", "#0ea5e9", "#a855f7", "#14b8a6"];
@@ -1658,6 +1805,7 @@ function brancherRail() {
   // Deposer un onglet sur la bande d'acces rapides : il devient un acces rapide du rail.
   const bande = document.getElementById("bande-acces");
   bande.addEventListener("dragover", (e) => {
+    if (glisseRail) return;
     e.preventDefault();
     bande.classList.add("survol-tissage");
   });
@@ -1665,6 +1813,7 @@ function brancherRail() {
   bande.addEventListener("drop", (e) => {
     e.preventDefault();
     bande.classList.remove("survol-tissage");
+    if (glisseRail) return;
     const id = Number(e.dataTransfer.getData("text/plain"));
     if (id) ipc({ m: "accesDepuisOnglet", onglet: id, rail: true });
   });

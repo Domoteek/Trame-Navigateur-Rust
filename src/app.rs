@@ -300,6 +300,8 @@ pub struct App {
 
     // ---- carnet et outils (voir `app/outils.rs`)
     favoris: Vec<crate::carnet::Favori>,
+    /// Acces rapides (sites), distincts des favoris (pages) depuis le 2026-11-22.
+    acces: Vec<crate::carnet::Acces>,
     /// Groupes d'acces rapides, dans l'ordre d'affichage (un groupe peut etre vide).
     acces_groupes: Vec<String>,
     guets: Vec<crate::carnet::Guet>,
@@ -615,6 +617,7 @@ impl App {
             modifie: false,
             dernier_toast: 0,
             favoris: Vec::new(),
+            acces: Vec::new(),
             acces_groupes: Vec::new(),
             guets: Vec::new(),
             sentinelle: None,

@@ -9,7 +9,7 @@
 //!   - un onglet en rendez-vous est endormi (aucune page vivante) jusqu'a son heure.
 
 use super::*;
-use crate::carnet::{self, Favori, Guet};
+use crate::carnet::{self, Acces, Favori, Guet, RAIL_MAX};
 use std::sync::atomic::Ordering as Atomique;
 
 /// La page cachee qui relit un guet.
@@ -40,7 +40,37 @@ impl App {
         self.favoris = self.profil.charger_liste(&self.profil.fichier_favoris());
         self.guets = self.profil.charger_liste(&self.profil.fichier_guets());
         self.acces_groupes = self.profil.charger_liste(&self.fichier_acces_groupes());
-        info!("carnet : {} favori(s), {} guet(s)", self.favoris.len(), self.guets.len());
+        if self.fichier_acces().exists() {
+            self.acces = self.profil.charger_liste(&self.fichier_acces());
+        } else if !self.favoris.is_empty() {
+            // Avant le 2026-11-22, favoris et acces rapides etaient une seule liste : elle
+            // devient les acces rapides, et reste aussi les favoris (rien ne se perd).
+            self.acces = self.profil.charger_liste(&self.profil.fichier_favoris());
+            self.sauver_acces();
+        }
+        info!(
+            "carnet : {} favori(s), {} accès rapide(s), {} guet(s)",
+            self.favoris.len(),
+            self.acces.len(),
+            self.guets.len()
+        );
+    }
+
+    fn fichier_acces(&self) -> std::path::PathBuf {
+        self.profil.racine().join("acces.json")
+    }
+
+    fn sauver_acces(&self) {
+        self.profil.sauver_liste(&self.fichier_acces(), &self.acces);
+    }
+
+    /// L'acces `url` peut-il etre dans la bande du rail : il y est deja, ou il reste une place.
+    fn rail_accepte(&self, url: &str) -> bool {
+        self.acces.iter().any(|a| a.url == url && a.rail) || self.acces.iter().filter(|a| a.rail).count() < RAIL_MAX
+    }
+
+    fn signaler_rail_plein(&mut self) {
+        self.signaler(&format!("Le rail tient {RAIL_MAX} accès rapides : retires-en un d'abord."));
     }
 
     fn fichier_acces_groupes(&self) -> std::path::PathBuf {
@@ -59,7 +89,7 @@ impl App {
     /// (fichier edite a la main, groupe perdu).
     fn groupes_affiches(&self) -> Vec<String> {
         let mut g = self.acces_groupes.clone();
-        for f in &self.favoris {
+        for f in &self.acces {
             if !f.groupe.is_empty() && !g.contains(&f.groupe) {
                 g.push(f.groupe.clone());
             }
@@ -112,7 +142,7 @@ impl App {
 
     fn acces_json(&self) -> Value {
         Value::Array(
-            self.favoris
+            self.acces
                 .iter()
                 .map(|f| {
                     json!({
@@ -145,8 +175,10 @@ impl App {
                 "url": f.url,
                 "titre": if f.titre.is_empty() { urls::affichage_court(&f.url) } else { f.titre.clone() },
                 "domaine": urls::domaine_enregistrable(&f.url),
+                "icone": f.icone.clone().or_else(|| self.icone_connue(&f.url)),
             })).collect::<Vec<_>>(),
             "acces": self.acces_json(),
+            "accesRailMax": RAIL_MAX,
             "accesGroupes": self.groupes_affiches(),
             "cote": self.session.cote.map(|_| json!({
                 "gauche": g, "droite": d,
@@ -225,8 +257,18 @@ impl App {
                 true
             }
             // ---- acces rapides (page « Nouvel onglet » et bande du rail)
+            "accesRetirer" => {
+                let url = v["url"].as_str().unwrap_or("");
+                let avant = self.acces.len();
+                self.acces.retain(|f| f.url != url);
+                if self.acces.len() != avant {
+                    self.sauver_acces();
+                    self.pousser_etat();
+                }
+                true
+            }
             "accesOuvrir" => {
-                if let Some(url) = v["url"].as_str().filter(|u| self.favoris.iter().any(|f| f.url == *u)) {
+                if let Some(url) = v["url"].as_str().filter(|u| self.acces.iter().any(|f| f.url == *u)) {
                     let url = url.to_string();
                     self.ouvrir_acces(&url, v["nouveau"].as_bool().unwrap_or(false));
                 }
@@ -245,21 +287,25 @@ impl App {
                 }
                 let titre = v["titre"].as_str().unwrap_or("").trim().to_string();
                 let groupe = v["groupe"].as_str().unwrap_or("").trim().to_string();
-                let rail = v["rail"].as_bool().unwrap_or(false);
                 let ancienne = v["ancienne"].as_str().unwrap_or("");
+                let mut rail = v["rail"].as_bool().unwrap_or(false);
+                if rail && !self.rail_accepte(ancienne) {
+                    self.signaler_rail_plein();
+                    rail = false;
+                }
                 if !groupe.is_empty() && !self.acces_groupes.contains(&groupe) {
                     self.acces_groupes.push(groupe.clone());
                     self.sauver_acces_groupes();
                 }
                 let pos = self
-                    .favoris
+                    .acces
                     .iter()
                     .position(|f| !ancienne.is_empty() && f.url == ancienne)
-                    .or_else(|| self.favoris.iter().position(|f| f.url == url));
+                    .or_else(|| self.acces.iter().position(|f| f.url == url));
                 let icone_onglet = self.icone_connue(&url);
                 match pos {
                     Some(i) => {
-                        let f = &mut self.favoris[i];
+                        let f = &mut self.acces[i];
                         if f.url != url {
                             f.icone = None;
                         }
@@ -272,8 +318,8 @@ impl App {
                         }
                     }
                     None => {
-                        let titre = if titre.is_empty() { urls::affichage_court(&url) } else { titre };
-                        self.favoris.push(Favori {
+                        let titre = if titre.is_empty() { carnet::nom_du_site(&url) } else { titre };
+                        self.acces.push(Acces {
                             url,
                             titre,
                             ajoute_le: maintenant_ms(),
@@ -285,44 +331,60 @@ impl App {
                 }
                 // Une adresse modifiee peut rejoindre celle d'un autre acces : un seul garde.
                 let mut vues = std::collections::HashSet::new();
-                self.favoris.retain(|f| vues.insert(f.url.clone()));
-                self.sauver_favoris();
+                self.acces.retain(|f| vues.insert(f.url.clone()));
+                self.sauver_acces();
                 self.pousser_etat();
                 true
             }
             "accesDepuisOnglet" => {
-                // Un onglet glisse sur la bande du rail ou sur les acces rapides du Nouvel onglet.
-                let Some(o) = v["onglet"].as_u64().and_then(|id| self.trouver(id as TabId)).cloned() else {
+                // Un onglet glisse sur la bande du rail ou sur les acces rapides du Nouvel onglet,
+                // ou le « + » de la bande (`actif`) : l'acces mene au SITE de la page, pas a la
+                // page elle-meme (une page precise, c'est un favori).
+                let id = v["onglet"].as_u64().map(|n| n as TabId).or_else(|| v["actif"].as_bool().filter(|b| *b).and(self.actif));
+                let Some(o) = id.and_then(|id| self.trouver(id)).cloned() else {
                     return true;
                 };
-                if !carnet::favorisable(&o.url) {
-                    self.signaler("Les accès rapides s'appliquent aux pages web.");
+                if !o.url.starts_with("http://") && !o.url.starts_with("https://") {
+                    self.signaler("Les accès rapides s'appliquent aux sites web.");
                     return true;
                 }
-                let rail = v["rail"].as_bool().unwrap_or(false);
+                let url = carnet::racine_du_site(&o.url);
+                let mut rail = v["rail"].as_bool().unwrap_or(false);
                 let groupe = v["groupe"].as_str().unwrap_or("").trim().to_string();
-                if let Some(f) = self.favoris.iter_mut().find(|f| f.url == o.url) {
+                if rail && !self.rail_accepte(&url) {
+                    self.signaler_rail_plein();
+                    rail = false;
+                }
+                if let Some(f) = self.acces.iter_mut().find(|f| f.url == url) {
                     f.rail |= rail;
+                    if f.icone.is_none() {
+                        f.icone = o.favicon.clone();
+                    }
                 } else {
-                    self.favoris.push(Favori {
-                        url: o.url.clone(),
-                        titre: o.libelle(),
+                    self.acces.push(Acces {
+                        url,
+                        titre: carnet::nom_du_site(&o.url),
                         ajoute_le: maintenant_ms(),
                         groupe,
                         rail,
                         icone: o.favicon.clone(),
                     });
                 }
-                self.signaler("Ajouté aux accès rapides.");
-                self.sauver_favoris();
+                self.signaler(if rail { "Ajouté aux accès rapides du rail." } else { "Ajouté aux accès rapides." });
+                self.sauver_acces();
                 self.pousser_etat();
                 true
             }
             "accesRail" => {
                 if let Some(url) = v["url"].as_str() {
-                    if let Some(f) = self.favoris.iter_mut().find(|f| f.url == url) {
-                        f.rail = v["rail"].as_bool().unwrap_or(!f.rail);
-                        self.sauver_favoris();
+                    if let Some(i) = self.acces.iter().position(|f| f.url == url) {
+                        let voulu = v["rail"].as_bool().unwrap_or(!self.acces[i].rail);
+                        if voulu && !self.rail_accepte(url) {
+                            self.signaler_rail_plein();
+                            return true;
+                        }
+                        self.acces[i].rail = voulu;
+                        self.sauver_acces();
                         self.pousser_etat();
                     }
                 }
@@ -331,9 +393,9 @@ impl App {
             "accesGroupeDe" => {
                 if let Some(url) = v["url"].as_str() {
                     let groupe = v["groupe"].as_str().unwrap_or("").trim().to_string();
-                    if let Some(f) = self.favoris.iter_mut().find(|f| f.url == url) {
+                    if let Some(f) = self.acces.iter_mut().find(|f| f.url == url) {
                         f.groupe = groupe;
-                        self.sauver_favoris();
+                        self.sauver_acces();
                         self.pousser_etat();
                     }
                 }
@@ -343,15 +405,15 @@ impl App {
                 // Nouvel ordre complet (glisser-deposer) ; les adresses inconnues sont ignorees,
                 // les oubliees gardent leur place relative a la fin.
                 if let Some(liste) = v["urls"].as_array() {
-                    let mut neuf: Vec<Favori> = Vec::with_capacity(self.favoris.len());
+                    let mut neuf: Vec<Acces> = Vec::with_capacity(self.acces.len());
                     for u in liste.iter().filter_map(|u| u.as_str()) {
-                        if let Some(i) = self.favoris.iter().position(|f| f.url == u) {
-                            neuf.push(self.favoris.remove(i));
+                        if let Some(i) = self.acces.iter().position(|f| f.url == u) {
+                            neuf.push(self.acces.remove(i));
                         }
                     }
-                    neuf.append(&mut self.favoris);
-                    self.favoris = neuf;
-                    self.sauver_favoris();
+                    neuf.append(&mut self.acces);
+                    self.acces = neuf;
+                    self.sauver_acces();
                     self.pousser_etat();
                 }
                 true
@@ -383,11 +445,11 @@ impl App {
                     *g = nouveau.clone();
                 }
                 // Les acces du groupe retire restent, sans groupe.
-                for f in self.favoris.iter_mut().filter(|f| f.groupe == nom) {
+                for f in self.acces.iter_mut().filter(|f| f.groupe == nom) {
                     f.groupe = nouveau.clone();
                 }
                 self.sauver_acces_groupes();
-                self.sauver_favoris();
+                self.sauver_acces();
                 self.pousser_etat();
                 true
             }
@@ -638,17 +700,15 @@ impl App {
         }
         if let Some(pos) = self.favoris.iter().position(|f| f.url == o.url) {
             self.favoris.remove(pos);
-            self.signaler("Retiré des favoris et des accès rapides.");
+            self.signaler("Retiré des favoris.");
         } else {
             self.favoris.push(Favori {
                 url: o.url.clone(),
                 titre: o.libelle(),
                 ajoute_le: maintenant_ms(),
-                groupe: String::new(),
-                rail: false,
                 icone: o.favicon.clone(),
             });
-            self.signaler("Ajouté aux favoris et aux accès rapides du Nouvel onglet (Ctrl+D pour le retirer).");
+            self.signaler("Page ajoutée aux favoris (Ctrl+D pour la retirer).");
         }
         self.sauver_favoris();
         self.pousser_etat();

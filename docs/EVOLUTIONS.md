@@ -501,6 +501,23 @@ le registre dans un conteneur privé, et Trame n'était jamais proposé comme na
 **Pas fait, volontairement** : déplacer un élément n'importe où dans la page (il faudrait
 déplacer des nœuds, ce qui casse les sites en composants comme YouTube).
 
+## 10 quater. 2026-11-22, soir — favoris et accès rapides séparés, 10 places sous le logo
+
+Demande de Clément : un **favori** est une page précise (une vidéo, un article, un chemin) ; un
+**accès rapide** est un bouton qui mène à un site. Jusque-là, c'était une seule liste (`favoris.json`).
+
+- `carnet::Acces` dans `acces.json`, à part de `carnet::Favori` (`favoris.json`). Au premier
+  lancement sans `acces.json`, l'ancienne liste devient les accès rapides et reste les favoris.
+- Ctrl+D / l'étoile ne touchent plus qu'aux favoris. Le Nouvel onglet a une section **Favoris**
+  (liste, clic, Ctrl+clic, ×, clic droit « Créer un accès rapide vers ce site »).
+- Un accès créé depuis un onglet (dépôt, « + » du rail) mène à la **racine du site**
+  (`racine_du_site`) et prend son nom (`nom_du_site` : youtube.com → « Youtube »).
+- Rail : la bande sous le logo est toujours là, **10 places** (`RAIL_MAX`, 5 × 2 déplié, une colonne
+  replié) ; « + » ajoute le site de la page affichée ; glisser une icône sur une autre la range ;
+  clic droit : ouvrir, modifier nom/adresse, retirer du rail, supprimer. L'hôte refuse une 11e.
+- Preuves : `cargo test --release` (171), `node outils/tester-ui.mjs` (58, dont les deux nouveaux cas
+  « 10 places » et « favoris à part »), captures du rail déplié, du menu et du rail replié.
+
 ## 11. L'état aujourd'hui
 
 ```

@@ -122,6 +122,30 @@
       .tuile.cible { border-color: var(--vif); }
       @keyframes tremble { from { transform: rotate(-.6deg); } to { transform: rotate(.6deg); } }
       .ar-vide { color: var(--texte-3); font-size: 12.5px; grid-column: 1 / -1; padding: 4px 2px; }
+      /* ---- favoris (pages precises) ---- */
+      .fav-aide { color: var(--texte-3); font-size: 11.5px; }
+      .favoris { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin-bottom: 34px; }
+      .fav {
+        display: flex; align-items: center; gap: 10px; min-width: 0; padding: 9px 11px; cursor: pointer;
+        border: 1px solid var(--bord); border-radius: 12px; background: rgba(255,255,255,.02);
+        transition: border-color .18s;
+      }
+      .fav:hover { border-color: rgba(255,255,255,.16); }
+      .fav .ico {
+        flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center;
+        font-weight: 700; color: #fff; font-size: 12px; overflow: hidden;
+      }
+      .fav .ico img { width: 16px; height: 16px; }
+      .fav .ico.image { background: rgba(255,255,255,.07) !important; }
+      .fav .txt { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+      .fav .t { font-size: 12.5px; color: #dbe4f5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .fav .d { font-size: 11px; color: var(--texte-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .fav .x {
+        margin-left: auto; flex: 0 0 auto; font: inherit; font-size: 14px; line-height: 1; color: var(--texte-3);
+        background: transparent; border: 0; padding: 4px 6px; border-radius: 6px; cursor: pointer; opacity: 0;
+      }
+      .fav:hover .x { opacity: 1; }
+      .fav .x:hover { color: #f87171; background: rgba(248,113,113,.1); }
 
       .menu {
         position: fixed; z-index: 20; min-width: 210px; background: #151c2a; border: 1px solid rgba(255,255,255,.16);
@@ -189,6 +213,14 @@
         </div>
         <div class="tuiles" id="tuiles"></div>
       </div>
+
+      <div id="bloc-favoris" hidden>
+        <div class="ar-tete">
+          <h2>Favoris</h2>
+          <span class="fav-aide">des pages précises · Ctrl+D sur une page pour l'ajouter ou la retirer</span>
+        </div>
+        <div class="favoris" id="favoris"></div>
+      </div>
       <h2>Tes fils</h2>
       <div class="grille" id="grille"></div>
 
@@ -240,6 +272,7 @@
           });
 
           rendreAcces();
+          rendreFavoris();
 
           const grille = document.getElementById("grille");
           grille.textContent = "";
@@ -361,7 +394,7 @@
           const visibles = liste.filter((a) => filtre === TOUS || a.groupe === filtre);
           for (const a of visibles) zone.appendChild(tuileAcces(a, liste));
           if (!liste.length) {
-            zone.appendChild(elem("div", "ar-vide", "Aucun accès rapide pour l'instant : « ＋ Ajouter », ou Ctrl+D sur une page."));
+            zone.appendChild(elem("div", "ar-vide", "Aucun accès rapide pour l'instant : « ＋ Ajouter », ou dépose un onglet ici."));
           }
           const ajout = elem("div", "tuile ajout");
           const t = elem("div");
@@ -441,6 +474,67 @@
           return d;
         }
 
+        /* ------------------------------------------------------------ favoris */
+        // Des pages precises (un article, une video), distinctes des acces rapides (des sites).
+        let signatureFavoris = "";
+        function rendreFavoris() {
+          const liste = (etat && etat.carnet && etat.carnet.favoris) || [];
+          const signature = JSON.stringify(liste);
+          if (signature === signatureFavoris) return;
+          signatureFavoris = signature;
+          document.getElementById("bloc-favoris").hidden = !liste.length;
+          const zone = document.getElementById("favoris");
+          zone.textContent = "";
+          for (const f of liste) zone.appendChild(ligneFavori(f));
+        }
+
+        function ligneFavori(f) {
+          const d = elem("div", "fav");
+          d.title = `${f.titre}\n${f.url}\nClic : ouvrir ici · Ctrl+clic : nouvel onglet · clic droit : plus`;
+          const ico = elem("div", "ico");
+          const lettre = (f.titre || f.domaine || "?").trim().charAt(0).toUpperCase();
+          ico.style.background = teinte(f.domaine || f.url);
+          if (f.icone) {
+            const img = document.createElement("img");
+            img.alt = "";
+            img.draggable = false;
+            img.referrerPolicy = "no-referrer";
+            img.onload = () => ico.classList.add("image");
+            img.onerror = () => { img.remove(); ico.classList.remove("image"); ico.textContent = lettre; };
+            img.src = f.icone;
+            ico.appendChild(img);
+          } else {
+            ico.textContent = lettre;
+          }
+          d.appendChild(ico);
+          const txt = elem("div", "txt");
+          txt.appendChild(elem("span", "t", f.titre));
+          txt.appendChild(elem("span", "d", f.domaine || f.url));
+          d.appendChild(txt);
+          const x = elem("button", "x", "×");
+          x.title = "Retirer des favoris";
+          x.onclick = (e) => { e.stopPropagation(); ipc({ m: "favoriRetirer", url: f.url }); };
+          d.appendChild(x);
+          const ouvrir = (nouveau) => ipc(nouveau ? { m: "nouvelOnglet", url: f.url } : { m: "naviguer", url: f.url });
+          d.onclick = (e) => ouvrir(e.ctrlKey || e.shiftKey);
+          d.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); ouvrir(true); } };
+          d.oncontextmenu = (e) => {
+            e.preventDefault();
+            let site = "";
+            try { site = new URL(f.url).origin + "/"; } catch (err) {}
+            const lignes = [
+              { texte: "Ouvrir ici", faire: () => ouvrir(false) },
+              { texte: "Ouvrir dans un nouvel onglet", faire: () => ouvrir(true) },
+            ];
+            if (site && /^https?:/.test(site)) {
+              lignes.push("-", { texte: "Créer un accès rapide vers ce site", faire: () => ipc({ m: "accesEnregistrer", url: site, titre: "", groupe: "", rail: false, ancienne: "" }) });
+            }
+            lignes.push("-", { texte: "Retirer des favoris", classe: "rouge", faire: () => ipc({ m: "favoriRetirer", url: f.url }) });
+            ouvrirMenu(lignes, e.clientX, e.clientY);
+          };
+          return d;
+        }
+
         /* ---- menu contextuel ---- */
         let menuOuvert = null;
         function fermerMenu() { if (menuOuvert) { menuOuvert.remove(); menuOuvert = null; } }
@@ -471,7 +565,7 @@
             { texte: "Ouvrir dans un nouvel onglet", faire: () => ipc({ m: "accesOuvrir", url: a.url, nouveau: true }) },
             "-",
             { texte: "Modifier…", faire: () => dialogueAcces(a) },
-            { texte: a.rail ? "Retirer du rail" : "Afficher aussi dans le rail", faire: () => ipc({ m: "accesRail", url: a.url, rail: !a.rail }) },
+            { texte: a.rail ? "Retirer du rail" : "Afficher aussi dans le rail (10 places)", faire: () => ipc({ m: "accesRail", url: a.url, rail: !a.rail }) },
           ];
           const gs = groupes();
           if (gs.length) {
@@ -481,7 +575,7 @@
             }
             if (a.groupe) lignes.push({ texte: "   Sans groupe", faire: () => ipc({ m: "accesGroupeDe", url: a.url, groupe: "" }) });
           }
-          lignes.push("-", { texte: "Retirer des accès rapides", classe: "rouge", faire: () => ipc({ m: "favoriRetirer", url: a.url }) });
+          lignes.push("-", { texte: "Retirer des accès rapides", classe: "rouge", faire: () => ipc({ m: "accesRetirer", url: a.url }) });
           ouvrirMenu(lignes, x, y);
         }
 
@@ -557,7 +651,7 @@
             iRail.type = "checkbox";
             iRail.checked = !!(a && a.rail);
             lab.appendChild(iRail);
-            lab.appendChild(document.createTextNode("Afficher aussi dans le rail"));
+            lab.appendChild(document.createTextNode("Afficher aussi dans le rail, sous le logo (10 places)"));
             d.appendChild(lab);
           }, () => {
             const url = iUrl.value.trim();
@@ -566,7 +660,7 @@
               m: "accesEnregistrer", url, titre: iNom.value.trim(), groupe: iGroupe.value.trim(),
               rail: iRail.checked, ancienne: a ? a.url : "",
             });
-          }, a ? () => ipc({ m: "favoriRetirer", url: a.url }) : null);
+          }, a ? () => ipc({ m: "accesRetirer", url: a.url }) : null);
         }
 
         function dialogueGroupe(nom) {
