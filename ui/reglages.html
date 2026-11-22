@@ -564,6 +564,29 @@
       </section>
 
       <section>
+        <h2>Apparence</h2>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Teinte de la coquille</b>
+            <span id="theme-actuel">Défaut</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button data-teinte="defaut">Défaut</button>
+          <button data-teinte="menthe">Menthe</button>
+          <button data-teinte="ciel">Ciel</button>
+          <button data-teinte="violet">Violet</button>
+          <button data-teinte="ambre">Ambre</button>
+          <button data-teinte="ardoise">Ardoise</button>
+          <button data-teinte="dynamique">Dynamique (site)</button>
+        </div>
+        <p style="font-size:11.5px;color:var(--texte-2);margin:10px 0 0">
+          « Dynamique » suivra la couleur annoncée par le site consulté : pas encore branché, la
+          teinte reste celle par défaut en attendant.
+        </p>
+      </section>
+
+      <section>
         <h2>Mises à jour</h2>
         <div class="ligne">
           <div class="libelle">
@@ -620,10 +643,22 @@
 // trame.exe). L'affichage suit `etat`, que l'hote pousse — sans crochet dans `rendre()`.
 document.getElementById('maj-verifier').onclick = () => ipc({ m: 'majVerifier' });
 document.getElementById('maj-installer').onclick = () => ipc({ m: 'majInstaller' });
+
+// Apparence : un bouton par teinte. L'hote la garde dans reglages.json ; la coquille se
+// repeint d'elle-meme, l'etat redescend.
+const NOMS_TEINTES = {
+  defaut: 'Défaut', menthe: 'Menthe', ciel: 'Ciel', violet: 'Violet',
+  ambre: 'Ambre', ardoise: 'Ardoise', dynamique: 'Dynamique',
+};
+document.querySelectorAll('[data-teinte]').forEach((b) => {
+  b.onclick = () => ipc({ m: 'theme', valeur: b.dataset.teinte });
+});
 setInterval(() => {
   if (typeof etat === 'undefined' || !etat) return;
   const version = document.getElementById('maj-version');
   if (version) version.textContent = etat.version || '—';
+  const teinteAffichee = document.getElementById('theme-actuel');
+  if (teinteAffichee) teinteAffichee.textContent = NOMS_TEINTES[etat.theme] || etat.theme || 'Défaut';
   const ligne = document.getElementById('maj-etat');
   if (!ligne) return;
   if (!etat.maj) {

@@ -284,9 +284,17 @@ impl Session {
     }
 }
 
+/// Teinte par defaut de la coquille : l'aspect d'origine, celui de `:root`.
+fn theme_defaut() -> String {
+    "defaut".into()
+}
+
 /// Reglages du navigateur, persistes dans `reglages.json`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Reglages {
+    /// Teinte de la coquille : « defaut », une teinte predefinie, ou « dynamique ».
+    #[serde(default = "theme_defaut")]
+    pub theme: String,
     /// Identifiant du moteur de recherche (`urls::MOTEURS`).
     #[serde(default = "moteur_defaut")]
     pub moteur: String,
@@ -471,6 +479,7 @@ impl Reglages {
 impl Default for Reglages {
     fn default() -> Self {
         Reglages {
+            theme: theme_defaut(),
             moteur: moteur_defaut(),
             barre_extensions: true,
             plein_ecran: plein_ecran_defaut(),

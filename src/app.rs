@@ -2757,6 +2757,7 @@ impl App {
             "railReplie": self.rail_replie,
             "panneau": self.panneau_ouvert,
             "version": crate::maj::ACTUELLE,
+            "theme": self.reglages.theme,
             "maj": self.maj.as_ref().map(|m| json!({ "version": m.version, "url": m.url })),
             "moteur": {
                 "id": urls::moteur(&self.reglages.moteur).id,
@@ -4118,6 +4119,15 @@ impl App {
             | "ouvrirTelechargements" => self.commande_telechargement(m, &v),
             "majVerifier" => self.verifier_maj(),
             "majInstaller" => self.installer_maj(),
+            "theme" => {
+                let voulu = v["valeur"].as_str().unwrap_or("defaut").to_string();
+                if voulu != self.reglages.theme {
+                    info!("apparence : teinte {voulu}");
+                    self.reglages.theme = voulu;
+                    self.profil.sauver_reglages(&self.reglages);
+                    self.pousser_etat();
+                }
+            }
             "muet" => {
                 if let Some(id) = v["id"].as_u64() {
                     self.basculer_muet(id as TabId);

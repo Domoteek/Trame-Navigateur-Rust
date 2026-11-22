@@ -139,6 +139,19 @@ function rendreFenetre(s) {
     styleFenetre = style;
     document.body.dataset.fenetre = style;
   }
+  // Teinte de la coquille (reglages > Apparence). On pose la variable CSS a la main : elle
+  // existe deja dans :root, donc rien d'autre a toucher. « defaut » la retire, et l'aspect
+  // d'origine revient tel quel.
+  const TEINTES = {
+    menthe: "#34d399",
+    ciel: "#60a5fa",
+    violet: "#a78bfa",
+    ambre: "#fbbf24",
+    ardoise: "#94a3b8",
+  };
+  const teinte = (s && s.theme) || "defaut";
+  if (TEINTES[teinte]) document.documentElement.style.setProperty("--accent", TEINTES[teinte]);
+  else document.documentElement.style.removeProperty("--accent");
   if (agrandie !== fenetreAgrandie) {
     fenetreAgrandie = agrandie;
     if (agrandie) document.body.dataset.agrandie = "1";
