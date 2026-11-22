@@ -296,6 +296,12 @@ impl App {
                 // sinon un nouvel onglet — jamais a la place de la page affichee.
                 if let Some(url) = v["url"].as_str().filter(|u| self.favoris.iter().any(|f| f.url == *u)) {
                     let url = url.to_string();
+                    // Adresses reelles d'abord : un onglet YouTube passe a une autre video sans
+                    // recharger, son adresse retenue peut etre en retard.
+                    let vivants: Vec<TabId> = self.webviews.keys().copied().collect();
+                    for id in vivants {
+                        self.actualiser_adresse(id);
+                    }
                     let ouvert = self
                         .session
                         .onglets
