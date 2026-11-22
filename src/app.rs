@@ -5048,11 +5048,20 @@ impl App {
             }
             "telechargementDossier" => {
                 let Some(t) = trouve else { return };
-                if Path::new(&t.chemin).exists() {
-                    crate::externe::montrer_dans_dossier(Path::new(&t.chemin));
+                let chemin = Path::new(&t.chemin).to_path_buf();
+                if chemin.exists() {
+                    info!("telechargements : {} montre dans son dossier ({})", t.fichier, chemin.display());
+                    if !crate::externe::montrer_dans_dossier(&chemin) {
+                        self.signaler("Windows n'a pas pu ouvrir l'Explorateur.");
+                    }
                 } else {
-                    let dossier = Path::new(&t.chemin).parent().map(Path::to_path_buf).unwrap_or_else(|| self.dossier_dl.borrow().clone());
-                    let _ = std::process::Command::new("explorer").arg(&dossier).spawn();
+                    // Le fichier a bouge ou disparu : on ouvre le dossier ou il devait etre. Et
+                    // jamais par `explorer.exe` : sur un chemin invalide il n'echoue pas, il
+                    // ouvre son dossier par defaut (« Documents ») et on croit s'etre trompe.
+                    let dossier = chemin.parent().map(Path::to_path_buf).unwrap_or_else(|| self.dossier_dl.borrow().clone());
+                    if !crate::externe::ouvrir_dossier(&dossier) {
+                        self.signaler(&format!("Ce dossier est introuvable : {}", dossier.display()));
+                    }
                 }
             }
             "telechargementRelancer" => {
@@ -5073,9 +5082,15 @@ impl App {
                 self.pousser_etat();
             }
             "telechargementsDossier" => {
-                let dossier = self.dossier_dl.borrow().clone();
+                // Le dossier est relu au moment du clic : s'il a change depuis le demarrage,
+                // c'est le nouveau qui compte, pas une valeur gardee en memoire.
+                let dossier = self.dossier_telechargements();
+                *self.dossier_dl.borrow_mut() = dossier.clone();
                 let _ = std::fs::create_dir_all(&dossier);
-                let _ = std::process::Command::new("explorer").arg(&dossier).spawn();
+                info!("telechargements : dossier ouvert ({})", dossier.display());
+                if !crate::externe::ouvrir_dossier(&dossier) {
+                    self.signaler(&format!("Windows n'a pas pu ouvrir ce dossier : {}", dossier.display()));
+                }
             }
             "telechargementsChoisirDossier" => match crate::systeme::choisir_dossier("Dossier des téléchargements") {
                 Ok(Some(d)) => {

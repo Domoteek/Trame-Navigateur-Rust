@@ -103,11 +103,42 @@ pub fn dossier_telechargements_windows() -> Option<std::path::PathBuf> {
     }
 }
 
+/// Les deux arguments donnes a `explorer` pour montrer un fichier.
+///
+/// **Deux**, jamais un seul. Un `/select,` colle au chemin (`/select,C:\…\mon dossier\f.pdf`)
+/// est mal compris des que le chemin contient une espace : Windows cite alors l'argument
+/// entier, `explorer` ne reconnait plus son prefixe et ouvre son dossier par defaut
+/// (« Documents »). Constate le 2026-11-22 sur le PC du fils de Clement : les fichiers
+/// arrivaient bien dans « Telechargements », mais « Afficher dans le dossier » ouvrait
+/// Documents. Mesure : en deux arguments, Explorer ouvre le bon dossier **et** selectionne le
+/// fichier, espace ou pas.
+pub fn arguments_select(chemin: &std::path::Path) -> [std::ffi::OsString; 2] {
+    [std::ffi::OsString::from("/select,"), chemin.as_os_str().to_os_string()]
+}
+
 /// Montre un fichier selectionne dans l'Explorateur (« Afficher dans le dossier »).
-pub fn montrer_dans_dossier(chemin: &std::path::Path) {
-    let _ = std::process::Command::new("explorer")
-        .arg(format!("/select,{}", chemin.display()))
-        .spawn();
+/// Rend `false` si Explorer n'a pas pu etre lance.
+pub fn montrer_dans_dossier(chemin: &std::path::Path) -> bool {
+    let [prefixe, cible] = arguments_select(chemin);
+    std::process::Command::new("explorer")
+        .arg(prefixe)
+        .arg(cible)
+        .spawn()
+        .is_ok()
+}
+
+/// Ouvre un dossier dans l'Explorateur (`ShellExecuteW`, verbe « open »).
+///
+/// Rend `false` quand Windows refuse — dossier absent, par exemple. C'est la difference avec
+/// `explorer.exe <dossier>` : lui, quand le chemin est invalide, n'echoue pas, il ouvre son
+/// dossier par defaut, et on croit avoir ouvert autre chose.
+pub fn ouvrir_dossier(dossier: &std::path::Path) -> bool {
+    use windows::core::{w, HSTRING, PCWSTR};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let cible = HSTRING::from(dossier.as_os_str());
+    let code = unsafe { ShellExecuteW(None, w!("open"), &cible, PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
+    code.0 as isize > 32
 }
 
 /// Est-ce que Trame est le navigateur par defaut de l'utilisateur (liens https) ?
@@ -134,6 +165,20 @@ pub fn est_par_defaut() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn montrer_dans_le_dossier_donne_deux_arguments() {
+        let chemin = std::path::Path::new(r"C:\Users\Jean Paul\Telechargements\mon document avec espaces.pdf");
+        let [prefixe, cible] = arguments_select(chemin);
+        assert_eq!(prefixe, std::ffi::OsString::from("/select,"));
+        // Le chemin reste UN SEUL argument, espaces comprises : c'est tout l'objet du correctif.
+        assert_eq!(std::path::Path::new(&cible), chemin);
+        // Un chemin sans espace doit donner exactement la meme forme.
+        let simple = std::path::Path::new(r"C:\Telechargements\preuve.pdf");
+        let [p2, c2] = arguments_select(simple);
+        assert_eq!(p2, prefixe);
+        assert_eq!(std::path::Path::new(&c2), simple);
+    }
 
     #[test]
     fn l_adresse_se_lit_dans_les_arguments() {

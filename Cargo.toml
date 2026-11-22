@@ -1,8 +1,8 @@
-[package]
+﻿[package]
 name = "trame"
-version = "0.4.11"
+version = "0.4.12"
 edition = "2021"
-description = "Trame — navigateur a onglets tisses (Rust + WebView2)"
+description = "Trame â€” navigateur a onglets tisses (Rust + WebView2)"
 license = "MIT"
 default-run = "trame"
 
@@ -20,7 +20,7 @@ sysinfo = "0.33"
 # piloter le moteur d'extensions de WebView2 a chaud (src/moteur_ext.rs).
 webview2-com = "=0.39.1"
 # Win32_System_SystemInformation : `GetLocalTime`, pour nommer une sauvegarde a l'heure
-# locale (et non en UTC, ce qui ferait lire 20 h a 21 h — cf. AGENTS.md, § 4 ter).
+# locale (et non en UTC, ce qui ferait lire 20 h a 21 h â€” cf. AGENTS.md, Â§ 4 ter).
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_System_SystemInformation", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]

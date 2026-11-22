@@ -243,13 +243,14 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
-> **0.4.11, signée et installée le 2026-11-22.** `dist\trame.exe` et `dist\Trame-0.4.11-setup.exe`
+> **0.4.12, signée et installée le 2026-11-23.** `dist\trame.exe` et `dist\Trame-0.4.12-setup.exe`
 > sont `Valid`, horodatés (DigiCert), signataire `CN=CAHAGNE CLEMENT` ; empreintes dans
-> `dist\SHA256SUMS.txt`. Cette version **contient la sauvegarde du profil**, et c'est prouvé, pas
-> supposé : le `trame.exe` que le setup installe est **octet pour octet** celui qui a été signé
-> (même empreinte que `dist\trame.exe`), et l'`ui\reglages.html` livré contient bien la section.
-> Elle est **installée sur le poste de Clément** (dossier `%LOCALAPPDATA%\Programs\Trame`,
-> raccourci, entrée « Applications », inscription navigateur et désinstalleur vérifiés après coup).
+> `dist\SHA256SUMS.txt`. Elle contient la **sauvegarde du profil** (0.4.11), le **téléchargement
+> fini qui ne reste plus « en cours »** (0.4.11) et **« Afficher dans le dossier » qui ouvre
+> enfin le bon dossier** (0.4.12) — et c'est prouvé, pas supposé : le `trame.exe` que le setup
+> installe est **octet pour octet** celui qui a été signé (même empreinte que `dist\trame.exe`).
+> Elle est **installée sur le poste de Clément** par son propre setup, en silence (code 0), et
+> l'entrée « Applications » répond `0.4.12`.
 >
 > ⚠️ **`node outils/verifier-setup.mjs` refuse de tourner quand une vraie installation existe**
 > (code 3, avec le motif) : son désinstalleur d'essai partage l'identifiant d'application et
@@ -262,7 +263,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > suivantes :
 >
 > ```powershell
-> dist\Trame-0.4.11-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.12-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 

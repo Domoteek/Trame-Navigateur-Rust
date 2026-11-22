@@ -925,10 +925,52 @@ Une autre session travaillait dans ce dossier **pendant** la fabrication (`src/a
 `src/telechargements.rs` 22 h 52, un test de plus : 187 au lieu de 186). Le livrable est donc
 construit sur l'arbre **testé à cet instant** — 187/187, 76/76 — et non sur l'état de 22 h.
 
+## 10 quaterdecies. 2026-11-23, 0 h 45 — « Afficher dans le dossier » n'ouvre plus Documents (0.4.12)
+
+Signalement de Clément, sur le PC de son fils (installation neuve) : « quand il télécharge des
+documents ou des fichiers, ça les met bien dans Téléchargements, mais quand je fais ouvrir le
+dossier, ça m'ouvre le dossier Documents. »
+
+**La cause, mesurée sur ce poste** : `explorer` était appelé avec **un seul** argument,
+`/select,C:\…\mon document.pdf`. Dès que le chemin contient une espace, Windows cite l'argument
+entier ; `explorer` ne reconnaît plus le préfixe `/select,`, n'échoue pas — il ouvre son dossier
+par défaut. Les trois formes ont été essayées :
+
+| Forme envoyée | Résultat |
+|---|---|
+| `/select,C:\…\essai-trame select\mon document.pdf` en un argument (l'ancien code) | ouvre **Documents**, ou réactive la fenêtre Documents déjà ouverte |
+| `/select,"C:\…\file.pdf"` en un argument | rien |
+| `/select,` **puis** le chemin, deux arguments (le nouveau code) | ouvre le bon dossier **et** sélectionne le fichier |
+
+Un second défaut, de la même famille, est retiré au passage : « Ouvrir le dossier » (l'en-tête de
+la page) passait par `explorer.exe <dossier>` et gardait en mémoire le dossier calculé au
+démarrage. Il relit maintenant le réglage au moment du clic et passe par `ShellExecuteW`, qui
+**échoue franchement** au lieu de se rabattre sur Documents ; l'échec s'annonce à l'écran.
+
+| Ce qui a été ajouté | Où |
+|---|---|
+| `arguments_select()` : deux arguments, jamais un | `src/externe.rs` |
+| `ouvrir_dossier()` par `ShellExecuteW`, avec `false` quand Windows refuse | `src/externe.rs` |
+| Les deux commandes relisent le dossier, journalisent ce qu'elles ouvrent, signalent un échec | `src/app.rs` |
+
+**Ce que Clément demandait au fond** — pouvoir choisir un dossier, qu'il soit mémorisé, que les
+nouveaux fichiers y aillent et que les anciens restent où ils sont — était déjà le
+comportement : `reglages.json` garde `dossier_telechargements`, et chaque entrée de
+`telechargements.json` garde son propre `chemin`. Ce qui manquait, c'était que le bouton ouvre le
+bon dossier.
+
+Preuves : `cargo test` **188/188** (dont le nouveau `montrer_dans_le_dossier_donne_deux_arguments`).
+Bout en bout sur le binaire réel, profil jetable avec une destination mémorisée **contenant des
+espaces** et un ancien fichier dans un autre dossier : le nouveau fichier arrive dans la
+destination mémorisée, l'ancien reste où il est, « Ouvrir le dossier » ouvre la destination
+mémorisée, « Afficher dans le dossier » de l'ancienne entrée ouvre **son** dossier — et jamais
+Documents. `dist/` 0.4.12 signé (Azure, `Valid`, horodaté) et installé par son propre setup
+(silencieux, code 0, `trame.exe` installé identique à `dist\trame.exe`).
+
 ## 11. L'état aujourd'hui
 
 ```
-cargo test --release            187/187
+cargo test --release            188/188
 node outils/tester-ui.mjs        76/76
 node outils/verifier-app.mjs     sans reseau : 24/24 (dont les scenarios `z` et `z2`, sauvegarde)
 node outils/verifier-setup.mjs   refuse (code 3) tant qu'une vraie installation existe — par conception
@@ -952,7 +994,8 @@ node outils/verifier-setup.mjs   refuse (code 3) tant qu'une vraie installation 
   synchronisation.
 - Le **clavier** est testé dans Chromium (17 combinaisons), mais pas dans la fenêtre : piloter le
   clavier depuis un autre processus perd des frappes.
-- Le dossier n'est **pas un dépôt git** : aucune histoire versionnée, aucun `git log`.
+- Le dossier **est un dépôt git** (`main`, de la 0.4.10 à la 0.4.12), mais **aucun dépôt distant**
+  n'est configuré : l'histoire est locale, rien n'est publié.
 - La **sauvegarde du profil est manuelle** : rien ne la planifie (pas de copie à date fixe dans
   un dossier choisi).
 - L'**import** de favoris HTML aplatit les dossiers de Chrome : un favori n'a pas de groupe dans
