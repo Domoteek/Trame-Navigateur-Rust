@@ -564,6 +564,24 @@
       </section>
 
       <section>
+        <h2>Mises à jour</h2>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Version installée</b>
+            <span id="maj-version">—</span>
+          </div>
+          <button id="maj-verifier">Vérifier maintenant</button>
+        </div>
+        <div class="ligne">
+          <div class="libelle">
+            <b>Mise à jour</b>
+            <span id="maj-etat">—</span>
+          </div>
+          <button id="maj-installer">Installer</button>
+        </div>
+      </section>
+
+      <section>
         <h2>Système</h2>
         <div class="ligne">
           <div class="libelle">
@@ -597,7 +615,20 @@
         };
         let etat = null;
 
-        function elem(tag, classe, texte) {
+        // Mises a jour : deux gestes, rien de silencieux. « Verifier » relit la fiche du produit ;
+// « Installer » lance le setup deja telecharge (l'installeur ferme Trame lui-meme : il remplace
+// trame.exe). L'affichage suit `etat`, que l'hote pousse — sans crochet dans `rendre()`.
+document.getElementById('maj-verifier').onclick = () => ipc({ m: 'majVerifier' });
+document.getElementById('maj-installer').onclick = () => ipc({ m: 'majInstaller' });
+setInterval(() => {
+  if (typeof etat === 'undefined' || !etat) return;
+  const version = document.getElementById('maj-version');
+  if (version) version.textContent = etat.version || '—';
+  const ligne = document.getElementById('maj-etat');
+  if (ligne) ligne.textContent = etat.maj ? `Trame ${etat.maj.version} disponible` : 'Rien de plus récent';
+}, 1000);
+
+function elem(tag, classe, texte) {
           const d = document.createElement(tag);
           if (classe) d.className = classe;
           if (texte !== undefined && texte !== null) d.textContent = String(texte);

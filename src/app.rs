@@ -2756,6 +2756,8 @@ impl App {
             "interne": actif.map(|o| o.interne()).unwrap_or(true),
             "railReplie": self.rail_replie,
             "panneau": self.panneau_ouvert,
+            "version": crate::maj::ACTUELLE,
+            "maj": self.maj.as_ref().map(|m| json!({ "version": m.version, "url": m.url })),
             "moteur": {
                 "id": urls::moteur(&self.reglages.moteur).id,
                 "nom": urls::moteur(&self.reglages.moteur).nom,
@@ -4114,6 +4116,8 @@ impl App {
             | "telechargementRetirer" | "telechargementsEffacer" | "telechargementsDossier"
             | "telechargementsChoisirDossier" | "telechargementsDossierWindows"
             | "ouvrirTelechargements" => self.commande_telechargement(m, &v),
+            "majVerifier" => self.verifier_maj(),
+            "majInstaller" => self.installer_maj(),
             "muet" => {
                 if let Some(id) = v["id"].as_u64() {
                     self.basculer_muet(id as TabId);
@@ -4962,6 +4966,54 @@ impl App {
         ));
         self.ouvrir_onglet(nouveaute.url.clone(), Declencheur::Lien, None);
         self.maj = Some(nouveaute);
+    }
+
+    /// Relit la fiche produit (bouton « Verifier maintenant » des reglages).
+    fn verifier_maj(&mut self) {
+        self.signaler("Recherche d'une mise à jour…");
+        let proxy = self.proxy.clone();
+        std::thread::spawn(move || {
+            let nouveaute = crate::maj::verifier(crate::maj::ACTUELLE);
+            let _ = proxy.send_event(UserEvent::Maj(nouveaute));
+        });
+    }
+
+    /// Lance le setup de la mise a jour, deja telecharge par le gestionnaire de telechargements.
+    ///
+    /// Le setup est un installeur Inno : c'est lui qui ferme Trame (`/CLOSEAPPLICATIONS`), parce
+    /// qu'il remplace `trame.exe` — le faire fermer depuis l'interieur serait plus fragile.
+    fn installer_maj(&mut self) {
+        let Some(maj) = self.maj.clone() else {
+            self.signaler("Aucune mise à jour en attente.");
+            return;
+        };
+        // On retrouve le setup par son ADRESSE, pas par son nom : Trame renomme en « (2) » pour
+        // ne jamais ecraser un fichier existant.
+        let deja = self
+            .telechargements
+            .iter()
+            .find(|t| t.url == maj.url && t.etat == "termine")
+            .cloned();
+        let Some(telechargement) = deja else {
+            self.signaler("La mise à jour n'est pas encore téléchargée : elle commence.");
+            self.ouvrir_onglet(maj.url.clone(), Declencheur::Lien, None);
+            return;
+        };
+        if !Path::new(&telechargement.chemin).exists() {
+            self.signaler("Le fichier de mise à jour a été déplacé ou supprimé.");
+            return;
+        }
+        info!("mise a jour : installation de {} ({})", maj.version, telechargement.chemin);
+        let lancement = std::process::Command::new(&telechargement.chemin)
+            .args(["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/CURRENTUSER"])
+            .spawn();
+        match lancement {
+            Ok(_) => self.signaler(&format!("Installation de Trame {} en cours…", maj.version)),
+            Err(e) => {
+                alerte!("mise a jour : installeur impossible a lancer ({e})");
+                self.signaler("Windows n'a pas pu lancer l'installeur de mise à jour.");
+            }
+        }
     }
 
     /// Chaque seconde, la progression des telechargements en cours.
