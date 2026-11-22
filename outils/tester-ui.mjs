@@ -1287,6 +1287,33 @@ async function suite() {
     await p.close();
   });
 
+  await cas("incrustation : fermer la fenetre flottante ne laisse pas la video en pause", async () => {
+    const p = await page("newtab.html");
+    await p.setContent(PAGE_VIDEO);
+    await p.waitForFunction(() => !document.getElementById("v").paused);
+    await p.addScriptTag({ path: path.join(UI, "incrustation.js") });
+    // La croix de Chromium : sortie d'incrustation, puis pause juste apres.
+    const relancee = await p.evaluate(async () => {
+      const v = document.getElementById("v");
+      v.dispatchEvent(new Event("leavepictureinpicture"));
+      v.pause();
+      await new Promise((r) => setTimeout(r, 300));
+      return !v.paused;
+    });
+    egal(relancee, true, "la video doit reprendre apres la fermeture");
+    // Une pause voulue, bien avant la sortie, est respectee.
+    const respectee = await p.evaluate(async () => {
+      const v = document.getElementById("v");
+      v.pause();
+      await new Promise((r) => setTimeout(r, 1200));
+      v.dispatchEvent(new Event("leavepictureinpicture"));
+      await new Promise((r) => setTimeout(r, 300));
+      return v.paused;
+    });
+    egal(respectee, true, "une pause faite avant reste une pause");
+    await p.close();
+  });
+
   await cas("incrustation : Alt+Maj+P demande la mini-fenetre, la page s'y etire puis revient", async () => {
     const p = await page("newtab.html");
     await p.setContent(PAGE_VIDEO);

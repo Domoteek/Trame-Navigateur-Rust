@@ -359,6 +359,47 @@
   document.addEventListener("enterpictureinpicture", placer, true);
   document.addEventListener("leavepictureinpicture", placer, true);
 
+  // La croix de la fenetre d'incrustation met la video en pause (choix de Chromium) : Clement
+  // veut qu'elle continue dans la page (2026-11-22). Une pause qui tombe a moins d'une seconde
+  // de la fermeture, sur une video qui jouait, vient de la croix : on relance. Une pause faite
+  // plus tot dans la fenetre flottante (bouton pause) est respectee. L'ordre des deux
+  // evenements n'est pas garanti : on traite les deux sens.
+  const ECART_FERMETURE = 1000;
+  let pauseFlottante = null; // { v, quand } : derniere pause d'une video en incrustation
+  let sortie = null; // { v, quand } : derniere sortie d'incrustation d'une video qui jouait
+  const relancer = (v) => {
+    if (v.paused && !v.ended) v.play().catch(() => {});
+  };
+  document.addEventListener(
+    "pause",
+    (e) => {
+      const v = e.target;
+      if (!(v instanceof HTMLVideoElement)) return;
+      const t = Date.now();
+      if (document.pictureInPictureElement === v) pauseFlottante = { v, quand: t };
+      else if (sortie && sortie.v === v && t - sortie.quand < ECART_FERMETURE) {
+        sortie = null;
+        relancer(v);
+      }
+    },
+    true
+  );
+  document.addEventListener(
+    "leavepictureinpicture",
+    (e) => {
+      const v = e.target;
+      if (!(v instanceof HTMLVideoElement)) return;
+      const t = Date.now();
+      if (pauseFlottante && pauseFlottante.v === v && t - pauseFlottante.quand < ECART_FERMETURE) {
+        pauseFlottante = null;
+        relancer(v);
+      } else if (!v.paused) {
+        sortie = { v, quand: t };
+      }
+    },
+    true
+  );
+
   window.addEventListener(
     "keydown",
     (e) => {
