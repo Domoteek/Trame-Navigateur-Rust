@@ -408,7 +408,7 @@
 
         function tuileAcces(a, liste) {
           const d = elem("div", "tuile");
-          d.title = `${a.titre}\n${a.url}` + (a.ouvert ? "\nDéjà ouvert : un clic y va" : "") + "\nClic droit : modifier, groupe, rail…";
+          d.title = `${a.titre}\n${a.url}` + "\nClic : ouvrir ici · Ctrl+clic : nouvel onglet · clic droit : modifier, groupe, rail…";
           if (a.ouvert) d.appendChild(elem("i", "ouvert"));
           if (a.rail) {
             const r = elem("span", "rail", "▌");
@@ -562,7 +562,7 @@
 
         function menuAcces(a, x, y) {
           const lignes = [
-            { texte: a.ouvert ? "Aller sur l'onglet ouvert" : "Ouvrir ici", faire: () => ipc({ m: "accesOuvrir", url: a.url }) },
+            { texte: "Ouvrir ici", faire: () => ipc({ m: "accesOuvrir", url: a.url }) },
             { texte: "Ouvrir dans un nouvel onglet", faire: () => ipc({ m: "accesOuvrir", url: a.url, nouveau: true }) },
             "-",
             { texte: "Modifier…", faire: () => dialogueAcces(a) },

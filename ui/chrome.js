@@ -275,7 +275,7 @@ function signatureDuRail(s) {
 }
 
 /* Bande d'acces rapides du rail, sous le logo : 10 places (carnet.accesRailMax).
-   Un clic va sur le site (l'onglet deja ouvert, sinon un nouvel onglet) ; « + » ajoute le site
+   Un clic ouvre le site dans un nouvel onglet, a chaque fois ; « + » ajoute le site
    de la page affichee ; glisser une icone sur une autre la range devant elle ; deposer un
    onglet sur la bande ajoute son site ; clic droit : ouvrir, renommer, changer l'adresse,
    retirer du rail, supprimer. Tous les acces rapides se gerent aussi sur le Nouvel onglet. */
@@ -313,7 +313,7 @@ function rendreBandeAcces(s) {
 
 function iconeRail(a, tous) {
   const b = elem("button", "acces");
-  b.title = `${a.titre}\n${a.url}` + (a.ouvert ? "\nDéjà ouvert : un clic y va" : "") + "\nClic droit : modifier · glisser : ranger";
+  b.title = `${a.titre}\n${a.url}` + "\nClic : nouvel onglet · clic droit : modifier · glisser : ranger";
   const lettre = elem("span", "lettre", (a.titre || a.domaine || "?").trim().charAt(0).toUpperCase());
   lettre.style.background = teinteAcces(a.domaine || a.url);
   if (a.icone) {
@@ -405,7 +405,7 @@ function ouvrirMenuAccesRail(a, ancre) {
     };
     m.appendChild(b);
   };
-  ligne(a.ouvert ? "Aller sur l'onglet ouvert" : "Ouvrir dans un nouvel onglet", () => {
+  ligne("Ouvrir dans un nouvel onglet", () => {
     fermerMenuAccesRail();
     ipc({ m: "accesOuvrir", url: a.url, nouveau: true });
   });

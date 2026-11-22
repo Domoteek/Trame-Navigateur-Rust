@@ -164,15 +164,10 @@ impl App {
             .map(|o| o.id)
     }
 
-    /// Clic sur un acces rapide : l'onglet deja ouvert s'il y en a un, sinon la page ici
-    /// (page « Nouvel onglet ») ou dans un nouvel onglet (rail, clic du milieu).
+    /// Clic sur un acces rapide : **toujours** un nouvel onglet (rail, clic du milieu), meme si
+    /// le site est deja ouvert ailleurs (choix de Clement, 2026-11-22). Depuis la page « Nouvel
+    /// onglet », le site se charge a sa place : c'est deja un onglet neuf.
     fn ouvrir_acces(&mut self, url: &str, nouveau: bool) {
-        if let Some(id) = self.onglet_de_l_acces(url) {
-            if Some(id) != self.actif {
-                self.activer(id);
-            }
-            return;
-        }
         if nouveau {
             self.ouvrir_onglet(url.to_string(), Declencheur::NouvelOnglet, None);
         } else {
