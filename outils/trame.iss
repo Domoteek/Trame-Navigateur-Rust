@@ -6,7 +6,10 @@
 ; ni la desinstallation ne doivent detruire des onglets, des reglages ou une connexion.
 
 #define AppName "Trame"
-#define AppVersion "0.1.0"
+; Version : celle de Cargo.toml, passee par faire-setup.mjs (/DAppVersion=…).
+#ifndef AppVersion
+  #define AppVersion "0.2.0"
+#endif
 #define AppPublisher "Trame"
 #define AppExeName "trame.exe"
 ; Identite d'application Windows : la meme que `APP_USER_MODEL_ID` dans src/main.rs.

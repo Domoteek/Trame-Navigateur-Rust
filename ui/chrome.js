@@ -306,8 +306,8 @@ function rendreBandeAcces(s) {
       ipc({ m: "nouvelOnglet" });
     };
     bande.appendChild(plus);
-    // Les places libres restantes, en pointille : on voit qu'il y en a 10.
-    for (let i = liste.length + 1; i < max; i++) bande.appendChild(elem("span", "acces libre"));
+    // Pas de places vides dessinees : la bande ne prend que ce qu'elle montre (retour de
+    // Clement, 2026-11-22 : deux rangees de pointilles « faisaient vide »).
   }
 }
 

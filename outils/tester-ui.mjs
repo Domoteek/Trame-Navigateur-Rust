@@ -992,7 +992,7 @@ async function suite() {
     });
     await pousser(p, etat);
     egal(await p.$$eval("#bande-acces .acces:not(.ajout):not(.libre)", (n) => n.length), 1, "une pastille");
-    egal(await p.$$eval("#bande-acces .acces", (n) => n.length), 10, "10 places en tout");
+    egal(await p.$$eval("#bande-acces .acces", (n) => n.length), 2, "la pastille et « + », sans cases vides");
     await vider(p);
     await p.click("#bande-acces .acces >> nth=0");
     verifier((await messages(p)).some((m) => m.m === "accesOuvrir" && m.nouveau === true), "le clic ouvre dans un nouvel onglet");

@@ -233,7 +233,8 @@ function portePortable(v) {
 function compilerSetup(v) {
   dire("5. compilation de l'installation (Inno Setup)");
   if (!ISCC) echouer("ISCC.exe introuvable (Inno Setup 6)");
-  const r = lancer(ISCC, [path.join(ICI, "trame.iss")], {
+  // La version vient de Cargo.toml (seule source) : /D remplace celle ecrite dans trame.iss.
+  const r = lancer(ISCC, [`/DAppVersion=${v}`, path.join(ICI, "trame.iss")], {
     env: { ...process.env, TRAME_VERSION: v },
   });
   const setup = path.join(DIST, `Trame-${v}-setup.exe`);
