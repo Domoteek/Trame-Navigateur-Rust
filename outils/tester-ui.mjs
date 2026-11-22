@@ -1612,13 +1612,58 @@ async function suite() {
     verifier((await messages(r)).some((m) => m.m === "endormirFroids"), "Veille endort les onglets froids");
     await r.setViewportSize({ width: 64, height: 700 });
     egal(await visibles(), ["btn-veille"], "replié : Veille seule");
+    // Replie, la jauge est l'anneau (conic-gradient) autour du bouton Veille.
     const pied = await r.$eval(".rail-pied", (n) => {
-      const v = document.getElementById("btn-veille").getBoundingClientRect();
-      const j = document.querySelector(".jauge-budget").getBoundingClientRect();
-      return { droite: v.right, jauge: j.width, texte: document.querySelector("#btn-veille span").offsetParent !== null };
+      const b = document.getElementById("btn-veille");
+      const v = b.getBoundingClientRect();
+      return {
+        droite: v.right,
+        anneau: getComputedStyle(b).backgroundImage.includes("conic-gradient"),
+        jauge: b.style.getPropertyValue("--jauge"),
+        texte: document.querySelector("#btn-veille span").offsetParent !== null,
+      };
     });
-    verifier(pied.droite <= 64 && pied.jauge > 10 && !pied.texte, `replié : icône sans texte, jauge visible ${JSON.stringify(pied)}`);
-    verifier(((await r.getAttribute("#budget", "title")) || "").includes("éveillé"), "la jauge donne le détail au survol");
+    verifier(pied.droite <= 64 && pied.anneau && /%$/.test(pied.jauge) && !pied.texte, `replié : icône sans texte, jauge en anneau ${JSON.stringify(pied)}`);
+    verifier(((await r.getAttribute("#btn-veille", "title")) || "").includes("éveillé"), "l'anneau donne le détail au survol");
+  });
+
+  await cas("rail replié en dock : fils colorés, tuiles de 44 px, fil fermé en pile", async () => {
+    const r = await page("chrome.html", { query: "?surface=rail" });
+    await r.setViewportSize({ width: 64, height: 700 });
+    const e = etatDeBase();
+    e.fils = [
+      { id: 1, nom: "Ciné", replie: false, compte: 2 },
+      { id: 2, nom: "Musique", replie: false, compte: 4 },
+    ];
+    e.onglets = [
+      onglet(10, 1, "Netflix", "https://www.netflix.com/", { actif: true }),
+      onglet(11, 1, "Netflix 2", "https://www.netflix.com/browse"),
+      onglet(12, 2, "Radio 1", "https://www.youtube.com/watch?v=a"),
+      onglet(13, 2, "Radio 2", "https://www.youtube.com/watch?v=b"),
+      onglet(14, 2, "Radio 3", "https://www.youtube.com/watch?v=c"),
+      onglet(15, 2, "Radio 4", "https://www.youtube.com/watch?v=d"),
+    ];
+    await pousser(r, e);
+    const vu = await r.$eval(".fil", (f) => {
+      const o = f.querySelector(".onglet").getBoundingClientRect();
+      const nom = f.querySelector(".fil-nom");
+      return { c: f.style.getPropertyValue("--c"), l: o.width, h: o.height, droite: o.right, nom: nom.offsetParent !== null, cadre: getComputedStyle(f).borderTopWidth };
+    });
+    verifier(/^#/.test(vu.c) && vu.l === 44 && vu.h === 40 && vu.droite <= 64 && vu.nom && vu.cadre === "0px", `fil replié : ${JSON.stringify(vu)}`);
+    await vider(r);
+    await r.click(".fil-tete");
+    const m = (await messages(r)).find((x) => x.m === "filReplier");
+    verifier(m && m.replie === true, `un clic sur la tête replie le fil : ${JSON.stringify(m)}`);
+    const f0 = e.fils[1];
+    await pousser(r, { ...e, fils: e.fils.map((f) => (f.id === f0.id ? { ...f, replie: true } : f)) });
+    const pile = await r.$eval(`.fil[data-fil="${f0.id}"] .fil-pile`, (n) => {
+      const b = n.getBoundingClientRect();
+      return { vis: n.offsetParent !== null, n: n.children.length, plus: n.lastChild.textContent, droite: b.right };
+    });
+    verifier(pile.vis && pile.n === 3 && pile.plus === "+2" && pile.droite <= 64, `fil fermé : 2 icônes et « +2 » ${JSON.stringify(pile)}`);
+    await vider(r);
+    await r.click(`.fil[data-fil="${f0.id}"] .fil-pile`);
+    verifier((await messages(r)).some((x) => x.m === "filReplier" && x.replie === false), "un clic sur la pile déplie le fil");
   });
 
   await cas("logo : clic droit = menu des commandes, dessiné par la barre", async () => {

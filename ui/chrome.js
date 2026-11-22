@@ -233,10 +233,50 @@ function rendreBudget() {
     // Rail replie : le texte est cache, la jauge porte le detail.
     document.getElementById("budget").title = txt.textContent + "\n" + txt.title;
   }
-  if (jauge) {
-    const ratio = b.plafond > 0 ? Math.min(1, b.reveilles / b.plafond) : 0;
-    jauge.style.width = `${Math.round(ratio * 100)}%`;
+  const ratio = b.plafond > 0 ? Math.min(1, b.reveilles / b.plafond) : 0;
+  if (jauge) jauge.style.width = `${Math.round(ratio * 100)}%`;
+  // Rail replie : la jauge devient l'anneau autour du bouton Veille, qui porte aussi son detail.
+  const veille = document.getElementById("btn-veille");
+  if (veille) {
+    veille.style.setProperty("--jauge", `${Math.round(ratio * 100)}%`);
+    const base = "Endormir maintenant les onglets froids (leur page se ferme, l'onglet reste)";
+    veille.title = txt ? `${base}\n\n${txt.textContent}\n${txt.title}` : base;
   }
+}
+
+/* Couleur d'un fil dans le rail replie : tiree de son identifiant, donc stable d'une session a
+   l'autre. Un fil cloisonne garde l'ambre, sa marque partout ailleurs. */
+const COULEURS_FIL = ["#5eead4", "#f0a35e", "#60a5fa", "#a78bfa", "#f472b6", "#facc15", "#34d399", "#fb7185"];
+function couleurFil(f) {
+  if (f.cloison) return "#fbbf24";
+  let h = 0;
+  for (const c of String(f.id)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return COULEURS_FIL[h % COULEURS_FIL.length];
+}
+
+/* Fil ferme, rail replie : ses icones empilees sur une ligne (3 au plus, la 3e devient « +N »). */
+function pileFil(f, onglets) {
+  const pile = elem("button", "fil-pile");
+  pile.title = `${f.nom} : ${onglets.length} onglet(s) — cliquer pour déplier`;
+  const montres = onglets.length > 3 ? onglets.slice(0, 2) : onglets;
+  for (const o of montres) {
+    const p = elem("span", "pastille lettre", initiale(o.titre || o.domaine));
+    if (o.favicon && /^https?:|^data:/.test(o.favicon)) {
+      const img = document.createElement("img");
+      img.src = o.favicon;
+      img.alt = "";
+      img.onerror = () => img.remove();
+      p.textContent = "";
+      p.appendChild(img);
+    }
+    pile.appendChild(p);
+  }
+  if (onglets.length > 3) pile.appendChild(elem("span", "pastille lettre plus", `+${onglets.length - 2}`));
+  pile.onclick = (e) => {
+    e.stopPropagation();
+    ipc({ m: "filReplier", id: f.id, replie: false });
+  };
+  return pile;
 }
 
 function rendreSuggestion(s) {
@@ -593,8 +633,13 @@ function rendreRail(s) {
 
     const bloc = elem("div", "fil" + (f.replie ? " replie" : "") + (f.cloison ? " cloisonne" : ""));
     bloc.dataset.fil = f.id;
+    bloc.style.setProperty("--c", couleurFil(f));
 
     const tete = elem("div", "fil-tete");
+    // Rail replie : le chevron est cache, la tete (pastille + nom) replie et deplie le fil.
+    tete.onclick = () => {
+      if (window.innerWidth < 130) ipc({ m: "filReplier", id: f.id, replie: !f.replie });
+    };
     const chev = elem("button", "chev");
     chev.title = f.replie ? "Déplier" : "Replier";
     chev.appendChild(icone("chevron", "petit"));
@@ -649,6 +694,8 @@ function rendreRail(s) {
       const liste = elem("div", "fil-onglets");
       for (const o of onglets) liste.appendChild(ligneOnglet(o));
       bloc.appendChild(liste);
+    } else {
+      bloc.appendChild(pileFil(f, onglets));
     }
 
     // depot : tisser un onglet dans ce fil

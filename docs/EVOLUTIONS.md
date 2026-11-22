@@ -587,6 +587,27 @@ deux boutons portent leur icône.
 Preuve : `cargo test --release` 172/172, `tester-ui.mjs` 61/61 (cas neuf : pied déplié et
 replié, plus de bouton Réveiller).
 
+## 10 septies. 2026-11-22, nuit — le rail replié en « dock »
+
+Clément trouvait le rail replié « léger » : icônes de 16 px (12 px en réalité, la règle des
+pastilles de fenêtre `.pastille` écrasait celle des onglets), chaque fil dans une carte bordée,
+une tête de fil réduite à un chevron. Trois maquettes à taille réelle
+(`docs/maquettes/rail-replie.html`) ; choix de Clément : la piste A, plus deux idées de la B.
+
+| Évolution | Détail |
+|---|---|
+| Plus de cartes | un filet entre deux fils, la bande d'accès rapides sans cadre ni case « + » |
+| Icônes de 22 px | dans des tuiles de 44 × 40 ; l'onglet affiché a un trait turquoise au bord du rail |
+| Couleur par fil | tirée de l'identifiant (`couleurFil`), ambre pour un fil cloisonné ; pastille + nom en capitales ; un clic sur la tête replie ou déplie |
+| Fil fermé en pile | ses icônes empilées sur une ligne, « +N » au-delà de 3 (`pileFil`) |
+| Son et veille sur l'icône | haut-parleur en pastille sur le coin (clic = couper) ; onglet en veille grisé avec un point violet |
+| Jauge en anneau | autour du bouton Veille (`--jauge`), qui porte le détail de mémoire dans sa bulle |
+
+Seul le rail replié change (`@media (max-width: 130px)`), le rail déplié reste tel quel.
+
+Preuve : `tester-ui.mjs` 62/62 (cas neuf : fils colorés, tuiles de 44 px, pile « +2 », clics),
+capture du rail replié en navigateur invisible. Pas encore vu dans la vraie fenêtre.
+
 ## 11. L'état aujourd'hui
 
 ```

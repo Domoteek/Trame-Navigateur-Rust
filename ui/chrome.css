@@ -1249,3 +1249,110 @@ body[data-fenetre="rail"] .pastilles { display: flex; }
   .pied-actions button { width: 36px; height: 32px; flex: 0 0 auto; padding: 0; }
   .pied-actions .ic.petit { width: 16px; height: 16px; }
 }
+
+/* Fil ferme vu en pile d'icones : seulement dans le rail replie. */
+.fil-pile { display: none; }
+
+/* ------------------------------------------- rail replie, version « dock » (2026-11-22)
+   Choix de Clement sur maquettes (docs/maquettes/rail-replie.html) : piste A, plus deux idees
+   de la B. Plus de cartes autour des fils, des icones de 22 px dans des tuiles de 44 x 40, le
+   nom du fil dans sa couleur, le son et la veille poses sur l'icone, un fil ferme sur une seule
+   ligne, la jauge en anneau autour du bouton Veille. */
+@media (max-width: 130px) {
+  /* Tete : le « + » devient le bouton principal, le « » » se fait discret. */
+  #btn-nouvel {
+    width: 44px; height: 32px; border-radius: 10px;
+    background: var(--surface-2); border: 1px solid var(--bord-fort); color: var(--texte);
+  }
+  #btn-nouvel:hover { background: var(--surface-3); }
+  #btn-rail { width: 30px; height: 22px; border-radius: 6px; color: var(--texte-3); }
+  #btn-rail:hover { color: var(--texte); }
+
+  /* Acces rapides : icones nues, sans cadre ; un filet les separe des fils. */
+  .bande-acces {
+    margin: 0 10px 4px; padding: 0 0 6px; gap: 2px;
+    border: 0; border-bottom: 1px solid var(--bord); border-radius: 0; background: none;
+  }
+  .bande-acces .acces {
+    aspect-ratio: auto; height: 40px; min-height: 0;
+    border-radius: 10px; background: transparent; border-color: transparent;
+  }
+  .bande-acces .acces:hover { background: var(--surface-2); border-color: transparent; transform: none; }
+  .bande-acces .acces img { width: 22px; height: 22px; }
+  .bande-acces .acces .lettre { width: 22px; height: 22px; font-size: 12px; }
+  .bande-acces .acces.ajout { display: none; }
+
+  /* Fils : plus de carte, un filet entre deux fils. */
+  .fils { padding: 2px 0 8px; scrollbar-width: none; }
+  .fils::-webkit-scrollbar { width: 0; }
+  .fil, .fil.cloisonne {
+    margin: 0 10px; padding: 2px 0 6px;
+    border: 0; border-radius: 0; background: none;
+  }
+  .fil + .fil { border-top: 1px solid var(--bord); }
+  .fil.survol-tissage { background: rgba(94, 234, 212, 0.07); border-radius: 10px; }
+
+  /* Tete du fil : pastille et nom dans la couleur du fil ; un clic replie ou deplie. */
+  .fil-tete { padding: 6px 0 3px; gap: 4px; justify-content: center; cursor: pointer; border-radius: 6px; }
+  .fil-tete:hover { background: rgba(255, 255, 255, 0.04); }
+  .fil-tete::before {
+    content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--c, var(--texte-3));
+  }
+  .fil-tete .chev { display: none; }
+  .rail .fil-tete .fil-nom {
+    display: block !important; flex: 0 1 auto; min-width: 0; max-width: 36px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--c, var(--texte-2));
+  }
+
+  /* Fil ferme : ses icones empilees, sur une ligne. */
+  .fil-pile {
+    display: flex; justify-content: center; align-items: center;
+    width: 44px; height: 32px; margin: 0 auto; padding: 0; border-radius: 10px;
+  }
+  .fil-pile:hover { background: var(--surface-2); }
+  .fil-pile .pastille { width: 20px; height: 20px; border-radius: 6px; box-shadow: 0 0 0 2px var(--fond); font-size: 9px; }
+  .fil-pile .pastille + .pastille { margin-left: -8px; }
+  .fil-pile .pastille img { width: 20px; height: 20px; border-radius: 6px; }
+  .fil-pile .pastille.plus { font-size: 8.5px; letter-spacing: -0.02em; color: var(--texte); background: var(--surface-3); }
+
+  /* Onglets : tuiles de 44 x 40, icone de 22 px. */
+  .fil-onglets { padding: 0; display: grid; gap: 2px; }
+  .onglet { width: 44px; height: 40px; margin: 0 auto; border-radius: 10px; }
+  .onglet:hover { background: var(--surface-2); }
+  .onglet .pastille { width: 22px; height: 22px; border-radius: 7px; font-size: 11px; }
+  .onglet .pastille img { width: 22px; height: 22px; border-radius: 6px; }
+  /* Onglet affiche : fond plus clair et trait turquoise colle au bord du rail. */
+  .onglet.actif { background: var(--surface-3); box-shadow: none; }
+  .onglet.actif::before {
+    content: ""; position: absolute; left: -10px; top: 10px; bottom: 10px; width: 3px;
+    border-radius: 0 3px 3px 0; background: var(--vif);
+  }
+  /* En veille : icone grisee et point violet. */
+  .onglet.endormi .pastille { filter: grayscale(1); opacity: 0.45; }
+  .onglet.endormi::after {
+    content: ""; position: absolute; right: 7px; top: 6px; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--dormant); box-shadow: 0 0 0 2px var(--fond);
+  }
+  /* Son : une pastille sur le coin de l'icone (clic = couper, comme avant). */
+  .onglet .son {
+    position: absolute; right: 3px; bottom: 2px; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--fond); box-shadow: 0 0 0 1px var(--bord);
+  }
+  .onglet .son .ic { width: 10px; height: 10px; stroke-width: 2.4; }
+  .onglet .son:hover { background: var(--surface-3); }
+
+  /* Pied : la jauge devient un anneau autour du bouton Veille (le detail est dans sa bulle). */
+  .rail-pied { border-top: 0; background: none; padding: 6px 0 12px; }
+  .budget { display: none; }
+  .pied-actions { justify-content: center; }
+  .pied-actions #btn-veille {
+    position: relative; width: 38px; height: 38px; border-radius: 50%; border: 0;
+    background: conic-gradient(var(--accent) 0 var(--jauge, 0%), var(--surface-3) var(--jauge, 0%) 100%);
+  }
+  .pied-actions #btn-veille::before {
+    content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--fond);
+  }
+  .pied-actions #btn-veille:hover::before { background: var(--surface-2); }
+  .pied-actions #btn-veille .ic { position: relative; }
+}

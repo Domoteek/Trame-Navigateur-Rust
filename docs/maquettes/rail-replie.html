@@ -1,0 +1,297 @@
+<title>Rail replié de Trame</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Mise en page : une rangée de colonnes, une par variante, chaque rail à taille réelle dans un faux bout de fenêtre. */
+:root {
+  color-scheme: dark;
+  --fond: #080b11; --fond-2: #0b0f17; --surface: #101521; --surface-2: #151c2a; --surface-3: #1b2434;
+  --bord: rgba(255,255,255,.07); --bord-fort: rgba(255,255,255,.14);
+  --texte: #e9eefa; --texte-2: #97a4bb; --texte-3: #616e85;
+  --vif: #5eead4; --dormant: #8b7cf6; --accent: #60a5fa; --tiede: #fbbf24;
+  --page: #05070b;
+  --f: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+}
+body { background: var(--page); color: var(--texte); font-family: var(--f); font-size: 14px;
+  padding-left: max(16px, env(safe-area-inset-left,0px)); padding-right: max(16px, env(safe-area-inset-right,0px)); padding-block: 28px 48px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 28px; }
+h1 { font-size: 26px; margin: 0; font-weight: 650; letter-spacing: -.01em; text-wrap: balance; }
+.intro { color: var(--texte-2); max-width: 70ch; line-height: 1.55; margin: 6px 0 0; }
+.constat { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 10px; }
+.constat div { background: var(--surface); border: 1px solid var(--bord); border-radius: 10px; padding: 12px 14px; color: var(--texte-2); line-height: 1.45; font-size: 13px; }
+.constat b { color: var(--texte); display: block; margin-bottom: 3px; font-size: 13.5px; }
+
+.grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px,1fr)); gap: 18px; align-items: start; }
+.variante { background: var(--fond-2); border: 1px solid var(--bord); border-radius: 14px; padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.variante.actuel { opacity: .9; }
+.v-tete { display: flex; align-items: baseline; gap: 8px; }
+.v-tete .lettre { font-size: 12px; font-weight: 700; color: var(--fond); background: var(--vif); border-radius: 6px; padding: 2px 7px; }
+.actuel .v-tete .lettre { background: var(--texte-3); }
+.v-tete h2 { font-size: 16px; margin: 0; font-weight: 650; }
+.v-tete .larg { margin-left: auto; color: var(--texte-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.scene { display: flex; gap: 0; height: 560px; border-radius: 12px; overflow: visible; position: relative; }
+.page-fausse { flex: 1; background: linear-gradient(180deg,#141a25,#0e131c); border-radius: 0 12px 12px 0; border: 1px solid var(--bord); border-left: 0; }
+.notes { margin: 0; padding-left: 18px; color: var(--texte-2); line-height: 1.5; font-size: 13px; display: grid; gap: 4px; }
+.notes b { color: var(--texte); font-weight: 600; }
+
+/* ---------- éléments communs des rails ---------- */
+.rail { background: var(--fond); border: 1px solid var(--bord); border-radius: 12px 0 0 12px; display: flex; flex-direction: column; align-items: stretch; padding: 8px 0; gap: 0; flex: 0 0 auto; position: relative; }
+.feux { display: flex; justify-content: center; gap: 5px; padding: 2px 0 8px; }
+.feux i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+.feux i:nth-child(1){background:#f5c043}.feux i:nth-child(2){background:#3fc07a}.feux i:nth-child(3){background:#f0605d}
+.ico { border-radius: 6px; display: grid; place-items: center; font-weight: 800; color: #fff; font-family: var(--f); flex: 0 0 auto; }
+.ico.yt { background: #e8322d; } .ico.am { background: #f08c1a; } .ico.nf { background: #1f2736; color: #9fb0cc; border: 1px solid #2c3749; } .ico.yt2{background:#e8322d}
+.ico svg { width: 55%; height: 55%; fill: #fff; }
+.ic { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- ACTUEL (64 px) ---------- */
+.r0 { width: 64px; }
+.r0 .btn { width: 27px; height: 27px; border-radius: 8px; margin: 2px auto; display: grid; place-items: center; color: var(--texte-2); }
+.r0 .boite { margin: 0 6px 7px; border: 1px solid var(--bord); background: var(--surface); border-radius: 12px; padding: 5px; display: grid; gap: 4px; justify-items: center; }
+.r0 .case { width: 38px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--surface-2); }
+.r0 .case.libre { background: none; border: 1px dashed var(--bord-fort); color: var(--texte-3); }
+.r0 .chev { color: var(--texte-3); height: 18px; display: grid; place-items: center; }
+.r0 .ong { width: 40px; height: 30px; display: grid; grid-auto-flow: column; place-items: center; gap: 3px; border-radius: 8px; }
+.r0 .ong.actif { background: #1a2a44; outline: 1px solid #2d4f80; }
+.r0 .son { color: var(--vif); }
+.r0 .pied { margin-top: auto; display: grid; justify-items: center; gap: 8px; }
+.r0 .jauge { width: 30px; height: 3px; border-radius: 2px; background: var(--accent); }
+
+/* ---------- A : DOCK NET (64 px) ---------- */
+.ra { width: 64px; }
+.ra .actions { display: grid; justify-items: center; gap: 4px; padding-bottom: 8px; }
+.ra .nouveau { width: 44px; height: 32px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--bord-fort); color: var(--texte); display: grid; place-items: center; }
+.ra .sep { height: 1px; background: var(--bord); margin: 6px 12px; }
+.ra .tuile { position: relative; width: 44px; height: 40px; margin: 2px auto; border-radius: 10px; display: grid; place-items: center; }
+.ra .tuile:hover, .ra .tuile.survol { background: var(--surface-2); }
+.ra .tuile.actif { background: var(--surface-3); }
+.ra .tuile.actif::before { content: ""; position: absolute; left: -10px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--vif); }
+.ra .tuile .ico { width: 24px; height: 24px; font-size: 13px; }
+.ra .badge-son { position: absolute; right: 4px; bottom: 3px; width: 15px; height: 15px; border-radius: 50%; background: var(--fond); display: grid; place-items: center; color: var(--vif); }
+.ra .badge-son .ic { width: 10px; height: 10px; stroke-width: 2.4; }
+.ra .tuile.dort .ico { filter: grayscale(1); opacity: .45; }
+.ra .tuile.dort::after { content: ""; position: absolute; right: 7px; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--dormant); box-shadow: 0 0 0 2px var(--fond); }
+.ra .fil-tag { display: flex; align-items: center; justify-content: center; gap: 4px; margin: 4px 0 2px; font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.ra .fil-tag i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+.ra .pied { margin-top: auto; display: grid; justify-items: center; }
+.anneau { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: var(--texte-2);
+  background: conic-gradient(var(--accent) 0 62%, var(--surface-3) 62% 100%); position: relative; }
+.anneau::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--fond); }
+.anneau .ic { position: relative; }
+
+/* infobulle de démonstration */
+.bulle { position: absolute; left: calc(100% + 10px); background: var(--surface-3); border: 1px solid var(--bord-fort); border-radius: 9px; padding: 7px 10px; white-space: nowrap; font-size: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.45); z-index: 3; }
+.bulle small { display: block; color: var(--texte-3); font-size: 11px; margin-top: 1px; }
+.bulle::before { content: ""; position: absolute; left: -5px; top: 50%; width: 8px; height: 8px; background: var(--surface-3); border-left: 1px solid var(--bord-fort); border-bottom: 1px solid var(--bord-fort); transform: translateY(-50%) rotate(45deg); }
+
+/* ---------- B : FILS EN COULEUR (64 px) ---------- */
+.rb { width: 64px; }
+.rb .actions { display: flex; justify-content: center; gap: 4px; padding-bottom: 8px; }
+.rb .mini { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; color: var(--texte-2); background: var(--surface); }
+.rb .acces { display: grid; justify-items: center; gap: 6px; padding: 4px 0 10px; }
+.rb .acces .ico { width: 30px; height: 30px; border-radius: 9px; font-size: 15px; }
+.rb .fil { margin: 0 7px 8px; border-radius: 14px; padding: 4px 0 6px; display: grid; justify-items: center; gap: 4px; background: color-mix(in srgb, var(--c) 10%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 28%, transparent); }
+.rb .pastille-fil { width: 34px; height: 18px; border-radius: 9px; background: color-mix(in srgb, var(--c) 30%, transparent); color: color-mix(in srgb, var(--c) 85%, white); font-size: 10px; font-weight: 800; display: grid; place-items: center; letter-spacing: .03em; }
+.rb .t { position: relative; width: 36px; height: 34px; border-radius: 10px; display: grid; place-items: center; }
+.rb .t.actif { background: color-mix(in srgb, var(--c) 26%, transparent); }
+.rb .t .ico { width: 22px; height: 22px; font-size: 12px; }
+.rb .t .onde { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; align-items: flex-end; height: 5px; }
+.rb .t .onde i { width: 2px; background: var(--vif); border-radius: 1px; display: block; }
+.rb .t .onde i:nth-child(1){height:3px}.rb .t .onde i:nth-child(2){height:5px}.rb .t .onde i:nth-child(3){height:2px}
+.rb .fil.ferme { padding: 5px 0; }
+.rb .pile { display: flex; }
+.rb .pile .ico { width: 20px; height: 20px; font-size: 10px; border: 2px solid var(--fond); border-radius: 7px; }
+.rb .pile .ico + .ico { margin-left: -8px; }
+.rb .pied { margin-top: auto; display: grid; justify-items: center; gap: 6px; }
+.rb .vide { margin: 0 7px; height: 34px; border-radius: 12px; border: 1px dashed var(--bord-fort); color: var(--texte-3); display: grid; place-items: center; font-size: 11px; }
+
+/* ---------- C : RAIL AVEC LÉGENDES (84 px) ---------- */
+.rc { width: 84px; }
+.rc .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 0 8px 8px; }
+.rc .actions span { height: 28px; border-radius: 8px; background: var(--surface); display: grid; place-items: center; color: var(--texte-2); }
+.rc .actions span.plus { background: var(--surface-3); color: var(--texte); }
+.rc .lab { font-size: 9.5px; color: var(--texte-3); text-transform: uppercase; letter-spacing: .09em; font-weight: 700; padding: 8px 10px 3px; display: flex; align-items: center; gap: 5px; }
+.rc .lab i { width: 6px; height: 6px; border-radius: 50%; }
+.rc .lab .n { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--texte-3); font-weight: 600; letter-spacing: 0; }
+.rc .it { position: relative; margin: 1px 6px; border-radius: 10px; padding: 6px 2px 5px; display: grid; justify-items: center; gap: 3px; }
+.rc .it.actif { background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--bord-fort); }
+.rc .it .ico { width: 24px; height: 24px; font-size: 12px; }
+.rc .it small { font-size: 10px; color: var(--texte-2); max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc .it.actif small { color: var(--texte); }
+.rc .it .son { position: absolute; top: 4px; right: 9px; color: var(--vif); }
+.rc .it .son .ic { width: 11px; height: 11px; }
+.rc .it.dort .ico { filter: grayscale(1); opacity: .45; } .rc .it.dort small { color: var(--texte-3); font-style: italic; }
+.rc .acces2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 2px 12px 6px; justify-items: center; }
+.rc .acces2 .ico { width: 26px; height: 26px; font-size: 13px; border-radius: 8px; }
+.rc .pied { margin-top: auto; padding: 0 8px; display: grid; gap: 6px; }
+.rc .budget { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--texte-2); font-variant-numeric: tabular-nums; }
+.rc .budget .barre { flex: 1; height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
+.rc .budget .barre::before { content: ""; display: block; width: 62%; height: 100%; background: var(--accent); }
+.rc .veille { height: 28px; border-radius: 8px; background: var(--surface); display: flex; align-items: center; justify-content: center; gap: 5px; color: var(--texte-2); font-size: 11px; }
+
+.choix { background: var(--surface); border: 1px solid var(--bord); border-radius: 12px; padding: 14px 16px; color: var(--texte-2); line-height: 1.55; }
+.choix b { color: var(--texte); }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="dbl" viewBox="0 0 24 24"><path d="m6 17 5-5-5-5M13 17l5-5-5-5"/></symbol>
+  <symbol id="son" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4zM16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></symbol>
+  <symbol id="lune" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="chevd" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header>
+    <h1>Rail replié de Trame : trois pistes</h1>
+    <p class="intro">Les quatre rails sont dessinés à taille réelle, avec le contenu de ta capture : deux accès rapides, un fil de deux onglets N, un fil de deux onglets YouTube qui jouent du son, un fil vide. Les noms de fils (« Ciné », « Musique ») sont des exemples.</p>
+  </header>
+
+  <section class="constat">
+    <div><b>Des boîtes dans des boîtes</b>Chaque fil est une carte bordée, dans un rail déjà sombre : beaucoup de cadres pour peu de contenu.</div>
+    <div><b>Icônes trop petites</b>16 px dans des cases de 30 px : à 64 px de large, on peut monter à 22–24 px.</div>
+    <div><b>Fils sans identité</b>Une tête de fil n'affiche qu'un chevron : rien ne dit lequel est lequel une fois replié.</div>
+    <div><b>États peu lisibles</b>Le son est une icône à côté du logo, l'onglet actif un simple contour, l'onglet endormi ne se voit pas.</div>
+  </section>
+
+  <section class="grille">
+
+    <!-- ACTUEL -->
+    <article class="variante actuel">
+      <div class="v-tete"><span class="lettre">0</span><h2>Aujourd'hui</h2><span class="larg">64 px</span></div>
+      <div class="scene">
+        <nav class="rail r0">
+          <div class="feux"><i></i><i></i><i></i></div>
+          <span class="btn"><svg class="ic"><use href="#plus"/></svg></span>
+          <span class="btn"><svg class="ic"><use href="#dbl"/></svg></span>
+          <div class="boite" style="margin-top:6px">
+            <span class="case"><span class="ico yt" style="width:18px;height:13px;border-radius:4px"><svg><use href="#play"/></svg></span></span>
+            <span class="case"><span class="ico am" style="width:16px;height:16px;font-size:9px">a</span></span>
+            <span class="case libre"><svg class="ic"><use href="#plus"/></svg></span>
+          </div>
+          <div class="boite"><span class="chev"><svg class="ic"><use href="#chevd"/></svg></span></div>
+          <div class="boite"><span class="chev"><svg class="ic"><use href="#chev"/></svg></span>
+            <span class="ong"><span class="ico nf" style="width:14px;height:14px;font-size:8px;border-radius:50%">N</span></span>
+            <span class="ong"><span class="ico nf" style="width:14px;height:14px;font-size:8px;border-radius:50%">N</span></span></div>
+          <div class="boite"><span class="chev"><svg class="ic"><use href="#chev"/></svg></span>
+            <span class="ong"><span class="ico yt" style="width:14px;height:14px;border-radius:50%"><svg><use href="#play"/></svg></span><svg class="ic son" style="width:12px"><use href="#son"/></svg></span>
+            <span class="ong actif"><span class="ico yt" style="width:14px;height:14px;border-radius:50%"><svg><use href="#play"/></svg></span><svg class="ic son" style="width:12px"><use href="#son"/></svg></span></div>
+          <div class="boite"><span class="chev"><svg class="ic"><use href="#chev"/></svg></span><span class="ong"><span style="width:14px;height:14px;border-radius:50%;background:#24304a;display:block"></span></span></div>
+          <div class="pied"><span class="jauge"></span><span class="btn"><svg class="ic"><use href="#lune"/></svg></span></div>
+        </nav>
+        <div class="page-fausse"></div>
+      </div>
+      <ul class="notes"><li>Pour comparer.</li></ul>
+    </article>
+
+    <!-- A -->
+    <article class="variante">
+      <div class="v-tete"><span class="lettre">A</span><h2>Dock net</h2><span class="larg">64 px</span></div>
+      <div class="scene">
+        <nav class="rail ra">
+          <div class="feux"><i></i><i></i><i></i></div>
+          <div class="actions">
+            <span class="nouveau"><svg class="ic"><use href="#plus"/></svg></span>
+          </div>
+          <span class="tuile"><span class="ico yt"><svg><use href="#play"/></svg></span></span>
+          <span class="tuile"><span class="ico am">a</span></span>
+          <div class="sep"></div>
+          <div class="fil-tag" style="color:#f0a35e"><i style="background:#f0a35e"></i>Ciné</div>
+          <span class="tuile survol"><span class="ico nf" style="border-radius:50%">N</span>
+            <span class="bulle" style="top:6px">Netflix · Accueil<small>Fil Ciné · actif il y a 4 min</small></span></span>
+          <span class="tuile dort"><span class="ico nf" style="border-radius:50%">N</span></span>
+          <div class="sep"></div>
+          <div class="fil-tag" style="color:#5eead4"><i style="background:#5eead4"></i>Musique</div>
+          <span class="tuile"><span class="ico yt"><svg><use href="#play"/></svg></span><span class="badge-son"><svg class="ic"><use href="#son"/></svg></span></span>
+          <span class="tuile actif"><span class="ico yt"><svg><use href="#play"/></svg></span><span class="badge-son"><svg class="ic"><use href="#son"/></svg></span></span>
+          <div class="sep"></div>
+          <div class="fil-tag" style="color:var(--texte-3)"><i style="background:var(--texte-3)"></i>Vide</div>
+          <div class="pied"><span class="anneau" title="Mémoire 62 % · clic = Veille"><svg class="ic"><use href="#lune"/></svg></span></div>
+        </nav>
+        <div class="page-fausse"></div>
+      </div>
+      <ul class="notes">
+        <li><b>Plus aucune carte</b> : de simples filets séparent les fils, le nom du fil en petites capitales et sa couleur au-dessus.</li>
+        <li><b>Icônes 24 px</b> dans des tuiles de 44 × 40 ; l'onglet actif a un trait turquoise collé au bord du rail.</li>
+        <li><b>Son</b> = pastille sur le coin de l'icône ; <b>veille</b> = icône grisée + point violet.</li>
+        <li>Le « » » et la case « + » vide disparaissent : déplier au survol du bord, ajouter un accès par glisser-déposer.</li>
+        <li><b>Jauge + Veille fusionnées</b> en un anneau autour de la lune.</li>
+      </ul>
+    </article>
+
+    <!-- B -->
+    <article class="variante">
+      <div class="v-tete"><span class="lettre">B</span><h2>Fils en couleur</h2><span class="larg">64 px</span></div>
+      <div class="scene">
+        <nav class="rail rb">
+          <div class="feux"><i></i><i></i><i></i></div>
+          <div class="actions">
+            <span class="mini"><svg class="ic"><use href="#plus"/></svg></span>
+            <span class="mini"><svg class="ic"><use href="#dbl"/></svg></span>
+          </div>
+          <div class="acces">
+            <span class="ico yt"><svg><use href="#play"/></svg></span>
+            <span class="ico am">a</span>
+          </div>
+          <div class="fil ferme" style="--c:#f0a35e">
+            <span class="pastille-fil">CI · 2</span>
+            <span class="pile"><span class="ico nf" style="border-radius:50%">N</span><span class="ico nf" style="border-radius:50%">N</span></span>
+          </div>
+          <div class="fil" style="--c:#5eead4">
+            <span class="pastille-fil">MU</span>
+            <span class="t"><span class="ico yt"><svg><use href="#play"/></svg></span><span class="onde"><i></i><i></i><i></i></span></span>
+            <span class="t actif"><span class="ico yt"><svg><use href="#play"/></svg></span><span class="onde"><i></i><i></i><i></i></span></span>
+          </div>
+          <div class="vide">+ fil</div>
+          <div class="pied"><span class="anneau"><svg class="ic"><use href="#lune"/></svg></span></div>
+        </nav>
+        <div class="page-fausse"></div>
+      </div>
+      <ul class="notes">
+        <li><b>Chaque fil prend une couleur</b> (choisie par toi) : fond teinté et pastille avec ses deux initiales.</li>
+        <li><b>Fil fermé</b> = ses icônes empilées et le nombre d'onglets, sur une seule ligne : on gagne de la hauteur.</li>
+        <li><b>Son</b> = petite onde animée sous l'icône, visible même de loin.</li>
+        <li>Les accès rapides passent en icônes nues de 30 px, sans cadre ; le fil vide devient un simple « + fil ».</li>
+      </ul>
+    </article>
+
+    <!-- C -->
+    <article class="variante">
+      <div class="v-tete"><span class="lettre">C</span><h2>Rail avec légendes</h2><span class="larg">84 px</span></div>
+      <div class="scene">
+        <nav class="rail rc">
+          <div class="feux"><i></i><i></i><i></i></div>
+          <div class="actions">
+            <span class="plus"><svg class="ic"><use href="#plus"/></svg></span>
+            <span><svg class="ic"><use href="#dbl"/></svg></span>
+          </div>
+          <div class="acces2">
+            <span class="ico yt"><svg><use href="#play"/></svg></span>
+            <span class="ico am">a</span>
+          </div>
+          <div class="lab"><i style="background:#f0a35e"></i>Ciné<span class="n">2</span></div>
+          <div class="it"><span class="ico nf" style="border-radius:50%">N</span><small>Accueil</small></div>
+          <div class="it dort"><span class="ico nf" style="border-radius:50%">N</span><small>en veille</small></div>
+          <div class="lab"><i style="background:#5eead4"></i>Musique<span class="n">2</span></div>
+          <div class="it"><span class="son"><svg class="ic"><use href="#son"/></svg></span><span class="ico yt"><svg><use href="#play"/></svg></span><small>Lofi radio</small></div>
+          <div class="it actif"><span class="son"><svg class="ic"><use href="#son"/></svg></span><span class="ico yt"><svg><use href="#play"/></svg></span><small>Ma musique</small></div>
+          <div class="lab" style="opacity:.6"><i style="background:var(--texte-3)"></i>Vide<span class="n">0</span></div>
+          <div class="pied">
+            <div class="budget"><span class="barre"></span>62 %</div>
+            <div class="veille"><svg class="ic"><use href="#lune"/></svg>Veille</div>
+          </div>
+        </nav>
+        <div class="page-fausse"></div>
+      </div>
+      <ul class="notes">
+        <li><b>20 px de plus</b> pour écrire : le début du titre de chaque onglet sous son icône.</li>
+        <li>Le nom du fil et son nombre d'onglets restent lisibles, sans survoler.</li>
+        <li>La jauge retrouve son pourcentage et « Veille » son mot.</li>
+        <li>Coûte un peu de largeur de page ; à garder si tu replies le rail surtout pour gagner en calme, pas en place.</li>
+      </ul>
+    </article>
+  </section>
+
+  <p class="choix"><b>Mon conseil :</b> la <b>A</b> comme base (le plus gros gain de lisibilité sans changer la largeur), avec deux idées de la <b>B</b> : la couleur par fil et le fil fermé sur une seule ligne. Les pièces se combinent : dis-moi lesquelles garder et je l'applique dans <code>ui/chrome.css</code>.</p>
+</div>
