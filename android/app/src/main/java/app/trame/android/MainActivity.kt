@@ -153,7 +153,6 @@ class MainActivity : Activity() {
             isSingleLine = true
             imeOptions = EditorInfo.IME_ACTION_GO
             inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI or android.text.InputType.TYPE_CLASS_TEXT
-            setSelectAllOnFocus(true)
             setOnEditorActionListener { _, id, ev ->
                 if (id == EditorInfo.IME_ACTION_GO || (ev?.keyCode == KeyEvent.KEYCODE_ENTER)) {
                     ouvrir(normaliser(text.toString()), nouvelOnglet = false)
@@ -161,7 +160,15 @@ class MainActivity : Activity() {
                     true
                 } else false
             }
-            setOnFocusChangeListener { _, focus -> if (!focus) majBarre() else setText(actif?.url?.let { u -> if (u == ACCUEIL) "" else u } ?: "") }
+            // Au toucher : l'adresse complète, entièrement sélectionnée (taper la remplace).
+            // setText après coup annulait la sélection : on la refait ensuite.
+            setOnFocusChangeListener { _, focus ->
+                if (!focus) majBarre()
+                else {
+                    setText(actif?.url?.let { u -> if (u == ACCUEIL) "" else u } ?: "")
+                    post { selectAll() }
+                }
+            }
         }
         bouclier = TextView(this).apply {
             textSize = 11f
@@ -347,7 +354,11 @@ class MainActivity : Activity() {
         actif?.session?.setActive(false)
         vue.releaseSession()
         actif = o
-        vue.setSession(o.session) // ouvre la session si GeckoView ne l'a pas encore fait
+        // Onglet restauré : sa session n'a jamais été ouverte. GeckoView.setSession ne l'ouvre PAS
+        // (constaté le 23/11 sur le téléphone : page noire, rien ne répondait). Les sessions
+        // rendues à Gecko (onNewSession, onNewTab) sont ouvertes par Gecko lui-même : pas ici.
+        if (o.aCharger && !o.session.isOpen) o.session.open(runtime)
+        vue.setSession(o.session)
         o.session.setActive(true)
         if (o.aCharger) {
             o.aCharger = false
