@@ -1050,6 +1050,16 @@ l'hôte le relaie à la barre avec la hauteur de la fenêtre, et la barre dessin
 (`menuAcces` dans `chrome.js`, commun aux deux) collé au rail, à la hauteur de l'icône. Preuves :
 `tester-ui` **85/85** (menu, Ouvrir, Modifier avec l'ancienne adresse et le groupe), banc
 `eprouver-bulles.mjs` sur le vrai binaire (clic droit réel : menu dans la barre, entier).
+**0.4.50 — le rail replié à son goût.** « Dissocier visuellement les applications ancrées et les
+onglets » (Clément, 23/11) : maquette `docs/maquettes/rail-replie-acces.html` (4 variantes), puis
+« prendre les meilleurs » dans Réglages > Apparence > Rail replié. Deux choix combinables :
+**accès rapides** `cases` (origine), `socle`, `ronds`, `grille` ; **groupes d'onglets**
+`etiquettes` (origine), `cartes`, `trait`. `reglages.json` (`rail_acces`, `rail_onglets`, valeurs
+inconnues refusées), message `railStyle`, attributs `data-rail-acces` / `data-rail-onglets` sur
+`<body>`, tout le dessin en CSS et seulement rail replié. La bulle de la tête d'un groupe donne
+son nom (seul endroit où il se lit en style `trait`). Preuves : `tester-ui` **86/86** (quatre
+combinaisons mesurées, déplié inchangé), `cargo test` **194/194**, vrai binaire caché (réglage
+appliqué au rail, enregistré, valeur inconnue refusée).
 ## 11. L'état aujourd'hui
 
 ```
