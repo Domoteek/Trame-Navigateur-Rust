@@ -10,10 +10,12 @@
 //! Le magasin de Chrome ne sert que du CRX3 aujourd'hui, mais un fichier `.crx` peut venir
 //! d'ailleurs : on accepte les deux, et un ZIP nu (quelqu'un a renomme une archive).
 //!
-//! **Ce que ce module ne fait pas** : verifier la signature. WebView2 charge des extensions
-//! decompressees, sans verification ; l'ignorer ici serait malhonnete si on ne le disait pas —
-//! c'est ecrit dans `docs/FORMAT-EXTENSION.md` et dans l'interface (« extension non signee,
-//! chargee localement »).
+//! **La signature** : un CRX3 est verifie (RSA-SHA256) avant d'etre extrait — la cle de la preuve
+//! doit etre celle du `crx_id`, et la signature doit tenir sur
+//! `"CRX3 SignedData\0" | u32le(taille) | SignedData | ZIP` (ce que Chromium signe). Depuis la
+//! 0.4.55, un paquet telecharge dont la preuve ne tient pas est **refuse**. Un ZIP nu ou un CRX2
+//! n'ont aucune preuve exploitable : ils restent installables (import local assume), et c'est
+//! ecrit dans l'interface comme dans `docs/FORMAT-EXTENSION.md`.
 
 /// En-tete magique de tous les CRX.
 const MAGIE: &[u8; 4] = b"Cr24";
@@ -54,6 +56,9 @@ pub fn extraire(octets: &[u8]) -> Result<ArchiveExtraite, String> {
             if taille == 0 || debut >= octets.len() {
                 return Err("en-tete CRX3 incoherent (taille invalide)".into());
             }
+            // 0.4.55 : un paquet telecharge doit prouver qu'il est intact AVANT d'etre installe.
+            // Un CRX3 dont la signature ne tient pas est refuse ici, avec le motif.
+            verifier_signature(octets)?;
             verifier_zip(&octets[debut..])?;
             Ok(ArchiveExtraite {
                 version_crx: 3,
@@ -94,8 +99,112 @@ pub fn extraire(octets: &[u8]) -> Result<ArchiveExtraite, String> {
     }
 }
 
-fn verifier_zip(reste: &[u8]) -> Result<(), String> {
-    if reste.len() < 4 || &reste[0..2] != b"PK" {
+/// Le contexte que Chromium signe, avec son octet nul final.
+const CONTEXTE_SIGNATURE: &[u8] = b"CRX3 SignedData\x00";
+
+/// Verifie la signature d'un paquet CRX3 (RSA-SHA256).
+///
+/// La charge signee est celle que Chromium signe :
+///
+/// ```text
+/// "CRX3 SignedData\0" | u32le(taille de signed_header_data) | signed_header_data | ZIP
+/// ```
+///
+/// On n'accepte une preuve que si **la cle publique de la preuve donne le `crx_id` de l'en-tete**
+/// (sinon n'importe qui signerait avec sa propre cle en la declarant sienne) **et** si la
+/// signature tient. Les preuves ECDSA ne sont pas verifiees ici : le magasin de Chrome signe en
+/// RSA, et refuser explicitement vaut mieux que d'accepter sans verifier.
+pub fn verifier_signature(octets: &[u8]) -> Result<(), String> {
+    if octets.len() < 12 || &octets[0..4] != MAGIE {
+        return Err("ce fichier n'a pas d'en-tete CRX : rien a verifier".into());
+    }
+    let version = u32::from_le_bytes([octets[4], octets[5], octets[6], octets[7]]);
+    if version != 3 {
+        return Err(format!(
+            "signature CRX{version} non verifiable : seul le format CRX3 porte une preuve exploitable"
+        ));
+    }
+    let taille = u32::from_le_bytes([octets[8], octets[9], octets[10], octets[11]]) as usize;
+    let fin_entete = 12usize
+        .checked_add(taille)
+        .ok_or("en-tete CRX3 incoherent (taille invalide)")?;
+    let entete = octets.get(12..fin_entete).ok_or("en-tete CRX3 tronque")?;
+    let zip = octets.get(fin_entete..).filter(|z| !z.is_empty()).ok_or("CRX3 sans archive")?;
+
+    let champs_entete = champs(entete);
+    let signed = champs_entete
+        .iter()
+        .find(|(numero, _)| *numero == 10000)
+        .map(|(_, valeur)| valeur)
+        .ok_or("en-tete CRX3 sans SignedData")?;
+    let crx_id = champs(signed)
+        .into_iter()
+        .find(|(numero, _)| *numero == 1)
+        .map(|(_, valeur)| valeur)
+        .ok_or("SignedData sans crx_id")?;
+    let identifiant = identifiant_depuis_empreinte(crx_id).ok_or("crx_id illisible")?;
+
+    let mut charge = Vec::with_capacity(CONTEXTE_SIGNATURE.len() + 4 + signed.len() + zip.len());
+    charge.extend_from_slice(CONTEXTE_SIGNATURE);
+    charge.extend_from_slice(&(signed.len() as u32).to_le_bytes());
+    charge.extend_from_slice(signed);
+    charge.extend_from_slice(zip);
+
+    let mut refus: Vec<String> = Vec::new();
+    for (numero, preuve) in &champs_entete {
+        if *numero != 2 {
+            continue; // 3 = ECDSA, non verifie (cf. ci-dessus)
+        }
+        let champs_preuve = champs(preuve);
+        let Some(cle) = champs_preuve
+            .iter()
+            .find(|(champ, _)| *champ == 1)
+            .map(|(_, valeur)| valeur)
+        else {
+            continue;
+        };
+        let Some(signature) = champs_preuve
+            .iter()
+            .find(|(champ, _)| *champ == 2)
+            .map(|(_, valeur)| valeur)
+        else {
+            continue;
+        };
+        // La cle doit etre celle de l'editeur declare : c'est ce qui lie la preuve au paquet.
+        if identifiant_depuis_empreinte(&sha256(cle)).as_deref() != Some(identifiant.as_str()) {
+            refus.push("une preuve utilise une cle qui n'est pas celle du crx_id".into());
+            continue;
+        }
+        match verifier_rsa_sha256(cle, signature, &charge) {
+            Ok(()) => return Ok(()),
+            Err(e) => refus.push(e),
+        }
+    }
+    if refus.is_empty() {
+        Err("ce paquet ne porte aucune preuve RSA-SHA256 : impossible d'affirmer qu'il est intact".into())
+    } else {
+        Err(format!("signature refusee : {}", refus.join(" ; ")))
+    }
+}
+
+/// Verifie une signature RSA PKCS#1 v1.5 / SHA-256 sur un DER de cle publique.
+fn verifier_rsa_sha256(cle_der: &[u8], signature: &[u8], charge: &[u8]) -> Result<(), String> {
+    use rsa::pkcs1v15::{Signature, VerifyingKey};
+    use rsa::pkcs8::DecodePublicKey;
+    use rsa::signature::Verifier;
+    use rsa::RsaPublicKey;
+    use sha2::Sha256;
+
+    let cle = RsaPublicKey::from_public_key_der(cle_der)
+        .map_err(|e| format!("cle publique illisible ({e})"))?;
+    let signataire = VerifyingKey::<Sha256>::new(cle);
+    let signature = Signature::try_from(signature).map_err(|e| format!("signature illisible ({e})"))?;
+    signataire
+        .verify(charge, &signature)
+        .map_err(|_| "la signature ne correspond pas au paquet".to_string())
+}
+
+fn verifier_zip(reste: &[u8]) -> Result<(), String> {    if reste.len() < 4 || &reste[0..2] != b"PK" {
         return Err("l'archive de l'extension ne commence pas par un ZIP".into());
     }
     Ok(())
@@ -531,13 +640,155 @@ mod tests {
         out
     }
 
+    /// Cle RSA de test, **jetable** : elle ne sert qu'a signer des paquets d'essai. Generee pour
+    /// ce fichier, jamais utilisee ailleurs, sans rapport avec la cle de signature de Trame.
+    const CLE_TEST_PEM: &str = include_str!("test-crx-key.pem");
+
+    fn cle_test() -> rsa::RsaPrivateKey {
+        use rsa::pkcs8::DecodePrivateKey;
+        rsa::RsaPrivateKey::from_pkcs8_pem(CLE_TEST_PEM).expect("cle de test lisible")
+    }
+
+    /// Encodage varint protobuf, taille quelconque.
+    fn varint(mut valeur: usize) -> Vec<u8> {
+        let mut sortie = Vec::new();
+        loop {
+            let mut octet = (valeur & 0x7f) as u8;
+            valeur >>= 7;
+            if valeur != 0 {
+                octet |= 0x80;
+            }
+            sortie.push(octet);
+            if valeur == 0 {
+                return sortie;
+            }
+        }
+    }
+
+    /// Un champ protobuf `bytes` (wire type 2), numero quelconque.
+    fn champ(numero: usize, valeur: &[u8]) -> Vec<u8> {
+        let mut sortie = varint((numero << 3) | 2);
+        sortie.extend(varint(valeur.len()));
+        sortie.extend_from_slice(valeur);
+        sortie
+    }
+
+    /// Fabrique un CRX3 **correctement signe** : SignedData, preuve RSA, et la signature sur la
+    /// charge que Chromium signe.
+    fn crx3_signe(contenu: &[u8]) -> Vec<u8> {
+        use rsa::pkcs1v15::SigningKey;
+        use rsa::pkcs8::EncodePublicKey;
+        use rsa::signature::{SignatureEncoding, Signer};
+        use sha2::Sha256;
+
+        let cle = cle_test();
+        let publique = cle.to_public_key().to_public_key_der().expect("DER public");
+        let publique = publique.as_bytes();
+        let crx_id = sha256(publique)[..16].to_vec();
+        // SignedData : champ 1 = crx_id.
+        let signed = champ(1, &crx_id);
+        // Ce qui est signe : contexte + taille + SignedData + archive.
+        let mut charge = Vec::new();
+        charge.extend_from_slice(CONTEXTE_SIGNATURE);
+        charge.extend_from_slice(&(signed.len() as u32).to_le_bytes());
+        charge.extend_from_slice(&signed);
+        charge.extend_from_slice(contenu);
+        let signataire = SigningKey::<Sha256>::new(cle);
+        let signature = signataire.sign(&charge).to_vec();
+
+        // En-tete : champ 2 = preuve { 1: cle, 2: signature }, champ 10000 = SignedData.
+        let mut preuve = champ(1, publique);
+        preuve.extend(champ(2, &signature));
+        let mut entete = champ(2, &preuve);
+        entete.extend(champ(10000, &signed));
+
+        let mut out = Vec::new();
+        out.extend_from_slice(MAGIE);
+        out.extend_from_slice(&3u32.to_le_bytes());
+        out.extend_from_slice(&(entete.len() as u32).to_le_bytes());
+        out.extend_from_slice(&entete);
+        out.extend_from_slice(contenu);
+        out
+    }
+
     #[test]
-    fn un_crx3_livre_son_zip() {
+    fn un_crx3_signe_livre_son_zip() {
         let contenu = b"PK\x03\x04des octets de zip".to_vec();
-        let crx = crx3(&contenu, 1310);
-        let archive = extraire(&crx).expect("CRX3 valide");
+        let crx = crx3_signe(&contenu);
+        let archive = extraire(&crx).expect("CRX3 signe valide");
         assert_eq!(archive.version_crx, 3);
         assert_eq!(archive.zip, contenu);
+    }
+
+    /// Le coeur de la 0.4.55 : un paquet **modifie apres signature** ne s'installe pas.
+    #[test]
+    fn un_paquet_modifie_apres_signature_est_refuse() {
+        let mut crx = crx3_signe(b"PK\x03\x04contenu d'origine");
+        let dernier = crx.len() - 1;
+        crx[dernier] ^= 0xff; // un octet de l'archive change
+        let message = extraire(&crx).unwrap_err();
+        assert!(
+            message.contains("signature"),
+            "le refus doit nommer la signature : {message}"
+        );
+    }
+
+    /// Une preuve dont la cle ne donne pas le `crx_id` ne prouve rien : signer avec sa propre cle
+    /// en la declarant sienne doit etre refuse.
+    #[test]
+    fn une_cle_qui_ne_donne_pas_le_crx_id_est_refusee() {
+        let mut crx = crx3_signe(b"PK\x03\x04une extension");
+        // Le crx_id est dans SignedData (champ 10000) : on le remplace par une autre empreinte.
+        let position = crx
+            .windows(0x10)
+            .position(|f| f == &crx_id_test()[..16])
+            .expect("crx_id present dans l'en-tete");
+        for (i, octet) in crx_id_test()[16..32].iter().enumerate() {
+            crx[position + i] = *octet;
+        }
+        let message = extraire(&crx).unwrap_err();
+        assert!(message.contains("signature") || message.contains("cle"), "{message}");
+    }
+
+    /// L'empreinte attendue du crx_id de la cle de test : `sha256(cle publique DER)`.
+    fn crx_id_test() -> Vec<u8> {
+        use rsa::pkcs8::EncodePublicKey;
+        let der = cle_test().to_public_key().to_public_key_der().unwrap();
+        sha256(der.as_bytes()).to_vec()
+    }
+
+    /// Epreuve sur un **vrai** paquet du magasin : un CRX3 telecharge doit verifier.
+    ///
+    /// Ce test ne s'execute que si `TRAME_CRX_REEL` donne un chemin de fichier. C'est le seul
+    /// controle qui dit si la lecture du format est juste : une fixture fabriquee par le meme
+    /// fichier se signe et se verifie avec la meme comprehension, donc elle ne prouve rien sur
+    /// le format reel. Mesure du 2026-11-23 : uBlock Origin Lite du magasin, verifie.
+    #[test]
+    fn un_vrai_paquet_du_magasin_est_accepte_si_fourni() {
+        let Ok(chemin) = std::env::var("TRAME_CRX_REEL") else {
+            return;
+        };
+        let octets = std::fs::read(&chemin).expect("paquet lisible");
+        match extraire(&octets) {
+            Ok(archive) => assert!(!archive.zip.is_empty(), "l'archive doit avoir un contenu"),
+            Err(e) => panic!("le paquet reel {chemin} a ete refuse : {e}"),
+        }
+    }
+
+    #[test]
+    fn un_crx3_sans_preuve_est_refuse() {
+        // L'ancien faux CRX3 (en-tete fait de zeros) : plus de preuve, donc plus d'installation.
+        let message = extraire(&crx3(b"PK\x03\x04un zip", 10)).unwrap_err();
+        assert!(
+            message.contains("signature") || message.contains("preuve") || message.contains("SignedData"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn un_crx3_signe_dont_le_contenu_n_est_pas_un_zip_est_refuse() {
+        let message = extraire(&crx3_signe(b"RIEN")).unwrap_err();
+        assert!(message.contains("ZIP"), "{message}");
     }
 
     #[test]
@@ -602,7 +853,7 @@ mod tests {
 
     #[test]
     fn un_contenu_qui_n_est_pas_un_zip_est_refuse() {
-        let message = extraire(&crx3(b"RIEN", 10)).unwrap_err();
+        let message = extraire(&crx3_signe(b"RIEN")).unwrap_err();
         assert!(message.contains("ZIP"), "{message}");
     }
 

@@ -151,6 +151,11 @@ pub enum UserEvent {
     },
     /// Une sauvegarde, une restauration ou un echange de favoris (fil annexe) est terminee.
     Sauvegarde(crate::sauvegarde::Issue),
+    /// Le setup d'une mise a jour est descendu : sa signature reste a verifier avant de le lancer.
+    MajTelechargee {
+        chemin: PathBuf,
+        version: String,
+    },
 }
 
 /// Ce qu'on demande au moteur d'extensions de WebView2, a chaud.
@@ -3456,6 +3461,7 @@ impl App {
             UserEvent::CacherDiffere(ids) => self.cacher_differe(ids),
             UserEvent::Installation { libelle, issue } => self.fin_installation(libelle, issue),
             UserEvent::Sauvegarde(issue) => self.fin_sauvegarde(issue),
+            UserEvent::MajTelechargee { chemin, version } => self.maj_telechargee(chemin, version),
             UserEvent::TaillePopup { largeur, hauteur } => {
                 // Bornes d'une fenetre d'action de Chrome : 25 a 800 px de large, 25 a 600 de haut.
                 let taille = (largeur.clamp(120.0, 800.0), hauteur.clamp(80.0, 600.0));
@@ -5458,6 +5464,7 @@ impl App {
             let dossier = self.dossier_telechargements();
             let nom = format!("Trame-{}-setup.exe", maj.version);
             let version = maj.version.clone();
+            let proxy = self.proxy.clone();
             self.signaler("Téléchargement de la mise à jour…");
             info!("mise a jour : telechargement de {nom} en tache de fond (sans onglet)");
             std::thread::spawn(move || {
@@ -5480,8 +5487,13 @@ impl App {
                     .unwrap_or(false)
                     && cible.exists();
                 if ok {
-                    info!("mise a jour : {nom} telecharge, installation de {version}");
-                    lancer_installation(&cible.to_string_lossy().to_string());
+                    info!("mise a jour : {nom} telecharge");
+                    // La verification de signature se fait sur le fil principal : c'est lui qui
+                    // peut refuser proprement et le DIRE a Clement.
+                    let _ = proxy.send_event(UserEvent::MajTelechargee {
+                        chemin: cible,
+                        version,
+                    });
                 } else {
                     alerte!("mise a jour : telechargement de {nom} impossible");
                 }
@@ -5490,6 +5502,19 @@ impl App {
         };
         if !Path::new(&telechargement.chemin).exists() {
             self.signaler("Le fichier de mise à jour a été déplacé ou supprimé.");
+            return;
+        }
+        // Meme controle pour un fichier deja descendu par le gestionnaire de telechargements :
+        // l'anciennete du fichier ne dit rien de sa signature.
+        let verdict = crate::signature::verifier(Path::new(&telechargement.chemin));
+        if !verdict.valide {
+            alerte!(
+                "mise a jour {} REFUSEE : signature absente ou invalide (code {}) — {}",
+                maj.version,
+                verdict.code,
+                telechargement.chemin
+            );
+            self.signaler("Mise à jour refusée : l'installeur n'est pas signé, ou sa signature ne tient pas. Rien n'a été exécuté.");
             return;
         }
         info!("mise a jour : installation de {} ({})", maj.version, telechargement.chemin);
@@ -5502,6 +5527,30 @@ impl App {
                 self.signaler("Windows n'a pas pu lancer l'installeur de mise à jour.");
             }
         }
+    }
+
+    /// Le setup d'une mise a jour est descendu : on verifie sa signature **avant** de le lancer.
+    ///
+    /// C'est le trou ferme en 0.4.55 : jusqu'ici la confiance reposait entierement sur « qui
+    /// peut ecrire la fiche Firestore qui donne l'adresse ». Un installeur non signe, ou dont la
+    /// signature ne tient pas, ne part plus — et Clement le lit a l'ecran.
+    fn maj_telechargee(&mut self, chemin: PathBuf, version: String) {
+        let verdict = crate::signature::verifier(&chemin);
+        if !verdict.valide {
+            alerte!(
+                "mise a jour {version} REFUSEE : signature absente ou invalide (code {}) — {}",
+                verdict.code,
+                chemin.display()
+            );
+            self.signaler(
+                "Mise à jour refusée : l'installeur n'est pas signé, ou sa signature ne tient pas. Rien n'a été exécuté.",
+            );
+            self.pousser_etat();
+            return;
+        }
+        info!("mise a jour {version} : signature valide, installation de {}", chemin.display());
+        self.signaler(&format!("Mise à jour {version} vérifiée — installation en cours…"));
+        lancer_installation(&chemin.to_string_lossy().to_string());
     }
 
     /// Chaque seconde, la progression des telechargements en cours.

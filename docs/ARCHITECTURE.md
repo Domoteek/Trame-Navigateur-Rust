@@ -365,9 +365,12 @@ d'une extension installée depuis un fichier ne s'ouvrirait pas (`chrome-extensi
 répondrait 404). `crx::identifiant_depuis_cle` implémente donc la règle exacte de Chromium, avec
 les vecteurs FIPS 180-4 en test.
 
-**Ce qui n'est pas vérifié** : la signature. Le magasin signe ses paquets, WebView2 ne contrôle
-rien. L'interface le dit (« la signature n'est pas vérifiée ») au lieu de laisser croire à une
-installation validée.
+**Ce qui est vérifié depuis la 0.4.55** : la signature d'un paquet `.crx` **v3** (RSA-SHA256 : la
+clé de la preuve doit être celle du `crx_id`, et la signature doit tenir sur
+`"CRX3 SignedData\0" | u32le(taille) | SignedData | ZIP`). Un paquet modifié après signature est
+refusé avant toute installation. **Ce qui n'est pas vérifié** : la provenance — aucune chaîne de
+confiance vers le magasin de Google — et les paquets sans preuve exploitable (`.crx` v2, ZIP nu,
+dossier décompressé), qui restent un import local assumé. Éprouvé sur un vrai paquet du magasin.
 
 **Les trois dossiers**, et pourquoi des dossiers plutôt qu'un état en mémoire :
 

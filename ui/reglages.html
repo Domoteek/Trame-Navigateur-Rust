@@ -695,8 +695,13 @@
               <p>
                 Trame télécharge le paquet depuis le magasin de Chrome, retire son en-tête de signature
                 (<code>.crx</code> v2 ou v3), le décompresse et vérifie qu'il contient un manifeste —
-                comme « charger une extension décompressée » dans Chrome. La signature n'est pas
-                vérifiée : ce n'est pas une installation « validée par le magasin ».
+                comme « charger une extension décompressée » dans Chrome.
+                <b>Depuis la 0.4.55, un <code>.crx</code> v3 est vérifié</b> : la clé de la preuve doit
+                être celle de l'identifiant de l'extension, et la signature RSA-SHA256 doit tenir sur le
+                paquet — sinon rien n'est installé. Ce qui n'est <b>pas</b> garanti : que le paquet vienne
+                bien du magasin (aucune chaîne de confiance vers Google), et les paquets anciens
+                (<code>.crx</code> v2, ZIP, dossier décompressé) qui ne portent aucune preuve
+                exploitable — ceux-là restent un import local assumé.
               </p>
               <p>
                 Comme dans Chrome, le bouton puzzle de la barre liste les extensions ; l'épingle met

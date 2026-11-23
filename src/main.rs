@@ -31,6 +31,7 @@ mod ressources;
 mod sauvegarde;
 mod sauvegarde_auto;
 mod search;
+mod signature;
 mod shell;
 mod systeme;
 mod teinte;

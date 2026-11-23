@@ -1127,6 +1127,25 @@ robuste (« au clic, ou remonté pour tenir dans la fenêtre »), parce qu'un me
 haut. Preuves : `cargo test` **204/204**, `tester-ui` **88/88** (le cas du menu d'onglet vérifie
 sept lignes de plus et clique « Dupliquer » et « Fermer les autres du fil »), `eprouver-entrees`
 **7/7** sur le vrai binaire (dupliquer ouvre un onglet de plus, fermer les autres en ferme).
+**0.4.55 — les deux trous de sécurité concrets sont fermés.** Choix de Clément sur la liste des
+manques (« les deux signatures »). (1) **La mise à jour vérifie son installeur avant de le
+lancer** : `src/signature.rs` appelle `WinVerifyTrust` (l'API qu'utilisent SmartScreen et
+l'Explorateur), et le téléchargement passe désormais par un événement — c'est le fil principal qui
+vérifie et qui refuse, donc Clément lit le refus à l'écran. Un setup non signé, ou dont la
+signature ne tient pas, **ne part pas**. Réserve écrite : on vérifie que la signature est valide et
+de confiance, **pas qui a signé** — un installeur signé par un autre éditeur de confiance
+passerait. (2) **Un `.crx` v3 est vérifié** (`crx::verifier_signature`) : la clé publique de la
+preuve doit donner le `crx_id`, et la signature RSA-SHA256 doit tenir sur
+`"CRX3 SignedData\0" | u32le(taille de SignedData) | SignedData | ZIP`. Un paquet modifié après
+signature est refusé avec son motif. Coût mesuré : **+168 Ko** de binaire (3 236 024 → 3 407 872)
+pour RustCrypto (`rsa` + `sha2` avec l'OID de SHA-256, sans lequel PKCS#1 v1.5 ne se vérifie pas).
+**La preuve qui compte** : mes fixtures se signaient avec ma propre compréhension du format, donc
+elles ne prouvaient rien sur le format réel — un **vrai paquet du magasin** (uBlock Origin Lite,
+9,1 Mo, point d'entrée `clients2.google.com`) est vérifié par le code, et des paquets trafiqués
+sont refusés (octet modifié, clé qui ne donne pas le `crx_id`, en-tête sans preuve). Preuves :
+`cargo test` **212/212** (8 neufs), dont un test qui ne s'exécute que si `TRAME_CRX_REEL` désigne
+un paquet. Reste non vérifié, dit à l'écran et dans la doc : la **provenance** (aucune chaîne de
+confiance vers Google) et les paquets sans preuve exploitable (`.crx` v2, ZIP nu, dossier).
 ## 11. L'état aujourd'hui
 
 ```

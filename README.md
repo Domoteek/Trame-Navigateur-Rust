@@ -246,6 +246,16 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.55, publiée et installée le 2026-11-23.** Les deux trous de sécurité concrets sont fermés.
+> La **mise à jour vérifie la signature de l'installeur** (`WinVerifyTrust`, l'API de Windows)
+> **avant de le lancer** : un setup non signé ou modifié ne part pas, et rien n'est exécuté. Un
+> paquet d'extension **`.crx` v3 est vérifié** en RSA-SHA256 (la clé de la preuve doit être celle
+> du `crx_id`, la signature doit tenir sur `"CRX3 SignedData\0" | taille | SignedData | ZIP`) :
+> un paquet modifié après signature est refusé. Coût mesuré : binaire **+168 Ko** (3 236 024 →
+> 3 407 872 octets) pour RustCrypto. Preuves : `cargo test` **212/212** (dont 8 neufs), et un
+> **vrai paquet du magasin** (uBlock Origin Lite, 9,1 Mo) vérifié par le code, plus des paquets
+> trafiqués refusés.
+>
 > **0.4.54, publiée et installée le 2026-11-23.** Le **clic droit d'un onglet** propose enfin tout
 > ce qu'on peut lui faire : fermer, fermer les autres du fil, dupliquer, veille/réveil, recharger,
 > son, ancrer, « à lire plus tard », ajouter aux accès rapides, copier l'adresse **et** le titre,
@@ -290,7 +300,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.54-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.55-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >
@@ -423,7 +433,7 @@ Trame en a **deux**, et c'est assumé :
 | Manifeste | le nôtre (`matches`, `js`, `css`) | **v2/v3 de Chrome**, tel quel |
 | Moteur | injecteur maison (fin de chargement) | **celui de Chromium** (`AddBrowserExtension`) |
 | Ce qu'on a | scripts de contenu, CSS, `chrome.storage.local` | scripts de contenu, **service worker**, page d'action, API `chrome.*` |
-| Ce qu'on n'a pas | page d'arrière-plan, `webRequest`, `tabs` | vérification de signature du magasin |
+| Ce qu'on n'a pas | page d'arrière-plan, `webRequest`, `tabs` | chaîne de confiance du magasin (Trame vérifie la **signature du paquet**, pas sa provenance) |
 | Gestion | réglages → Extensions | réglages → **Extensions Chrome** |
 
 Le premier est documenté dans [`docs/FORMAT-EXTENSION.md`](docs/FORMAT-EXTENSION.md), le second
@@ -482,9 +492,14 @@ manifeste, 32 lettres `a`–`p`, recoupé avec le `crypto` de Node ; l'extension
 suit le chemin complet d'« Ajouter à Chrome » (téléchargement par WebView2, décompression,
 clé inscrite, provenance « magasin »).
 
-**Ce que l'installation ne garantit pas** : la signature. WebView2 charge des extensions
-décompressées, sans vérifier que le paquet vient bien du magasin. Trame le dit dans l'interface
-plutôt que de laisser croire à une installation « validée ».
+**Ce que l'installation garantit depuis la 0.4.55** : un paquet `.crx` **v3** est vérifié avant
+d'être installé — la clé publique de la preuve doit être celle de l'identifiant de l'extension, et
+la signature RSA-SHA256 doit tenir sur `"CRX3 SignedData\0" | taille | SignedData | ZIP`, ce que
+Chromium signe. Un paquet modifié après signature est **refusé**, avec le motif à l'écran. Ce qui
+n'est **toujours pas** garanti : que le paquet vienne du magasin (aucune chaîne de confiance vers
+Google), et les paquets qui ne portent aucune preuve exploitable (`.crx` v2, ZIP nu, dossier
+décompressé) — ceux-là restent un import local assumé. Éprouvé sur un vrai paquet du magasin
+(uBlock Origin Lite, 9,1 Mo) et sur des paquets trafiqués.
 
 ### Gérer une extension
 
