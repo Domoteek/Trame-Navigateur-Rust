@@ -1032,6 +1032,17 @@ geste (« Double-clic ») et touches (« Ctrl+B ») en pastilles, explication ap
 seconde ligne. Les `title` restent la source : au survol ils passent dans `data-bulle`. Rail
 replié et barre gardent la bulle native (une webview de 64 px ou 40 px couperait la nôtre).
 Preuve : `tester-ui` **81/81**.
+**0.4.48 — des infobulles Trame partout.** « Tu as oublié les autres » (Clément, 23/11) : une seule
+implémentation, `ui/bulles.js`, chargée par la coquille et par réglages, nouvel onglet,
+téléchargements et zap. Mise en forme tirée du `title` : version à part, motif d'adresse en police
+fixe, gestes en pastilles regroupés en pied (« Cliquer pour », « Clic : … · clic droit : … »).
+Ce qu'une webview ne peut pas peindre hors de ses bords passe par la **colonne du panneau de la
+barre** : la barre demande `panneau` + `zone`, l'hôte l'agrandit et ne découpe que la carte.
+Puces d'extensions : carte sous la barre. Rail replié (64 px) : message `bulle` relayé par l'hôte
+(`app/outils.rs`, avec la hauteur de la fenêtre), carte posée à droite de l'icône, remontée pour
+une icône du bas ; ce message ne referme pas un menu ouvert. Preuves : `tester-ui` **84/84**,
+`cargo test` **194/194**, `outils/eprouver-bulles.mjs` sur le vrai binaire caché (barre
+76 → 198 px puis retour ; carte du rail collée à l'icône, texte entier dans la fenêtre).
 ## 11. L'état aujourd'hui
 
 ```
