@@ -1008,13 +1008,17 @@ function champ() {
 }
 
 function ouvrirPanneau() {
-  if (panneauOuvert) return;
-  panneauOuvert = true;
-  ipc({ m: "panneau", open: true });
-  document.getElementById("panneau").hidden = false;
-  // Pas de requete ici : c'est la saisie (focus, frappe) qui la declenche. Sans cela,
-  // cliquer sur ◇ affichait la liste des extensions puis la remplacait aussitot par des
-  // resultats de recherche, sans que l'utilisateur ait rien tape.
+  if (!panneauOuvert) {
+    panneauOuvert = true;
+    ipc({ m: "panneau", open: true });
+    document.getElementById("panneau").hidden = false;
+    // Pas de requete ici : c'est la saisie (focus, frappe) qui la declenche. Sans cela,
+    // cliquer sur ◇ affichait la liste des extensions puis la remplacait aussitot par des
+    // resultats de recherche, sans que l'utilisateur ait rien tape.
+  }
+  // TOUJOURS remesurer, meme si le panneau est deja ouvert : un second clic droit change le
+  // contenu (un autre onglet, donc d'autres lignes), et garder la hauteur de la fois precedente
+  // laissait la barre trop courte — le menu se dessinait hors de la webview (2026-11-23).
   ajusterHauteur();
 }
 

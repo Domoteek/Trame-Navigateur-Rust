@@ -3754,7 +3754,15 @@ impl App {
         // donc `window.blur` ne suffisait pas : le panneau restait ouvert par-dessus la page.
         // Sauf une infobulle du rail replie : survoler une icone n'est pas agir, et c'est justement
         // la barre qui va la dessiner dans son panneau.
-        if self.panneau_ouvert && !matches!(source, Source::Barre) && m != "bulle" {
+        // Sauf aussi les menus que le RAIL demande a la barre de dessiner (`menuPage` au clic droit
+        // sur un onglet, `menuAcces` sur un acces rapide) : ce sont des actions SUR le panneau, pas
+        // « ailleurs ». Sans cette exception, le panneau se refermait — la barre retombait a 76 px —
+        // et le menu s'y dessinait ecrase, avec un fond absent et une coupe au milieu de ses lignes
+        // (constate par Clement le 2026-11-23, mesure : viewport 886 -> 76 au deuxieme clic).
+        if self.panneau_ouvert
+            && !matches!(source, Source::Barre)
+            && !matches!(m, "bulle" | "menuPage" | "menuAcces")
+        {
             self.panneau_ouvert = false;
             self.appliquer_geometrie();
             self.pousser_etat();

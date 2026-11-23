@@ -246,6 +246,14 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.56, publiée et installée le 2026-11-23.** Bug signalé par Clément : « le clic droit sur un
+> onglet, si je clique plusieurs fois, ça fait ça » (menu écrasé, fond absent, coupe au milieu des
+> lignes). Cause mesurée : le clic droit vient du **rail**, et la règle « fermer le panneau dès
+> qu'on agit ailleurs que dans la barre » refermait le panneau — la barre retombait de **886 à
+> 76 px** — puis le menu s'y dessinait dans 76 px. `menuPage` et `menuAcces` sont désormais exclus
+> de cette règle, et l'interface remesure la hauteur à chaque ouverture. Banc neuf :
+> `outils/eprouver-menu-onglet.mjs` (trois clics, la barre garde 886 px, le menu ne déborde plus).
+>
 > **0.4.55, publiée et installée le 2026-11-23.** Les deux trous de sécurité concrets sont fermés.
 > La **mise à jour vérifie la signature de l'installeur** (`WinVerifyTrust`, l'API de Windows)
 > **avant de le lancer** : un setup non signé ou modifié ne part pas, et rien n'est exécuté. Un
@@ -300,7 +308,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.55-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.56-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

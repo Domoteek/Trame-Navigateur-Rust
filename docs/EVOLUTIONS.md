@@ -1146,6 +1146,18 @@ sont refusés (octet modifié, clé qui ne donne pas le `crx_id`, en-tête sans 
 `cargo test` **212/212** (8 neufs), dont un test qui ne s'exécute que si `TRAME_CRX_REEL` désigne
 un paquet. Reste non vérifié, dit à l'écran et dans la doc : la **provenance** (aucune chaîne de
 confiance vers Google) et les paquets sans preuve exploitable (`.crx` v2, ZIP nu, dossier).
+**0.4.56 — le menu d'un onglet ne s'écrase plus quand on reclique.** Bug signalé par Clément, avec
+deux captures : après plusieurs clics droits, le menu gardait un fond absent et se coupait au
+milieu de ses lignes. Mesure sur le vrai binaire (`outils/eprouver-menu-onglet.mjs`, trois clics) :
+la barre passait de **886 à 76 px** au deuxième clic, et le menu de 795 px s'y dessinait dans
+76 px. **Cause** : la règle « fermer le panneau dès qu'on agit ailleurs que dans la barre »
+(`traiter_ipc`) s'appliquait au message `menuPage`, qui vient pourtant du **rail** — donc elle
+refermait le panneau juste avant que la barre ne dessine le menu ; `menuAcces` (menu d'un accès du
+rail replié) avait le même défaut, latent. **Correction** : `menuPage` et `menuAcces` sont exclus
+de cette règle, comme `bulle` l'était déjà, et `ouvrirPanneau()` remesure la hauteur même quand le
+panneau est déjà ouvert (un second clic change le contenu, donc la hauteur). Banc neuf :
+`outils/eprouver-menu-onglet.mjs` — trois hauteurs de clic, la barre reste à 886 px et le menu ne
+déborde jamais. Preuves : `cargo test` **212/212**, `tester-ui` **88/88**, banc du menu vert.
 ## 11. L'état aujourd'hui
 
 ```
