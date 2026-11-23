@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accès ou onglets</title>
+<style>
+/* Maquettes : distinguer d'un coup d'œil les accès rapides (applications ancrées) des onglets,
+   dans le rail replié de 64 px. Chaque rail est à taille réelle, dans un faux bout de fenêtre. */
+:root {
+  color-scheme: dark;
+  --fond: #080b11; --fond-2: #0b0f17; --surface: #101521; --surface-2: #151c2a; --surface-3: #1b2434;
+  --bord: rgba(255,255,255,.07); --bord-fort: rgba(255,255,255,.14);
+  --texte: #e9eefa; --texte-2: #97a4bb; --texte-3: #616e85;
+  --vif: #5eead4; --dormant: #8b7cf6; --accent: #60a5fa;
+  --page: #05070b;
+  --f: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+  /* couleurs des groupes, comme dans le rail de Clément */
+  --g1: #8b7cf6; --g2: #fbbf24; --g3: #34d399; --g4: #f87171; --g5: #f472b6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--texte); font-family: var(--f); font-size: 14px;
+  padding: 28px max(16px, env(safe-area-inset-right,0px)) 48px max(16px, env(safe-area-inset-left,0px)); }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 24px; }
+h1 { font-size: 26px; margin: 0; font-weight: 650; letter-spacing: -.01em; text-wrap: balance; }
+.intro { color: var(--texte-2); max-width: 72ch; line-height: 1.55; margin: 6px 0 0; }
+.intro b { color: var(--texte); font-weight: 600; }
+
+.grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; align-items: start; }
+.variante { background: var(--fond-2); border: 1px solid var(--bord); border-radius: 14px; padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.v-tete { display: flex; align-items: baseline; gap: 8px; }
+.v-tete .num { font-size: 12px; font-weight: 700; color: var(--fond); background: var(--vif); border-radius: 6px; padding: 2px 7px; font-variant-numeric: tabular-nums; }
+.actuel .v-tete .num { background: var(--texte-3); }
+.v-tete h2 { font-size: 15.5px; margin: 0; font-weight: 650; }
+.scene { display: flex; height: 640px; }
+.page-fausse { flex: 1; min-width: 40px; background: linear-gradient(180deg,#141a25,#0e131c); border-radius: 0 12px 12px 0; border: 1px solid var(--bord); border-left: 0; }
+.notes { margin: 0; padding-left: 18px; color: var(--texte-2); line-height: 1.5; font-size: 13px; display: grid; gap: 4px; }
+.notes b { color: var(--texte); font-weight: 600; }
+
+/* ---------- commun ---------- */
+.rail { width: 64px; flex: 0 0 64px; background: var(--fond); border: 1px solid var(--bord); border-radius: 12px 0 0 12px;
+  display: flex; flex-direction: column; align-items: center; padding: 8px 0; position: relative; overflow: hidden; }
+.feux { display: flex; gap: 5px; padding: 2px 0 8px; }
+.feux i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+.feux i:nth-child(1){background:#f5c043}.feux i:nth-child(2){background:#3fc07a}.feux i:nth-child(3){background:#f0605d}
+.plus { width: 44px; height: 30px; border-radius: 9px; border: 1px solid var(--bord-fort); background: var(--surface-2); display: grid; place-items: center; color: var(--texte); font-size: 18px; line-height: 1; }
+.chev { color: var(--texte-3); font-size: 12px; height: 20px; display: grid; place-items: center; letter-spacing: -2px; }
+.pied { margin-top: auto; padding-top: 6px; }
+.anneau { width: 36px; height: 36px; border-radius: 50%; background: conic-gradient(var(--accent) 0 30%, var(--surface-3) 30% 100%); position: relative; display: grid; place-items: center; }
+.anneau::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--fond); }
+.anneau span { position: relative; color: var(--texte-2); font-size: 12px; }
+
+/* icônes de site (accès) : pleines, couleur de marque */
+.app { display: grid; place-items: center; font-weight: 800; color: #fff; flex: 0 0 auto; }
+.app svg { width: 56%; height: 56%; }
+.yt { background: #e8322d; } .gh { background: #f0f3f6; } .gm { background: #fff; }
+/* favicons d'onglets : petites, sur fond neutre */
+.fav { width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center; font-size: 10px; font-weight: 800; color: #fff; flex: 0 0 auto; }
+.fav.gm { background: #fff; } .fav.oc { background: #1e2533; color: #cbd5e1; border: 1px solid #334155; }
+.fav.nt { background: #1e2533; color: #94a3b8; } .fav.gh { background: #f0f3f6; } .fav.yt { background: #e8322d; } .fav.rg { background: #2a3346; color: #cbd5e1; }
+.fav svg { width: 70%; height: 70%; }
+
+.etiq { font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; display: flex; align-items: center; gap: 4px; max-width: 58px; overflow: hidden; white-space: nowrap; margin: 6px 0 2px; }
+.etiq i { width: 6px; height: 6px; border-radius: 50%; display: block; flex: 0 0 auto; }
+
+/* ---------- 0 : ACTUEL ---------- */
+.r0 .a { width: 44px; height: 38px; border-radius: 10px; display: grid; place-items: center; position: relative; margin: 2px 0; }
+.r0 .a .app { width: 24px; height: 24px; border-radius: 6px; }
+.r0 .a::after { content: ""; position: absolute; bottom: 1px; width: 4px; height: 4px; border-radius: 50%; background: var(--vif); }
+.r0 .sep { width: 40px; height: 1px; background: var(--bord); margin: 6px 0; }
+.r0 .o { width: 44px; height: 38px; border-radius: 10px; display: grid; place-items: center; position: relative; margin: 2px 0; }
+.r0 .o .fav { width: 24px; height: 24px; border-radius: 6px; font-size: 12px; filter: grayscale(.8) brightness(.7); }
+.r0 .o.dort::after { content: ""; position: absolute; top: 5px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--dormant); }
+.r0 .o.actif { background: var(--surface-3); }
+.r0 .o.actif::before { content: ""; position: absolute; left: -10px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--vif); }
+.r0 .o.actif .fav { filter: none; }
+
+/* ---------- 1 : LE SOCLE ---------- */
+.r1 .socle { width: 52px; margin: 2px 0 4px; padding: 6px 0; border-radius: 14px; background: linear-gradient(180deg, var(--surface-3), var(--surface)); border: 1px solid var(--bord-fort); box-shadow: 0 6px 16px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05); display: grid; justify-items: center; gap: 6px; }
+.r1 .socle .app { width: 34px; height: 34px; border-radius: 10px; position: relative; }
+.r1 .socle .app.ouvert::after { content: ""; position: absolute; bottom: -5px; width: 12px; height: 3px; border-radius: 2px; background: var(--vif); }
+.r1 .o { width: 40px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; position: relative; margin: 1px 0; }
+.r1 .o .fav { opacity: .75; }
+.r1 .o.dort .fav { opacity: .4; filter: grayscale(1); }
+.r1 .o.dort::after { content: ""; position: absolute; top: 4px; right: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--dormant); }
+.r1 .o.actif { background: var(--surface-3); }
+.r1 .o.actif .fav { opacity: 1; }
+.r1 .o.actif::before { content: ""; position: absolute; left: -12px; top: 7px; bottom: 7px; width: 3px; border-radius: 0 3px 3px 0; background: var(--vif); }
+
+/* ---------- 2 : ROND ET CARRÉ ---------- */
+.r2 .rond { width: 38px; height: 38px; border-radius: 50%; margin: 3px 0; position: relative; box-shadow: 0 0 0 2px var(--fond), 0 0 0 3px var(--bord-fort); }
+.r2 .rond svg { width: 52%; height: 52%; }
+.r2 .rond.ouvert { box-shadow: 0 0 0 2px var(--fond), 0 0 0 3.5px var(--vif); }
+.r2 .titre-zone { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--texte-3); margin: 10px 0 2px; }
+.r2 .fil { width: 48px; display: grid; justify-items: center; gap: 3px; padding: 3px 0 4px; border-left: 3px solid var(--c); border-radius: 3px 8px 8px 3px; background: color-mix(in srgb, var(--c) 7%, transparent); margin: 3px 0 3px 4px; }
+.r2 .carre { width: 34px; height: 30px; border-radius: 6px; display: grid; place-items: center; position: relative; background: var(--surface); border: 1px solid var(--bord); }
+.r2 .carre.actif { background: var(--surface-3); border-color: color-mix(in srgb, var(--c) 60%, transparent); }
+.r2 .carre.dort .fav { filter: grayscale(1); opacity: .45; }
+.r2 .carre.dort::after { content: ""; position: absolute; top: -3px; right: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--dormant); box-shadow: 0 0 0 2px var(--fond); }
+
+/* ---------- 3 : CARTES DE GROUPE ---------- */
+.r3 .lance { width: 44px; height: 40px; border-radius: 10px; display: grid; place-items: center; position: relative; margin: 1px 0; }
+.r3 .lance .app { width: 28px; height: 28px; border-radius: 8px; }
+.r3 .lance .fleche { position: absolute; right: 3px; bottom: 3px; width: 13px; height: 13px; border-radius: 4px; background: var(--fond); color: var(--texte-2); font-size: 9px; display: grid; place-items: center; box-shadow: 0 0 0 1px var(--bord-fort); }
+.r3 .lance.ouvert .fleche { color: var(--vif); }
+.r3 .carte { width: 52px; margin: 4px 0; padding: 5px 0 6px; border-radius: 12px; background: color-mix(in srgb, var(--c) 11%, var(--fond)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent); display: grid; justify-items: center; gap: 3px; }
+.r3 .carte .nom { font-size: 8.5px; font-weight: 800; letter-spacing: .05em; color: color-mix(in srgb, var(--c) 85%, white); text-transform: uppercase; max-width: 46px; overflow: hidden; white-space: nowrap; text-overflow: clip; }
+.r3 .t { width: 36px; height: 28px; border-radius: 8px; display: grid; place-items: center; position: relative; }
+.r3 .t.actif { background: color-mix(in srgb, var(--c) 28%, transparent); }
+.r3 .t.dort .fav { filter: grayscale(1); opacity: .45; }
+.r3 .t.dort::after { content: ""; position: absolute; top: 2px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--dormant); }
+
+/* ---------- 4 : LANCEUR COMPACT ---------- */
+.r4 .lanceur { display: grid; grid-template-columns: repeat(2, 22px); gap: 6px; padding: 7px; border-radius: 12px; border: 1px dashed var(--bord-fort); margin: 2px 0 6px; }
+.r4 .lanceur .app { width: 22px; height: 22px; border-radius: 6px; position: relative; }
+.r4 .lanceur .app.ouvert::after { content: ""; position: absolute; right: -2px; top: -2px; width: 6px; height: 6px; border-radius: 50%; background: var(--vif); box-shadow: 0 0 0 2px var(--fond); }
+.r4 .lanceur .ajout { width: 22px; height: 22px; border-radius: 6px; color: var(--texte-3); display: grid; place-items: center; font-size: 14px; }
+.r4 .ligne { width: 50px; height: 34px; border-radius: 9px; display: flex; align-items: center; gap: 5px; padding-left: 7px; position: relative; margin: 1px 0; }
+.r4 .ligne .barre { width: 3px; height: 18px; border-radius: 2px; background: var(--c); flex: 0 0 auto; }
+.r4 .ligne .fav { width: 20px; height: 20px; }
+.r4 .ligne.actif { background: var(--surface-3); }
+.r4 .ligne.dort .fav { filter: grayscale(1); opacity: .45; }
+.r4 .ligne.dort::after { content: ""; position: absolute; top: 5px; right: 9px; width: 6px; height: 6px; border-radius: 50%; background: var(--dormant); }
+
+.legende { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--texte-3); font-size: 12px; }
+.legende span { display: inline-flex; align-items: center; gap: 6px; }
+.legende i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Rail replié : accès rapides ou onglets ?</h1>
+    <p class="intro">Aujourd'hui, YouTube, GitHub et Gmail (tes <b>applications ancrées</b>) et les
+    <b>onglets</b> des groupes ont presque la même forme : une icône dans une case. Voici quatre façons de
+    les distinguer d'un coup d'œil. Même contenu partout : 3 accès, puis tes 5 groupes. Rail à taille
+    réelle (64 px).</p>
+  </header>
+
+  <div class="legende">
+    <span><i style="background:var(--vif)"></i>accès déjà ouvert / onglet affiché</span>
+    <span><i style="background:var(--dormant)"></i>onglet en veille</span>
+  </div>
+
+  <div class="grille">
+
+    <!-- 0 : ACTUEL -->
+    <section class="variante actuel">
+      <div class="v-tete"><span class="num">0</span><h2>Aujourd'hui</h2></div>
+      <div class="scene">
+        <nav class="rail r0">
+          <div class="feux"><i></i><i></i><i></i></div>
+          <div class="plus">+</div>
+          <div class="chev">››</div>
+          <div class="a"><span class="app yt"><svg viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg></span></div>
+          <div class="a"><span class="app gh" style="border-radius:50%"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#24292f"/></svg></span></div>
+          <div class="a"><span class="app gm"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span></div>
+          <div class="sep"></div>
+          <div class="etiq" style="color:var(--g1)"><i style="background:var(--g1)"></i>GMA…</div>
+          <div class="o dort"><span class="fav gm"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span></div>
+          <div class="o dort"><span class="fav gm"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span></div>
+          <div class="etiq" style="color:var(--g2)"><i style="background:var(--g2)"></i>OCC…</div>
+          <div class="o dort"><span class="fav oc">D</span></div>
+          <div class="o dort"><span class="fav nt">N</span></div>
+          <div class="etiq" style="color:var(--g3)"><i style="background:var(--g3)"></i>GITH…</div>
+          <div class="o dort"><span class="fav gh"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#24292f"/></svg></span></div>
+          <div class="etiq" style="color:var(--g5)"><i style="background:var(--g5)"></i>RÉGL…</div>
+          <div class="o actif"><span class="fav rg">R</span></div>
+          <div class="pied"><div class="anneau"><span>☾</span></div></div>
+        </nav>
+        <div class="page-fausse"></div>
+      </div>
+      <ul class="notes">
+        <li>Accès et onglets : même case, même taille. Seul le séparateur les sépare.</li>
+      </ul>
+    </section>
+
+    <!-- 1 : SOCLE -->
+    <section class="variante">
+      <div class="v-tete"><span class="num">1</span><h2>Le socle</h2></div>
+      <div class="scene">
+        <nav class="rail r1">
+          <div class="feux"><i></i><i></i><i></i></div>
+          <div class="plus">+</div>
+          <div class="chev">››</div>
+          <div class="socle">
+            <span class="app yt ouvert"><svg viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg></span>
+            <span class="app gh ouvert"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#24292f"/></svg></span>
+            <span class="app gm ouvert"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span>
+          </div>
+          <div class="etiq" style="color:var(--g1)"><i style="background:var(--g1)"></i>GMA…</div>
+          <div class="o dort"><span class="fav gm"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span></div>
+          <div class="o dort"><span class="fav gm"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span></div>
+          <div class="etiq" style="color:var(--g2)"><i style="background:var(--g2)"></i>OCC…</div>
+          <div class="o dort"><span class="fav oc">D</span></div>
+          <div class="o dort"><span class="fav nt">N</span></div>
+          <div class="etiq" style="color:var(--g3)"><i style="background:var(--g3)"></i>GITH…</div>
+          <div class="o dort"><span class="fav gh"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#24292f"/></svg></span></div>
+          <div class="etiq" style="color:var(--g4)"><i style="background:var(--g4)"></i>YOU…</div>
+          <div class="o dort"><span class="fav yt"><svg viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg></span></div>
+          <div class="etiq" style="color:var(--g5)"><i style="background:var(--g5)"></i>RÉGL…</div>
+          <div class="o actif"><span class="fav rg">R</span></div>
+          <div class="pied"><div class="anneau"><span>☾</span></div></div>
+        </nav>
+        <div class="page-fausse"></div>
+      </div>
+      <ul class="notes">
+        <li>Les accès sont <b>posés sur un socle</b> en relief, comme le dock de macOS : grandes icônes en couleur.</li>
+        <li>Les onglets sont <b>plus petits</b>, sans case, un peu éteints tant qu'ils ne sont pas affichés.</li>
+        <li>Accès ouvert : un petit trait vert sous l'icône.</li>
+      </ul>
+    </section>
+
+    <!-- 2 : ROND ET CARRÉ -->
+    <section class="variante">
+      <div class="v-tete"><span class="num">2</span><h2>Rond et carré</h2></div>
+      <div class="scene">
+        <nav class="rail r2">
+          <div class="feux"><i></i><i></i><i></i></div>
+          <div class="plus">+</div>
+          <div class="chev">››</div>
+          <span class="app rond yt ouvert"><svg viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg></span>
+          <span class="app rond gh"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#24292f"/></svg></span>
+          <span class="app rond gm ouvert"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span>
+          <div class="titre-zone">ONGLETS</div>
+          <div class="fil" style="--c:var(--g1)">
+            <div class="carre dort"><span class="fav gm"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span></div>
+            <div class="carre dort"><span class="fav gm"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span></div>
+          </div>
+          <div class="fil" style="--c:var(--g2)">
+            <div class="carre dort"><span class="fav oc">D</span></div>
+            <div class="carre dort"><span class="fav nt">N</span></div>
+          </div>
+          <div class="fil" style="--c:var(--g3)">
+            <div class="carre dort"><span class="fav gh"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#24292f"/></svg></span></div>
+          </div>
+          <div class="fil" style="--c:var(--g4)">
+            <div class="carre dort"><span class="fav yt"><svg viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg></span></div>
+          </div>
+          <div class="fil" style="--c:var(--g5)">
+            <div class="carre actif"><span class="fav rg">R</span></div>
+          </div>
+          <div class="pied"><div class="anneau"><span>☾</span></div></div>
+        </nav>
+        <div class="page-fausse"></div>
+      </div>
+      <ul class="notes">
+        <li><b>Accès = ronds</b>, pleine couleur. <b>Onglets = carrés</b> : la forme suffit à les séparer.</li>
+        <li>Chaque groupe est un trait de sa couleur sur la gauche, sans étiquette (le nom vient en bulle).</li>
+        <li>Accès ouvert : son anneau devient vert.</li>
+      </ul>
+    </section>
+
+    <!-- 3 : CARTES DE GROUPE -->
+    <section class="variante">
+      <div class="v-tete"><span class="num">3</span><h2>Cartes de groupe</h2></div>
+      <div class="scene">
+        <nav class="rail r3">
+          <div class="feux"><i></i><i></i><i></i></div>
+          <div class="plus">+</div>
+          <div class="chev">››</div>
+          <div class="lance ouvert"><span class="app yt"><svg viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg></span><span class="fleche">↗</span></div>
+          <div class="lance"><span class="app gh"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#24292f"/></svg></span><span class="fleche">↗</span></div>
+          <div class="lance ouvert"><span class="app gm"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span><span class="fleche">↗</span></div>
+          <div class="carte" style="--c:var(--g1)"><span class="nom">Gmail</span>
+            <div class="t dort"><span class="fav gm"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span></div>
+            <div class="t dort"><span class="fav gm"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span></div>
+          </div>
+          <div class="carte" style="--c:var(--g2)"><span class="nom">Occt</span>
+            <div class="t dort"><span class="fav oc">D</span></div>
+            <div class="t dort"><span class="fav nt">N</span></div>
+          </div>
+          <div class="carte" style="--c:var(--g3)"><span class="nom">Github</span>
+            <div class="t dort"><span class="fav gh"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#24292f"/></svg></span></div>
+          </div>
+          <div class="carte" style="--c:var(--g4)"><span class="nom">Youtube</span>
+            <div class="t dort"><span class="fav yt"><svg viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg></span></div>
+          </div>
+          <div class="carte" style="--c:var(--g5)"><span class="nom">Réglages</span>
+            <div class="t actif"><span class="fav rg">R</span></div>
+          </div>
+          <div class="pied"><div class="anneau"><span>☾</span></div></div>
+        </nav>
+        <div class="page-fausse"></div>
+      </div>
+      <ul class="notes">
+        <li>Les onglets vivent <b>dans des cartes</b> teintées de la couleur du groupe ; les accès restent <b>libres</b>, hors carte.</li>
+        <li>Une petite flèche ↗ sur chaque accès dit « ouvre un site » (verte s'il est déjà ouvert).</li>
+        <li>Reprend la piste « fils en couleur » de la maquette du rail replié.</li>
+      </ul>
+    </section>
+
+    <!-- 4 : LANCEUR COMPACT -->
+    <section class="variante">
+      <div class="v-tete"><span class="num">4</span><h2>Lanceur compact</h2></div>
+      <div class="scene">
+        <nav class="rail r4">
+          <div class="feux"><i></i><i></i><i></i></div>
+          <div class="plus">+</div>
+          <div class="chev">››</div>
+          <div class="lanceur">
+            <span class="app yt ouvert"><svg viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg></span>
+            <span class="app gh"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#24292f"/></svg></span>
+            <span class="app gm ouvert"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span>
+            <span class="ajout">+</span>
+          </div>
+          <div class="ligne dort" style="--c:var(--g1)"><span class="barre"></span><span class="fav gm"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span></div>
+          <div class="ligne dort" style="--c:var(--g1)"><span class="barre"></span><span class="fav gm"><svg viewBox="0 0 24 24"><path d="M3 6l9 7 9-7v12h-3V10l-6 5-6-5v8H3z" fill="#ea4335"/></svg></span></div>
+          <div class="ligne dort" style="--c:var(--g2)"><span class="barre"></span><span class="fav oc">D</span></div>
+          <div class="ligne dort" style="--c:var(--g2)"><span class="barre"></span><span class="fav nt">N</span></div>
+          <div class="ligne dort" style="--c:var(--g3)"><span class="barre"></span><span class="fav gh"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#24292f"/></svg></span></div>
+          <div class="ligne dort" style="--c:var(--g4)"><span class="barre"></span><span class="fav yt"><svg viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg></span></div>
+          <div class="ligne actif" style="--c:var(--g5)"><span class="barre"></span><span class="fav rg">R</span></div>
+          <div class="pied"><div class="anneau"><span>☾</span></div></div>
+        </nav>
+        <div class="page-fausse"></div>
+      </div>
+      <ul class="notes">
+        <li>Les accès forment une <b>petite grille 2 × 2</b> dans un cadre pointillé : un lanceur, pas une liste.</li>
+        <li>Les onglets sont <b>une liste</b> : un trait de la couleur du groupe devant chaque icône, sans étiquettes.</li>
+        <li>Le plus compact : tient 10 accès sur 5 lignes.</li>
+      </ul>
+    </section>
+
+  </div>
+</div>
+</body>
+</html>
