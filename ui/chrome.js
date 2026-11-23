@@ -160,6 +160,13 @@ function rendreFenetre(s) {
     teintePosee = teinte + "|" + site;
     window.TrameTeintes.appliquer(teinte, site);
   }
+  // Style du rail replie (reglages > Apparence) : acces rapides et groupes, choisis separement.
+  // Tout est en CSS (chrome.css, « styles du rail replie »), cle sur ces deux attributs.
+  const rs = (s && s.railStyle) || {};
+  const railAcces = rs.acces || "cases";
+  const railOnglets = rs.onglets || "etiquettes";
+  if (document.body.dataset.railAcces !== railAcces) document.body.dataset.railAcces = railAcces;
+  if (document.body.dataset.railOnglets !== railOnglets) document.body.dataset.railOnglets = railOnglets;
   if (agrandie !== fenetreAgrandie) {
     fenetreAgrandie = agrandie;
     if (agrandie) document.body.dataset.agrandie = "1";
@@ -782,7 +789,8 @@ function rendreRail(s) {
       if (vientDeRanger) return;
       if (window.innerWidth < 130) ipc({ m: "filReplier", id: f.id, replie: !f.replie });
     };
-    tete.title = "Glisser pour ranger ce groupe";
+    // Le nom d'abord : rail replie en style « trait », la bulle est le seul endroit ou il se lit.
+    tete.title = `${f.nom}\nGlisser pour ranger ce groupe`;
     tete.addEventListener("pointerdown", (e) => saisirRangement(e, f));
     const chev = elem("button", "chev");
     chev.title = f.replie ? "Déplier" : "Replier";

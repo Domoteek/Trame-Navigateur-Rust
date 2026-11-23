@@ -2843,6 +2843,7 @@ impl App {
             "panneau": self.panneau_ouvert,
             "version": crate::maj::ACTUELLE,
             "theme": self.reglages.theme,
+            "railStyle": { "acces": self.reglages.rail_acces(), "onglets": self.reglages.rail_onglets() },
             // La teinte du site n'est poussee qu'en mode dynamique : ailleurs elle ne sert a rien.
             "teinteSite": if self.reglages.theme == "dynamique" { self.teinte_site.clone() } else { None },
             "maj": self.maj.as_ref().map(|m| json!({ "version": m.version, "url": m.url })),
@@ -4252,6 +4253,28 @@ impl App {
                 if voulu != self.reglages.theme {
                     info!("apparence : teinte {voulu}");
                     self.reglages.theme = voulu;
+                    self.profil.sauver_reglages(&self.reglages);
+                    self.pousser_etat();
+                }
+            }
+            // Reglages > Apparence : style du rail replie, acces rapides et groupes d'onglets
+            // choisis separement (on peut prendre le socle d'une maquette et les cartes d'une autre).
+            "railStyle" => {
+                let mut change = false;
+                if let Some(a) = v["acces"].as_str().filter(|a| crate::model::RAIL_ACCES.contains(a)) {
+                    if a != self.reglages.rail_acces {
+                        self.reglages.rail_acces = a.to_string();
+                        change = true;
+                    }
+                }
+                if let Some(o) = v["onglets"].as_str().filter(|o| crate::model::RAIL_ONGLETS.contains(o)) {
+                    if o != self.reglages.rail_onglets {
+                        self.reglages.rail_onglets = o.to_string();
+                        change = true;
+                    }
+                }
+                if change {
+                    info!("apparence : rail replie {} / {}", self.reglages.rail_acces, self.reglages.rail_onglets);
                     self.profil.sauver_reglages(&self.reglages);
                     self.pousser_etat();
                 }

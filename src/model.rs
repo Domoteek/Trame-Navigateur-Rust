@@ -312,6 +312,15 @@ pub struct Reglages {
     /// Windows). Les trois premiers retirent la barre de Windows.
     #[serde(default = "barre_fenetre_defaut")]
     pub barre_fenetre: String,
+    /// Rail replie, acces rapides : `cases` (icones nues, l'aspect d'origine), `socle` (posees sur
+    /// un socle en relief), `ronds` (pastilles rondes) ou `grille` (lanceur 2 x 2). Choix de
+    /// Clement sur `docs/maquettes/rail-replie-acces.html` (2026-11-23).
+    #[serde(default = "rail_acces_defaut")]
+    pub rail_acces: String,
+    /// Rail replie, groupes d'onglets : `etiquettes` (nom du groupe en couleur, l'origine),
+    /// `cartes` (chaque groupe dans une carte teintee) ou `trait` (un trait de couleur, sans nom).
+    #[serde(default = "rail_onglets_defaut")]
+    pub rail_onglets: String,
     /// Endormir automatiquement les onglets refroidis.
     #[serde(default = "vrai")]
     pub veille_auto: bool,
@@ -384,7 +393,38 @@ fn barre_fenetre_defaut() -> String {
 /// Les styles de barre de fenetre acceptes (`Reglages::barre_fenetre`).
 pub const BARRES_FENETRE: [&str; 4] = ["bande", "bandeau", "rail", "windows"];
 
+fn rail_acces_defaut() -> String {
+    "cases".into()
+}
+
+fn rail_onglets_defaut() -> String {
+    "etiquettes".into()
+}
+
+/// Styles des acces rapides du rail replie (`Reglages::rail_acces`).
+pub const RAIL_ACCES: [&str; 4] = ["cases", "socle", "ronds", "grille"];
+/// Styles des groupes d'onglets du rail replie (`Reglages::rail_onglets`).
+pub const RAIL_ONGLETS: [&str; 3] = ["etiquettes", "cartes", "trait"];
+
 impl Reglages {
+    /// Le style des acces du rail replie, ramene a une valeur connue.
+    pub fn rail_acces(&self) -> &str {
+        if RAIL_ACCES.contains(&self.rail_acces.as_str()) {
+            &self.rail_acces
+        } else {
+            "cases"
+        }
+    }
+
+    /// Le style des groupes d'onglets du rail replie, ramene a une valeur connue.
+    pub fn rail_onglets(&self) -> &str {
+        if RAIL_ONGLETS.contains(&self.rail_onglets.as_str()) {
+            &self.rail_onglets
+        } else {
+            "etiquettes"
+        }
+    }
+
     /// Le style de barre de fenetre, ramene a une valeur connue.
     pub fn barre_fenetre(&self) -> &str {
         if BARRES_FENETRE.contains(&self.barre_fenetre.as_str()) {
@@ -484,6 +524,8 @@ impl Default for Reglages {
             barre_extensions: true,
             plein_ecran: plein_ecran_defaut(),
             barre_fenetre: barre_fenetre_defaut(),
+            rail_acces: rail_acces_defaut(),
+            rail_onglets: rail_onglets_defaut(),
             veille_auto: true,
             budget: budget_defaut(),
             extensions_etat: BTreeMap::new(),

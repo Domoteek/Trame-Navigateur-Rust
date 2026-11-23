@@ -429,6 +429,33 @@
             </div>
           </div>
 
+          <div class="groupe" data-mots="rail replié accès rapides applications ancrées onglets groupes socle ronds grille cartes trait">
+            <h3>Rail replié</h3>
+            <div class="carte">
+              <select id="rail-acces" class="choix-cache" aria-label="Accès rapides du rail replié">
+                <option value="cases">Cases</option>
+                <option value="socle">Socle</option>
+                <option value="ronds">Ronds</option>
+                <option value="grille">Grille</option>
+              </select>
+              <div class="libelle" style="display:flex;flex-direction:column;gap:2px"><b>Accès rapides</b>
+                <span>Les sites ancrés sous le « + » : comment ils se distinguent des onglets.</span></div>
+              <div class="choix" id="choix-rail-acces"></div>
+              <select id="rail-onglets" class="choix-cache" aria-label="Groupes d'onglets du rail replié">
+                <option value="etiquettes">Étiquettes</option>
+                <option value="cartes">Cartes</option>
+                <option value="trait">Trait</option>
+              </select>
+              <div class="libelle" style="margin-top:16px;display:flex;flex-direction:column;gap:2px"><b>Groupes d'onglets</b>
+                <span>Comment un groupe se montre quand le rail est replié.</span></div>
+              <div class="choix" id="choix-rail-onglets"></div>
+              <p class="note">
+                Les deux se combinent : par exemple le socle pour les accès et les cartes pour les groupes.
+                Le rail déplié ne change pas.
+              </p>
+            </div>
+          </div>
+
           <div class="groupe" data-mots="barre extensions pastille couture">
             <h3>Barre d'extensions</h3>
             <div class="carte">
@@ -848,7 +875,40 @@
           const pos = x === "d" ? [22, 14, 6] : [x, x + 8, x + 16];
           return pos.map((p, i) => `<i class="b${i === 2 ? " x" : ""}" style="${cote}:${p}px;top:${y}px"></i>`).join("");
         };
+        // Rail replie en miniature : la colonne du rail a gauche, la page a droite. `a` dessine les
+        // trois acces rapides, `o` les groupes d'onglets en dessous.
+        const RAIL = (a, o) =>
+          `<i class="r" style="left:4px;top:4px;width:30px;bottom:4px;background:var(--surface)"></i>` +
+          `<i class="pg" style="left:38px;top:4px;right:4px;bottom:4px"></i>${a}${o}`;
+        const CASE = (y, c) => `<i style="position:absolute;left:14px;top:${y}px;width:10px;height:10px;border-radius:3px;background:${c}"></i>`;
+        const ONG = (y, x = 15) => `<i style="position:absolute;left:${x}px;top:${y}px;width:8px;height:8px;border-radius:2px;background:#56627a"></i>`;
+        const COUL = ["#e8322d", "#f0f3f6", "#ea4335"];
+        const ACCES_CASES = COUL.map((c, i) => CASE(7 + i * 12, c)).join("") + `<i style="position:absolute;left:9px;top:44px;width:20px;height:1px;background:var(--bord-fort)"></i>`;
+        const ONGLETS_ETIQ = `<i style="position:absolute;left:11px;top:48px;width:3px;height:3px;border-radius:50%;background:#8b7cf6"></i><i style="position:absolute;left:16px;top:48px;width:10px;height:3px;border-radius:1px;background:#8b7cf6"></i>${ONG(54)}<i style="position:absolute;left:11px;top:65px;width:3px;height:3px;border-radius:50%;background:#fbbf24"></i>`;
         const VIGNETTES = {
+          "rail-acces": [
+            ["cases", "Cases", "icônes nues, comme aujourd'hui", RAIL(ACCES_CASES, ONGLETS_ETIQ)],
+            ["socle", "Socle", "posés sur un plateau en relief",
+              RAIL(`<i style="position:absolute;left:8px;top:5px;width:22px;height:39px;border-radius:6px;background:linear-gradient(180deg,#2a3448,#151c2a);box-shadow:0 0 0 1px rgba(255,255,255,.16)"></i>` + COUL.map((c, i) => CASE(8 + i * 12, c)).join(""), ONGLETS_ETIQ)],
+            ["ronds", "Ronds", "les onglets restent carrés",
+              RAIL(COUL.map((c, i) => `<i style="position:absolute;left:13px;top:${6 + i * 13}px;width:12px;height:12px;border-radius:50%;background:${c};box-shadow:0 0 0 1px var(--fond),0 0 0 2px rgba(255,255,255,.3)"></i>`).join(""), ONGLETS_ETIQ)],
+            ["grille", "Grille", "un petit lanceur 2 × 2",
+              RAIL(`<i style="position:absolute;left:9px;top:6px;width:20px;height:20px;border-radius:4px;border:1px dashed rgba(255,255,255,.25);box-sizing:border-box"></i>` +
+                [[12, 9, COUL[0]], [20, 9, COUL[1]], [12, 17, COUL[2]]].map(([x, y, c]) => `<i style="position:absolute;left:${x}px;top:${y}px;width:6px;height:6px;border-radius:2px;background:${c}"></i>`).join(""),
+                `<i style="position:absolute;left:11px;top:32px;width:3px;height:3px;border-radius:50%;background:#8b7cf6"></i><i style="position:absolute;left:16px;top:32px;width:10px;height:3px;border-radius:1px;background:#8b7cf6"></i>${ONG(38)}${ONG(49)}`)],
+          ],
+          "rail-onglets": [
+            ["etiquettes", "Étiquettes", "le nom du groupe en couleur",
+              RAIL(ACCES_CASES, ONGLETS_ETIQ)],
+            ["cartes", "Cartes", "chaque groupe dans sa carte",
+              RAIL(ACCES_CASES,
+                `<i style="position:absolute;left:8px;top:47px;width:22px;height:13px;border-radius:4px;background:rgba(139,124,246,.18);box-shadow:inset 0 0 0 1px rgba(139,124,246,.5)"></i>${ONG(50)}` +
+                `<i style="position:absolute;left:8px;top:62px;width:22px;height:9px;border-radius:4px 4px 0 0;background:rgba(251,191,36,.16);box-shadow:inset 0 0 0 1px rgba(251,191,36,.45)"></i>`)],
+            ["trait", "Trait", "un trait de couleur, sans nom",
+              RAIL(ACCES_CASES,
+                `<i style="position:absolute;left:9px;top:48px;width:2px;height:12px;border-radius:1px;background:#8b7cf6"></i>${ONG(50)}` +
+                `<i style="position:absolute;left:9px;top:63px;width:2px;height:9px;border-radius:1px;background:#fbbf24"></i>${ONG(64)}`)],
+          ],
           "barre-fenetre": [
             ["bande", "Une seule bande", "au bout de la barre d'adresse",
               `<i class="r" style="left:4px;top:4px;width:22px;bottom:4px"></i><i class="r" style="left:30px;top:4px;right:34px;height:12px"></i>${B("d", 8)}<i class="pg" style="left:30px;top:20px;right:4px;bottom:4px"></i>`],
@@ -1368,6 +1428,9 @@
           if (document.activeElement !== selPlein) selPlein.value = r.pleinEcran || "fenetre";
           const selBarre = $("barre-fenetre");
           if (document.activeElement !== selBarre) selBarre.value = r.barreFenetre || "bande";
+          const rail = etat.railStyle || {};
+          $("rail-acces").value = rail.acces || "cases";
+          $("rail-onglets").value = rail.onglets || "etiquettes";
           $("bascule-memoire-basse").className = "bascule" + (r.memoireBasse ? " on" : "");
           $("bascule-budget-auto").className = "bascule" + (r.budgetAuto ? " on" : "");
           $("bascule-nettoyer").className = "bascule" + (r.nettoyerAdresses ? " on" : "");
@@ -1464,6 +1527,8 @@
           ipc({ m: "barreExtensions", visible: !((etat && etat.reglages && etat.reglages.barreExtensions) || false) });
         $("plein-ecran").addEventListener("change", (e) => ipc({ m: "pleinEcran", mode: e.target.value }));
         $("barre-fenetre").addEventListener("change", (e) => ipc({ m: "barreFenetre", mode: e.target.value }));
+        $("rail-acces").addEventListener("change", (e) => ipc({ m: "railStyle", acces: e.target.value }));
+        $("rail-onglets").addEventListener("change", (e) => ipc({ m: "railStyle", onglets: e.target.value }));
         $("btn-recharger").onclick = () => ipc({ m: "extensionsRecharger" });
         $("btn-dossier-ext").onclick = () => ipc({ m: "dossierExtensions" });
         $("btn-chercher-chrome").addEventListener("click", () => ipc({ m: "chromeScan" }));

@@ -1435,3 +1435,88 @@ body[data-fenetre="rail"] .pastilles { display: flex; }
   .pied-actions #btn-veille:hover::before { background: var(--surface-2); }
   .pied-actions #btn-veille .ic { position: relative; }
 }
+/* ------------------------------------------- styles du rail replie (2026-11-23)
+   Reglages > Apparence : distinguer d'un coup d'oeil les acces rapides (sites ancres) des
+   onglets. Deux choix separes, poses par chrome.js sur <body> : data-rail-acces (cases, socle,
+   ronds, grille) et data-rail-onglets (etiquettes, cartes, trait). « cases » et « etiquettes »
+   gardent l'aspect d'origine (regles ci-dessus). Maquettes : docs/maquettes/rail-replie-acces.html. */
+@media (max-width: 130px) {
+  /* ----- acces : le socle — posees sur un plateau en relief, grandes icones ----- */
+  body[data-rail-acces="socle"] .bande-acces {
+    margin: 2px 6px 8px; padding: 6px 0; gap: 4px;
+    border: 1px solid var(--bord-fort); border-radius: 14px;
+    background: linear-gradient(180deg, var(--surface-3), var(--surface));
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+  body[data-rail-acces="socle"] .bande-acces .acces { height: 42px; }
+  body[data-rail-acces="socle"] .bande-acces .acces:hover { background: rgba(255, 255, 255, 0.06); }
+  body[data-rail-acces="socle"] .bande-acces .acces img,
+  body[data-rail-acces="socle"] .bande-acces .acces .lettre { width: 30px; height: 30px; border-radius: 9px; font-size: 14px; }
+  body[data-rail-acces="socle"] .bande-acces .acces .ouvert {
+    bottom: 1px; width: 12px; height: 3px; margin-left: -6px; border-radius: 2px;
+  }
+
+  /* ----- acces : ronds — pastilles rondes cerclees, les onglets restent carres ----- */
+  body[data-rail-acces="ronds"] .bande-acces { gap: 6px; padding-top: 4px; }
+  body[data-rail-acces="ronds"] .bande-acces .acces { height: 44px; border-radius: 50%; }
+  body[data-rail-acces="ronds"] .bande-acces .acces:hover { background: transparent; }
+  body[data-rail-acces="ronds"] .bande-acces .acces img,
+  body[data-rail-acces="ronds"] .bande-acces .acces .lettre {
+    width: 38px; height: 38px; border-radius: 50%; box-sizing: border-box; font-size: 15px;
+    box-shadow: 0 0 0 2px var(--fond), 0 0 0 3px var(--bord-fort);
+  }
+  /* L'icone d'un site n'est pas ronde : un disque de fond, l'icone au milieu. */
+  body[data-rail-acces="ronds"] .bande-acces .acces img { padding: 8px; background: var(--surface-3); }
+  body[data-rail-acces="ronds"] .bande-acces .acces:hover img,
+  body[data-rail-acces="ronds"] .bande-acces .acces:hover .lettre { box-shadow: 0 0 0 2px var(--fond), 0 0 0 3px var(--texte-3); }
+  /* Acces deja ouvert : l'anneau devient turquoise (le point ne sert plus). */
+  body[data-rail-acces="ronds"] .bande-acces .acces .ouvert { display: none; }
+  body[data-rail-acces="ronds"] .bande-acces .acces:has(.ouvert) img,
+  body[data-rail-acces="ronds"] .bande-acces .acces:has(.ouvert) .lettre { box-shadow: 0 0 0 2px var(--fond), 0 0 0 3.5px var(--vif); }
+
+  /* ----- acces : grille — lanceur 2 x 2 dans un cadre pointille ----- */
+  body[data-rail-acces="grille"] .bande-acces {
+    grid-template-columns: repeat(2, 22px); justify-content: center; gap: 6px;
+    margin: 2px 8px 8px; padding: 7px 0;
+    border: 1px dashed var(--bord-fort); border-radius: 12px;
+  }
+  body[data-rail-acces="grille"] .bande-acces .acces { width: 22px; height: 22px; border-radius: 6px; }
+  body[data-rail-acces="grille"] .bande-acces .acces:hover { background: var(--surface-3); }
+  body[data-rail-acces="grille"] .bande-acces .acces img,
+  body[data-rail-acces="grille"] .bande-acces .acces .lettre { width: 20px; height: 20px; border-radius: 5px; font-size: 10px; }
+  body[data-rail-acces="grille"] .bande-acces .acces .ouvert {
+    top: -2px; right: -2px; bottom: auto; left: auto; margin: 0; width: 6px; height: 6px;
+    box-shadow: 0 0 0 2px var(--fond);
+  }
+
+  /* ----- groupes : cartes — chaque groupe dans une carte de sa couleur ----- */
+  body[data-rail-onglets="cartes"] .fil,
+  body[data-rail-onglets="cartes"] .fil.cloisonne {
+    margin: 0 6px 6px; padding: 2px 0 5px; border-radius: 12px;
+    background: color-mix(in srgb, var(--c, var(--texte-3)) 11%, var(--fond));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--texte-3)) 30%, transparent);
+  }
+  body[data-rail-onglets="cartes"] .fil + .fil { border-top: 0; }
+  body[data-rail-onglets="cartes"] .fil-tete::before { display: none; }
+  body[data-rail-onglets="cartes"] .rail .fil-tete .fil-nom { max-width: 44px; font-size: 8.5px; color: color-mix(in srgb, var(--c, var(--texte-2)) 85%, white); }
+  body[data-rail-onglets="cartes"] .onglet { width: 40px; height: 34px; }
+  body[data-rail-onglets="cartes"] .onglet:hover { background: color-mix(in srgb, var(--c, var(--texte-3)) 18%, transparent); }
+  /* L'onglet affiche prend la couleur du groupe : le trait colle au bord tomberait hors carte. */
+  body[data-rail-onglets="cartes"] .onglet.actif { background: color-mix(in srgb, var(--c, var(--accent)) 30%, transparent); }
+  body[data-rail-onglets="cartes"] .onglet.actif::before { display: none; }
+
+  /* ----- groupes : trait — un trait de couleur a gauche, sans nom (le nom vient en bulle) ----- */
+  body[data-rail-onglets="trait"] .fil,
+  body[data-rail-onglets="trait"] .fil.cloisonne {
+    margin: 3px 6px 3px 8px; padding: 2px 0;
+    border-left: 3px solid var(--c, var(--texte-3)); border-radius: 3px 10px 10px 3px;
+    background: color-mix(in srgb, var(--c, var(--texte-3)) 7%, transparent);
+  }
+  body[data-rail-onglets="trait"] .fil + .fil { border-top: 0; }
+  /* La tete reste cliquable (replier le groupe) mais se reduit a une fine bande. */
+  body[data-rail-onglets="trait"] .fil-tete { padding: 0; height: 8px; }
+  body[data-rail-onglets="trait"] .fil-tete::before,
+  body[data-rail-onglets="trait"] .rail .fil-tete .fil-nom { display: none !important; }
+  body[data-rail-onglets="trait"] .onglet { width: 38px; height: 34px; border-radius: 8px; }
+  body[data-rail-onglets="trait"] .onglet.actif::before { left: -11px; }
+}

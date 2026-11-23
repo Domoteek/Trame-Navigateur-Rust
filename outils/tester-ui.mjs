@@ -1201,6 +1201,89 @@ async function suite() {
     await p.close();
   });
 
+  await cas("apparence : style du rail replié, accès et groupes choisis séparément", async () => {
+    // Réglages : une vignette par style, le choix part vers l'hôte.
+    const p = await page("reglages.html");
+    await pousser(p, Object.assign(etatDeBase(), { railStyle: { acces: "cases", onglets: "etiquettes" } }));
+    egal(await p.$$eval("#choix-rail-acces .option", (l) => l.map((o) => o.dataset.valeur).join(",")), "cases,socle,ronds,grille", "quatre styles d'accès");
+    egal(await p.$$eval("#choix-rail-onglets .option", (l) => l.map((o) => o.dataset.valeur).join(",")), "etiquettes,cartes,trait", "trois styles de groupes");
+    egal(await p.$eval("#choix-rail-acces .option.choisi", (o) => o.dataset.valeur), "cases", "l'état actuel est coché");
+    await vider(p);
+    await p.evaluate(() => document.querySelector('#choix-rail-acces .option[data-valeur="socle"]').click());
+    await p.evaluate(() => document.querySelector('#choix-rail-onglets .option[data-valeur="cartes"]').click());
+    const recus = (await messages(p)).filter((m) => m.m === "railStyle");
+    verifier(recus.some((m) => m.acces === "socle") && recus.some((m) => m.onglets === "cartes"), `railStyle envoyés ${JSON.stringify(recus)}`);
+    if (process.env.TRAME_CAPTURES) {
+      await rubrique(p, "apparence");
+      await pousser(p, Object.assign(etatDeBase(), { railStyle: { acces: "socle", onglets: "cartes" } }));
+      const carte = p.locator("#choix-rail-acces").locator("xpath=..");
+      await carte.screenshot({ path: `${process.env.TRAME_CAPTURES}/reglages-rail.png` });
+    }
+    await p.close();
+
+    // Rail replié : chaque combinaison change ce qu'elle doit, et seulement replié.
+    const r = await page("chrome.html", { query: "?surface=rail" });
+    const etat = etatDeBase();
+    etat.carnet = Object.assign({}, etat.carnet, {
+      acces: [
+        { url: "https://www.youtube.com/", titre: "Youtube", domaine: "youtube.com", groupe: "", rail: true, icone: null, ouvert: 4 },
+        { url: "https://github.com/", titre: "GitHub", domaine: "github.com", groupe: "", rail: true, icone: null, ouvert: null },
+        { url: "https://mail.google.com/", titre: "Gmail", domaine: "mail.google.com", groupe: "", rail: true, icone: null, ouvert: null },
+      ],
+      accesGroupes: [],
+    });
+    etat.fils = [
+      { id: 1, nom: "Gmail Boîte", replie: false, couleur: "#8b7cf6" },
+      { id: 2, nom: "Occt Download", replie: false, couleur: "#fbbf24" },
+    ];
+    etat.onglets = [onglet(1, 1, "Boîte", "https://mail.google.com/"), onglet(2, 1, "Boîte 2", "https://mail.google.com/b"), onglet(3, 2, "OCCT", "https://ocbase.com/")];
+    etat.actif = 3;
+    await r.setViewportSize({ width: 64, height: 520 });
+    const mesure = () => r.evaluate(() => {
+      const b = getComputedStyle(document.querySelector(".bande-acces"));
+      const img = getComputedStyle(document.querySelector(".bande-acces .acces .lettre, .bande-acces .acces img"));
+      const f = getComputedStyle(document.querySelector(".fil"));
+      return { rayonBande: b.borderTopLeftRadius, colonnes: b.gridTemplateColumns.split(" ").length, rayonIcone: img.borderTopLeftRadius, fondFil: f.backgroundColor, traitFil: f.borderLeftWidth, nomVisible: getComputedStyle(document.querySelector(".fil-nom")).display !== "none" };
+    });
+    const combos = [["cases", "etiquettes"], ["socle", "cartes"], ["ronds", "trait"], ["grille", "cartes"]];
+    const vus = {};
+    for (const [acces, onglets] of combos) {
+      await pousser(r, Object.assign({}, etat, { railStyle: { acces, onglets } }));
+      egal(await r.evaluate(() => document.body.dataset.railAcces + "/" + document.body.dataset.railOnglets), `${acces}/${onglets}`, "attributs posés");
+      await r.waitForTimeout(300); // .fil a une transition de 0,2 s sur ses bords
+      vus[acces + "/" + onglets] = await mesure();
+      if (onglets === "trait") {
+        const [c, bord] = await r.evaluate(() => {
+          const f = document.querySelector(".fil");
+          const t = document.createElement("i");
+          t.style.color = f.style.getPropertyValue("--c");
+          document.body.appendChild(t);
+          const attendu = getComputedStyle(t).color;
+          t.remove();
+          return [attendu, getComputedStyle(f).borderLeftColor];
+        });
+        egal(bord, c, "trait : de la couleur du groupe");
+      }
+      if (process.env.TRAME_CAPTURES) await r.screenshot({ path: `${process.env.TRAME_CAPTURES}/rail-${acces}-${onglets}.png` });
+    }
+    verifier(vus["socle/cartes"].rayonBande === "14px", `socle : plateau arrondi ${JSON.stringify(vus["socle/cartes"])}`);
+    verifier(vus["ronds/trait"].rayonIcone === "50%", `ronds : icônes rondes ${JSON.stringify(vus["ronds/trait"])}`);
+    egal(vus["grille/cartes"].colonnes, 2, "grille : deux colonnes");
+    verifier(vus["socle/cartes"].fondFil !== vus["cases/etiquettes"].fondFil, "cartes : le groupe a un fond");
+    egal(vus["ronds/trait"].traitFil, "3px", "trait : bord gauche de couleur");
+    egal(vus["ronds/trait"].nomVisible, false, "trait : sans nom");
+    egal(vus["cases/etiquettes"].nomVisible, true, "étiquettes : le nom se voit");
+    // Déplié, rien ne change : les styles ne valent que replié.
+    await r.setViewportSize({ width: 300, height: 520 });
+    const deplie = (onglets) =>
+      r.evaluate((o) => {
+        document.body.dataset.railOnglets = o;
+        return getComputedStyle(document.querySelector(".fil")).borderLeftWidth;
+      }, onglets);
+    egal(await deplie("trait"), await deplie("etiquettes"), "déplié : le style « trait » ne s'applique pas");
+    await r.close();
+  });
+
   await cas("rail replié : le clic droit sur un accès ouvre son menu, dessiné par la barre", async () => {
     const r = await page("chrome.html", { query: "?surface=rail" });
     await r.setViewportSize({ width: 64, height: 700 });
