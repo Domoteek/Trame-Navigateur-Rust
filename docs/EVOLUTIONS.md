@@ -1021,6 +1021,11 @@ rouge = fermer/danger, vert = actif, ambre = tiède, blanc = texte, carré du lo
 Preuves : `cargo test` **194/194** (palette lue dans `teintes.js`, popup injecté), `tester-ui`
 **79/79** (scripts injectés avec une palette Menthe) ; vrai binaire en Ambre : la recherche dans la
 page et la barre du coup d'œil sont ambrées (captures).
+**0.4.45 — le double-clic renomme un groupe.** La tête d'un groupe capture le pointeur pour le
+glisser-ranger ; Chromium lui renvoie alors `click` et `dblclick`, et le nom ne recevait jamais le
+double-clic (signalé par Clément le 23/11). Le double-clic s'écoute sur la tête ; le champ de
+saisie survit aux poussées de l'hôte et ne se referme qu'une fois (retirer le champ déclenche
+`blur`). Preuve : `tester-ui` **80/80**, dont un vrai double-clic souris qui échouait avant.
 ## 11. L'état aujourd'hui
 
 ```
