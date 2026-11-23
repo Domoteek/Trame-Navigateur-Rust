@@ -1,6 +1,6 @@
 ﻿[package]
 name = "trame"
-version = "0.4.30"
+version = "0.4.32"
 edition = "2021"
 description = "Trame Ã¢â‚¬â€ navigateur a onglets tisses (Rust + WebView2)"
 license = "MIT"

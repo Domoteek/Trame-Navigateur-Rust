@@ -5073,16 +5073,8 @@ impl App {
             return;
         }
         info!("mise a jour : installation de {} ({})", maj.version, telechargement.chemin);
-        // L'installeur ferme Trame pour se remplacer. C'est donc un `cmd` qui l'attend et qui
-        // RALLUME Trame ensuite — sans ca, l'utilisateur reste devant un navigateur ferme.
-        // On ne compte pas sur l'entree [Run] de l'installeur : elle est sautee en mode silencieux.
-        let moi = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("trame.exe"));
-        let ligne = format!(
-            "/C start \"\" /wait \"{}\" /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /CURRENTUSER && start \"\" \"{}\"",
-            telechargement.chemin,
-            moi.display()
-        );
-        let lancement = std::process::Command::new("cmd").arg(&ligne).spawn();
+        lancer_installation(&telechargement.chemin);
+        let lancement: Result<(), std::io::Error> = Ok(());
         match lancement {
             Ok(_) => self.signaler(&format!("Installation de Trame {} en cours…", maj.version)),
             Err(e) => {
@@ -5135,14 +5127,7 @@ impl App {
                 self.maj_a_installer = false;
                 if Path::new(&chemin).exists() {
                     info!("mise a jour : installation de {version} ({chemin})");
-                    // Meme raison que dans `installer_maj` : le `cmd` attend l'installeur puis
-                    // rallume Trame, que l'installeur a du fermer pour se remplacer.
-                    let moi = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("trame.exe"));
-                    let ligne = format!(
-                        "/C start \"\" /wait \"{chemin}\" /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /CURRENTUSER && start \"\" \"{}\"",
-                        moi.display()
-                    );
-                    let _ = std::process::Command::new("cmd").arg(&ligne).spawn();
+                    lancer_installation(&chemin);
                     self.signaler(&format!("Installation de Trame {version}…"));
                 }
             }
@@ -6304,6 +6289,33 @@ fn popup_maj(disponible: &str, actuelle: &str) -> String {
     POPUP_MAJ
         .replace("__VERSION__", disponible)
         .replace("__ACTUELLE__", actuelle)
+}
+
+/// Lance le setup d'une mise a jour, puis rallume Trame.
+///
+/// Pourquoi un fichier `.bat` plutot qu'une ligne `cmd /C` : la forme
+/// `cmd /C start "" /wait "…" && start "…"` passee en UN argument a produit un
+/// « Impossible de trouver "\\" » sur le poste de Clement (2026-11-23) — les guillemets se
+/// melangent quand Rust echappe l'argument. Un fichier ecrit sur disque, lui, est lu tel quel.
+///
+/// L'installeur ferme Trame pour remplacer `trame.exe` : c'est ce script qui l'attend, puis qui
+/// rallume le programme — sinon on reste devant un navigateur ferme.
+fn lancer_installation(chemin_setup: &str) {
+    let moi = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("trame.exe"));
+    let bat = std::env::temp_dir().join("trame-mise-a-jour.bat");
+    let contenu = format!(
+        "@echo off\r\nstart \"\" /wait \"{}\" /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /CURRENTUSER\r\nstart \"\" \"{}\"\r\n",
+        chemin_setup,
+        moi.display()
+    );
+    match std::fs::write(&bat, contenu) {
+        Ok(()) => {
+            let _ = std::process::Command::new("cmd")
+                .args(["/C", &bat.to_string_lossy().to_string()])
+                .spawn();
+        }
+        Err(e) => alerte!("mise a jour : script d'installation impossible ({e})"),
+    }
 }
 
 /// La couleur annoncee par une page est-elle une couleur CSS raisonnable ?
