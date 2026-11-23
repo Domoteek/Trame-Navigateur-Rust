@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trame pour Android</title>
+<style>
+/* Maquette de la piste 2 (2026-11-23) : Trame Android sur GeckoView, extensions comprises.
+   Six écrans numérotés, à taille de téléphone, avec les couleurs « Défaut » de teintes.js. */
+:root {
+  color-scheme: dark;
+  --fond: #080b11; --fond-2: #0b0f17; --surface: #101521; --surface-2: #151c2a; --surface-3: #1b2434;
+  --bord: rgba(255,255,255,.07); --bord-fort: rgba(255,255,255,.14);
+  --texte: #e9eefa; --texte-2: #97a4bb; --texte-3: #616e85;
+  --vif: #5eead4; --dormant: #8b7cf6; --accent: #60a5fa; --accent-rgb: 96,165,250; --tiede: #fbbf24; --danger: #f87171;
+  --page: #05070b;
+  --f: "Segoe UI Variable Text", "Segoe UI", Roboto, Inter, system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--texte); font-family: var(--f); font-size: 14px;
+  padding: 28px 16px 56px; font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 28px; min-width: 0; }
+.wrap > * { min-width: 0; }
+h1 { font-size: 26px; margin: 0; font-weight: 650; letter-spacing: -.01em; text-wrap: balance; }
+.intro { color: var(--texte-2); max-width: 74ch; line-height: 1.55; margin: 6px 0 0; }
+.constat { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%),1fr)); gap: 10px; }
+.constat div { background: var(--surface); border: 1px solid var(--bord); border-radius: 10px; padding: 12px 14px; color: var(--texte-2); line-height: 1.45; font-size: 13px; }
+.constat b { color: var(--texte); display: block; margin-bottom: 3px; font-size: 13.5px; }
+
+.grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 30px 22px; justify-items: center; }
+.ecran { display: grid; gap: 12px; width: 320px; max-width: 100%; }
+.e-tete { display: flex; align-items: baseline; gap: 8px; }
+.e-tete .n { font-size: 12px; font-weight: 700; color: var(--fond); background: var(--vif); border-radius: 6px; padding: 2px 8px; }
+.e-tete h2 { font-size: 16px; margin: 0; font-weight: 650; }
+.e-note { color: var(--texte-2); font-size: 12.5px; line-height: 1.5; margin: 0; }
+.e-note b { color: var(--texte); font-weight: 600; }
+
+/* --- Le téléphone ------------------------------------------------------- */
+.tel { width: 100%; aspect-ratio: 9 / 19.5; background: var(--fond); border-radius: 30px; border: 1px solid var(--bord-fort);
+  box-shadow: 0 0 0 6px #0e1118, 0 18px 50px rgba(0,0,0,.55); overflow: hidden; position: relative; display: flex; flex-direction: column; }
+.statut { height: 26px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 20px 0 22px; font-size: 11px; color: var(--texte-2); }
+.statut .cam { width: 9px; height: 9px; border-radius: 50%; background: #000; box-shadow: 0 0 0 2px #151a22; }
+.contenu { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+.geste { height: 18px; flex: none; display: grid; place-items: center; }
+.geste::after { content: ""; width: 96px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.35); }
+
+/* Barre du bas (adresse au pouce) */
+.barre { flex: none; background: var(--fond-2); border-top: 1px solid var(--bord); padding: 8px 10px 6px; display: grid; gap: 8px; }
+.adresse { display: flex; align-items: center; gap: 8px; height: 40px; background: var(--surface-2); border: 1px solid var(--bord); border-radius: 20px; padding: 0 6px 0 12px; font-size: 13px; color: var(--texte-2); }
+.adresse .cad { color: var(--vif); font-size: 12px; }
+.adresse .txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.adresse .txt b { color: var(--texte); font-weight: 500; }
+.pastille-ext { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--vif); background: rgba(94,234,212,.1); border-radius: 12px; padding: 3px 8px; }
+.boutons { display: flex; justify-content: space-around; align-items: center; height: 34px; color: var(--texte-2); }
+.bt { width: 40px; height: 34px; display: grid; place-items: center; border-radius: 10px; position: relative; }
+.bt svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.bt.on { color: var(--accent); background: rgba(var(--accent-rgb), .12); }
+.compte { width: 21px; height: 21px; border: 1.8px solid currentColor; border-radius: 6px; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+.bt .point { position: absolute; top: 5px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--vif); }
+
+/* Faux contenu de page */
+.site { position: absolute; inset: 0; background: #0f141d; }
+.video { aspect-ratio: 16/9; background: linear-gradient(135deg, #2a1d3d, #10324a 60%, #0d2230); position: relative; display: grid; place-items: center; }
+.video .lire { width: 46px; height: 46px; border-radius: 50%; background: rgba(0,0,0,.45); display: grid; place-items: center; }
+.video .lire::after { content: ""; border-left: 14px solid #fff; border-top: 9px solid transparent; border-bottom: 9px solid transparent; margin-left: 4px; }
+.video .prog { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.2); }
+.video .prog::before { content: ""; display: block; width: 38%; height: 100%; background: #ef4444; }
+.lignes { padding: 12px; display: grid; gap: 8px; }
+.l { height: 10px; border-radius: 5px; background: rgba(255,255,255,.08); }
+.l.t { height: 14px; background: rgba(255,255,255,.16); width: 85%; }
+.miniature { display: flex; gap: 9px; }
+.miniature i { width: 104px; aspect-ratio: 16/9; border-radius: 8px; background: linear-gradient(135deg,#1f2b3e,#16323a); flex: none; }
+.miniature div { flex: 1; display: grid; gap: 6px; align-content: start; padding-top: 2px; }
+.bandeau { position: absolute; left: 10px; right: 10px; bottom: 10px; background: var(--surface-3); border: 1px solid var(--bord-fort); border-radius: 12px; padding: 9px 12px; font-size: 12px; color: var(--texte-2); display: flex; gap: 8px; align-items: center; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.bandeau b { color: var(--texte); }
+
+/* Nouvel onglet */
+.nt { padding: 16px 14px; display: grid; gap: 16px; align-content: start; height: 100%; overflow: hidden; background: radial-gradient(120% 60% at 50% 0%, rgba(var(--accent-rgb),.08), transparent 70%); }
+.logo { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 18px; margin-top: 6px; }
+.logo i { width: 26px; height: 26px; border-radius: 8px; background: conic-gradient(from 200deg, var(--vif), var(--accent), var(--dormant), var(--vif)); }
+.recherche { height: 44px; border-radius: 22px; background: var(--surface-2); border: 1px solid var(--bord-fort); display: flex; align-items: center; padding: 0 14px; color: var(--texte-3); font-size: 13.5px; gap: 8px; }
+.titre-s { font-size: 11.5px; color: var(--texte-3); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; display: flex; justify-content: space-between; }
+.titre-s span { text-transform: none; letter-spacing: 0; color: var(--accent); font-weight: 500; }
+.acces { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px 6px; }
+.a { display: grid; justify-items: center; gap: 5px; font-size: 10.5px; color: var(--texte-2); min-width: 0; }
+.a i { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-style: normal; font-weight: 700; font-size: 16px; color: #fff; border: 1px solid rgba(255,255,255,.08); }
+.a span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fav { display: grid; gap: 2px; background: var(--surface); border: 1px solid var(--bord); border-radius: 14px; padding: 4px; }
+.fav div { display: flex; align-items: center; gap: 10px; padding: 8px; font-size: 12.5px; border-radius: 10px; min-width: 0; }
+.fav div i { width: 22px; height: 22px; border-radius: 6px; flex: none; }
+.fav div span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fav div em { font-style: normal; color: var(--texte-3); font-size: 11px; }
+
+/* Fils (groupes d'onglets) */
+.fils { padding: 12px; display: grid; gap: 14px; align-content: start; height: 100%; overflow: hidden; }
+.onglets-tete { display: flex; align-items: center; gap: 8px; }
+.onglets-tete h3 { margin: 0; font-size: 16px; font-weight: 650; flex: 1; }
+.seg { display: flex; background: var(--surface); border: 1px solid var(--bord); border-radius: 10px; padding: 2px; font-size: 11.5px; }
+.seg span { padding: 4px 9px; border-radius: 8px; color: var(--texte-2); }
+.seg span.on { background: var(--surface-3); color: var(--texte); }
+.fil { border-left: 3px solid var(--c); padding-left: 10px; display: grid; gap: 8px; }
+.fil-t { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; }
+.fil-t em { font-style: normal; color: var(--texte-3); font-weight: 400; font-size: 11.5px; }
+.fil-t .pile { margin-left: auto; color: var(--texte-3); font-weight: 400; font-size: 11px; }
+.cartes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.carte { background: var(--surface); border: 1px solid var(--bord); border-radius: 12px; overflow: hidden; position: relative; }
+.carte.actif { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.carte .ap { height: 68px; background: linear-gradient(160deg, var(--g1), var(--g2)); }
+.carte .ct { padding: 6px 8px; font-size: 11px; display: flex; gap: 6px; align-items: center; }
+.carte .ct i { width: 12px; height: 12px; border-radius: 4px; background: var(--c); flex: none; }
+.carte .ct span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.carte.dort .ap { filter: grayscale(.8) brightness(.55); }
+.carte.dort::after { content: "veille"; position: absolute; top: 6px; left: 6px; font-size: 9.5px; padding: 2px 6px; border-radius: 6px; background: rgba(139,124,246,.25); color: #c4b5fd; }
+.carte .x { position: absolute; top: 5px; right: 5px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,.5); display: grid; place-items: center; font-size: 11px; color: #ddd; }
+.fil.ferme .cartes { display: none; }
+
+/* Feuille du bas (menu) */
+.voile { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
+.feuille { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-radius: 20px 20px 0 0; border-top: 1px solid var(--bord-fort); padding: 8px 14px 12px; display: grid; gap: 12px; }
+.poignee { width: 36px; height: 4px; border-radius: 4px; background: var(--bord-fort); justify-self: center; }
+.f-titre { font-size: 11.5px; color: var(--texte-3); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.ext { display: grid; gap: 2px; }
+.ext div { display: flex; align-items: center; gap: 10px; padding: 7px 4px; font-size: 13px; }
+.ext div i { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-style: normal; font-weight: 700; font-size: 12px; flex: none; }
+.ext div span { flex: 1; min-width: 0; }
+.ext div .inter { flex: none; }
+.ext div small { display: block; color: var(--texte-3); font-size: 11px; }
+.inter { width: 34px; height: 20px; border-radius: 10px; background: var(--surface-3); position: relative; flex: none; }
+.inter::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--texte-3); }
+.inter.on { background: rgba(94,234,212,.35); }
+.inter.on::after { left: 17px; background: var(--vif); }
+.actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.actions div { display: grid; justify-items: center; gap: 5px; font-size: 10.5px; color: var(--texte-2); padding: 8px 2px; background: var(--surface-2); border-radius: 12px; }
+.actions svg { width: 20px; height: 20px; stroke: var(--texte); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.teintes { display: flex; gap: 10px; }
+.teintes i { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; }
+.teintes i.on { border-color: var(--texte); }
+
+/* Écran PC */
+.pc { padding: 14px 12px; display: grid; gap: 12px; align-content: start; height: 100%; }
+.appareil { background: var(--surface); border: 1px solid var(--bord); border-radius: 14px; padding: 10px; display: grid; gap: 8px; }
+.appareil-t { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 600; }
+.appareil-t em { margin-left: auto; font-style: normal; font-weight: 400; font-size: 11px; color: var(--vif); }
+.appareil-t em.vieux { color: var(--texte-3); }
+.ligne-o { display: flex; gap: 9px; align-items: center; font-size: 12px; padding: 5px 2px; min-width: 0; }
+.ligne-o i { width: 16px; height: 16px; border-radius: 5px; flex: none; }
+.ligne-o span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ligne-o small { color: var(--texte-3); font-size: 10.5px; }
+.bouton-p { height: 38px; border-radius: 12px; background: rgba(var(--accent-rgb),.15); color: var(--accent); display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+
+/* Vidéo flottante (image dans l'image d'Android) */
+.accueil-android { position: absolute; inset: 0; background: linear-gradient(160deg, #1b2537, #0b1018); padding: 30px 18px; display: grid; grid-template-columns: repeat(4, 1fr); align-content: start; gap: 18px 10px; }
+.accueil-android i { aspect-ratio: 1; border-radius: 16px; background: rgba(255,255,255,.1); }
+.pip { position: absolute; right: 12px; bottom: 90px; width: 62%; border-radius: 12px; overflow: hidden; box-shadow: 0 12px 30px rgba(0,0,0,.6); border: 1px solid var(--bord-fort); }
+.notif { position: absolute; left: 10px; right: 10px; top: 8px; background: var(--surface-2); border: 1px solid var(--bord-fort); border-radius: 16px; padding: 10px 12px; display: grid; gap: 8px; font-size: 12px; }
+.notif-t { display: flex; gap: 8px; align-items: center; color: var(--texte-2); font-size: 11px; }
+.notif-t i { width: 16px; height: 16px; border-radius: 5px; background: conic-gradient(from 200deg, var(--vif), var(--accent), var(--dormant), var(--vif)); }
+.notif-c { display: flex; gap: 10px; align-items: center; }
+.notif-c .vig { width: 46px; height: 46px; border-radius: 8px; background: linear-gradient(135deg, #2a1d3d, #10324a); flex: none; }
+.notif-c div { flex: 1; min-width: 0; }
+.notif-c b { display: block; font-size: 12.5px; }
+.notif-c small { color: var(--texte-3); }
+.ctrl { display: flex; justify-content: space-around; color: var(--texte); font-size: 16px; }
+
+.sec { display: grid; gap: 10px; }
+.sec h2 { font-size: 18px; margin: 0; font-weight: 650; }
+.tableau { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tableau th, .tableau td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--bord); vertical-align: top; line-height: 1.45; }
+.tableau th { color: var(--texte-3); font-weight: 600; font-size: 12px; }
+.tableau td:first-child { color: var(--texte); min-width: 9em; }
+.tableau td { color: var(--texte-2); }
+.ok { color: var(--vif); } .moyen { color: var(--tiede); } .non { color: var(--danger); }
+.defile { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Trame pour Android, piste 2 : moteur GeckoView</h1>
+    <p class="intro">Six écrans pour voir à quoi ressemblerait Trame sur le téléphone. Ce n'est pas la version PC rétrécie :
+      l'adresse descend sous le pouce, le rail devient une barre de cinq boutons et les fils deviennent des piles de cartes.
+      Le moteur de Firefox (GeckoView) fait tourner Bitwarden et le saute-pub. Couleurs : teinte « Défaut ».</p>
+  </header>
+
+  <div class="constat">
+    <div><b>Ce qu'on garde</b>Fils, accès rapides (10 places), favoris, veille des onglets, teintes, saute-pub, Bitwarden.</div>
+    <div><b>Ce qui change</b>Plus de survol ni de raccourcis clavier : appui long à la place des bulles, glisser au doigt à la place du rail.</div>
+    <div><b>Le lien avec le PC</b>Le home lab sert de relais : favoris, accès rapides et onglets ouverts suivent d'un appareil à l'autre.</div>
+  </div>
+
+  <div class="grille">
+
+    <!-- 1 : Nouvel onglet -->
+    <section class="ecran">
+      <div class="e-tete"><span class="n">1</span><h2>Nouvel onglet</h2></div>
+      <div class="tel">
+        <div class="statut"><span>9:41</span><span class="cam"></span><span>5G · 82 %</span></div>
+        <div class="contenu">
+          <div class="nt">
+            <div class="logo"><i></i>Trame</div>
+            <div class="recherche">⌕ Rechercher ou saisir une adresse</div>
+            <div class="titre-s">Accès rapides <span>Modifier</span></div>
+            <div class="acces">
+              <div class="a"><i style="background:#b91c1c">Y</i><span>YouTube</span></div>
+              <div class="a"><i style="background:#1d4ed8">G</i><span>Gmail</span></div>
+              <div class="a"><i style="background:#0e7490">H</i><span>Maison</span></div>
+              <div class="a"><i style="background:#7c3aed">P</i><span>Pronote</span></div>
+              <div class="a"><i style="background:#15803d">F</i><span>FoyerBudget</span></div>
+              <div class="a"><i style="background:#b45309">A</i><span>Amazon</span></div>
+              <div class="a"><i style="background:#0f766e">M</i><span>Météo</span></div>
+              <div class="a"><i style="background:#be185d">S</i><span>Stremio</span></div>
+              <div class="a"><i style="background:#334155">D</i><span>Discord</span></div>
+              <div class="a"><i style="background:#1e293b;color:var(--texte-3);font-size:20px">+</i><span>Ajouter</span></div>
+            </div>
+            <div class="titre-s">Favoris</div>
+            <div class="fav">
+              <div><i style="background:#b91c1c"></i><span>Recette du pain au levain</span><em>hier</em></div>
+              <div><i style="background:#0e7490"></i><span>Plan électrique du garage</span><em>15/11</em></div>
+              <div><i style="background:#7c3aed"></i><span>Cahier de textes : semaine 48</span><em>12/11</em></div>
+            </div>
+          </div>
+        </div>
+        <div class="barre">
+          <div class="boutons">
+            <div class="bt"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></div>
+            <div class="bt"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="bt on"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+            <div class="bt"><span class="compte">7</span></div>
+            <div class="bt"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
+          </div>
+        </div>
+        <div class="geste"></div>
+      </div>
+      <p class="e-note">Mêmes <b>10 accès rapides</b> que le rail du PC, dans le même ordre. Appui long sur une icône : déplacer, renommer, retirer.</p>
+    </section>
+
+    <!-- 2 : Page ouverte -->
+    <section class="ecran">
+      <div class="e-tete"><span class="n">2</span><h2>Une page, adresse sous le pouce</h2></div>
+      <div class="tel">
+        <div class="statut"><span>9:42</span><span class="cam"></span><span>5G · 82 %</span></div>
+        <div class="contenu">
+          <div class="site">
+            <div class="video"><span class="lire"></span><span class="prog"></span></div>
+            <div class="lignes">
+              <div class="l t"></div><div class="l" style="width:60%"></div>
+              <div style="height:6px"></div>
+              <div class="miniature"><i></i><div><div class="l"></div><div class="l" style="width:70%"></div></div></div>
+              <div class="miniature"><i></i><div><div class="l"></div><div class="l" style="width:55%"></div></div></div>
+              <div class="miniature"><i></i><div><div class="l"></div><div class="l" style="width:65%"></div></div></div>
+            </div>
+            <div class="bandeau">🛡 <span><b>3 pubs sautées</b> sur cette vidéo</span></div>
+          </div>
+        </div>
+        <div class="barre">
+          <div class="adresse"><span class="cad">🔒</span><span class="txt"><b>youtube.com</b>/watch?v=…</span><span class="pastille-ext">🛡 3</span></div>
+          <div class="boutons">
+            <div class="bt"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></div>
+            <div class="bt"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="bt"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+            <div class="bt"><span class="compte">7</span></div>
+            <div class="bt"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
+          </div>
+        </div>
+        <div class="geste"></div>
+      </div>
+      <p class="e-note">La barre <b>se replie en défilant</b> vers le bas et revient en remontant. Glisser sur l'adresse, à gauche ou à droite, change d'onglet dans le fil.</p>
+    </section>
+
+    <!-- 3 : Fils -->
+    <section class="ecran">
+      <div class="e-tete"><span class="n">3</span><h2>Les onglets rangés en fils</h2></div>
+      <div class="tel">
+        <div class="statut"><span>9:43</span><span class="cam"></span><span>5G · 82 %</span></div>
+        <div class="contenu">
+          <div class="fils">
+            <div class="onglets-tete"><h3>7 onglets</h3><div class="seg"><span class="on">Fils</span><span>Tous</span></div></div>
+            <div class="fil" style="--c:#5eead4">
+              <div class="fil-t">Maison <em>3</em><span class="pile">⌄</span></div>
+              <div class="cartes">
+                <div class="carte actif" style="--c:#0e7490;--g1:#13314a;--g2:#0e1a26"><div class="ap"></div><div class="ct"><i></i><span>Home Assistant</span></div><span class="x">✕</span></div>
+                <div class="carte" style="--c:#b45309;--g1:#3a2a12;--g2:#15110a"><div class="ap"></div><div class="ct"><i></i><span>Ampoule TS0505B</span></div><span class="x">✕</span></div>
+                <div class="carte dort" style="--c:#15803d;--g1:#173521;--g2:#0d1610"><div class="ap"></div><div class="ct"><i></i><span>Goulotte 40×16</span></div><span class="x">✕</span></div>
+              </div>
+            </div>
+            <div class="fil" style="--c:#a78bfa">
+              <div class="fil-t">Soirée <em>2</em><span class="pile">⌄</span></div>
+              <div class="cartes">
+                <div class="carte" style="--c:#b91c1c;--g1:#3d1d2a;--g2:#10324a"><div class="ap"></div><div class="ct"><i></i><span>Bande-annonce</span></div><span class="x">✕</span></div>
+                <div class="carte dort" style="--c:#be185d;--g1:#3a1830;--g2:#160b14"><div class="ap"></div><div class="ct"><i></i><span>Stremio</span></div><span class="x">✕</span></div>
+              </div>
+            </div>
+            <div class="fil ferme" style="--c:#fbbf24">
+              <div class="fil-t">École <em>2</em><span class="pile">fil fermé · toucher pour ouvrir</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="barre">
+          <div class="boutons">
+            <div class="bt"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/></svg></div>
+            <div class="bt"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 2"/></svg></div>
+            <div class="bt on"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+            <div class="bt"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></div>
+            <div class="bt"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+          </div>
+        </div>
+        <div class="geste"></div>
+      </div>
+      <p class="e-note">Une couleur par fil, comme sur le PC. Les onglets <b>en veille</b> sont grisés. Appui long sur une carte puis glisser : la ranger dans un autre fil. Glisser une carte de côté : la fermer.</p>
+    </section>
+
+    <!-- 4 : Menu -->
+    <section class="ecran">
+      <div class="e-tete"><span class="n">4</span><h2>Menu : extensions et teinte</h2></div>
+      <div class="tel">
+        <div class="statut"><span>9:44</span><span class="cam"></span><span>5G · 82 %</span></div>
+        <div class="contenu">
+          <div class="site"><div class="video"><span class="lire"></span></div><div class="lignes"><div class="l t"></div><div class="l"></div></div></div>
+          <div class="voile"></div>
+          <div class="feuille">
+            <div class="poignee"></div>
+            <div class="actions">
+              <div><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg>Favori</div>
+              <div><svg viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"/></svg>Télécharg.</div>
+              <div><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.3-4.3"/></svg>Chercher</div>
+              <div><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M14 13h5v4h-5z"/></svg>Flottante</div>
+            </div>
+            <div class="f-titre">Extensions</div>
+            <div class="ext">
+              <div><i style="background:rgba(94,234,212,.15);color:var(--vif)">🛡</i><span>Saute-pub<small>3 pubs sautées ici · SponsorBlock</small></span><span class="inter on"></span></div>
+              <div><i style="background:#1e3a8a;color:#bfdbfe">B</i><span>Bitwarden<small>2 identifiants pour ce site</small></span><span class="inter on"></span></div>
+              <div><i style="background:rgba(251,191,36,.15);color:var(--tiede)">#</i><span>Compteur de visites<small>12e visite ce mois-ci</small></span><span class="inter on"></span></div>
+            </div>
+            <div class="f-titre">Teinte</div>
+            <div class="teintes">
+              <i class="on" style="background:#60a5fa"></i><i style="background:#34d399"></i><i style="background:#38bdf8"></i><i style="background:#a78bfa"></i><i style="background:#fbbf24"></i><i style="background:#94a3b8"></i>
+            </div>
+          </div>
+        </div>
+        <div class="geste"></div>
+      </div>
+      <p class="e-note">Feuille qui monte du bas, ouverte par <b>⋮</b>. Les extensions s'y affichent avec ce qu'elles font sur la page en cours. Les teintes sont celles de <b>teintes.js</b>, sans changement.</p>
+    </section>
+
+    <!-- 5 : PC -->
+    <section class="ecran">
+      <div class="e-tete"><span class="n">5</span><h2>Reprendre ce qui est ouvert sur le PC</h2></div>
+      <div class="tel">
+        <div class="statut"><span>9:45</span><span class="cam"></span><span>Wi-Fi · 81 %</span></div>
+        <div class="contenu">
+          <div class="pc">
+            <div class="onglets-tete"><h3>Sur mes appareils</h3></div>
+            <div class="appareil">
+              <div class="appareil-t">🖥 PC du bureau <em>ouvert · il y a 2 min</em></div>
+              <div class="ligne-o"><i style="background:#0e7490"></i><span>Home Assistant : Énergie</span><small>Maison</small></div>
+              <div class="ligne-o"><i style="background:#b91c1c"></i><span>Monter une goulotte d'angle</span><small>Maison</small></div>
+              <div class="ligne-o"><i style="background:#15803d"></i><span>FoyerBudget : Stock</span><small>Travail</small></div>
+              <div class="ligne-o"><i style="background:#334155"></i><span>+ 9 autres onglets</span><small></small></div>
+              <div class="bouton-p">Ouvrir le fil « Maison » ici</div>
+            </div>
+            <div class="appareil">
+              <div class="appareil-t">💻 Portable <em class="vieux">fermé · hier 22 h</em></div>
+              <div class="ligne-o"><i style="background:#7c3aed"></i><span>Pronote : devoirs</span><small>École</small></div>
+            </div>
+            <div class="e-note" style="padding:0 2px">Relayé par le home lab (réseau local, ou Tailscale dehors). Rien ne passe par un service tiers.</div>
+          </div>
+        </div>
+        <div class="barre">
+          <div class="boutons">
+            <div class="bt"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></div>
+            <div class="bt"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="bt"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+            <div class="bt on"><span class="compte">7</span><span class="point"></span></div>
+            <div class="bt"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
+          </div>
+        </div>
+        <div class="geste"></div>
+      </div>
+      <p class="e-note">C'est la <b>piste 3</b> intégrée dans l'appli. Elle peut se faire en premier, côté PC et home lab, avant même l'appli Android.</p>
+    </section>
+
+    <!-- 6 : Vidéo flottante -->
+    <section class="ecran">
+      <div class="e-tete"><span class="n">6</span><h2>Vidéo flottante et écran éteint</h2></div>
+      <div class="tel">
+        <div class="statut"><span>9:46</span><span class="cam"></span><span>5G · 80 %</span></div>
+        <div class="contenu">
+          <div class="accueil-android"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="notif">
+            <div class="notif-t"><i></i>Trame · lecture en cours</div>
+            <div class="notif-c"><span class="vig"></span><div><b>Bande-annonce</b><small>youtube.com · 1:42 / 4:30</small></div></div>
+            <div class="ctrl"><span>⏮</span><span>⏸</span><span>⏭</span></div>
+          </div>
+          <div class="pip"><div class="video"><span class="prog"></span></div></div>
+        </div>
+        <div class="geste"></div>
+      </div>
+      <p class="e-note">Quitter l'appli pendant une vidéo la met <b>en incrustation</b> (image dans l'image d'Android). La lecture continue écran éteint, avec les commandes dans la notification.</p>
+    </section>
+  </div>
+
+  <section class="sec">
+    <h2>Ce que coûte la piste 2</h2>
+    <div class="defile">
+    <table class="tableau">
+      <tr><th>Morceau</th><th>Repris du PC ?</th><th>Travail</th></tr>
+      <tr><td>Coquille Android (barre, fils, menu)</td><td class="non">Non</td><td>À écrire en Kotlin (Jetpack Compose) autour de GeckoView.</td></tr>
+      <tr><td>Nouvel onglet, réglages, téléchargements</td><td class="moyen">En partie</td><td>Pages HTML de <code>ui/</code> servies dans GeckoView, retouchées pour le toucher.</td></tr>
+      <tr><td>Teintes</td><td class="ok">Oui</td><td><code>teintes.js</code> tel quel, plus une traduction vers les couleurs d'Android.</td></tr>
+      <tr><td>Saute-pub</td><td class="moyen">En partie</td><td>Le même code en extension Firefox (manifeste et API <code>browser.*</code> à adapter).</td></tr>
+      <tr><td>Bitwarden</td><td class="ok">Oui</td><td>Extension Firefox officielle, à vérifier dans GeckoView.</td></tr>
+      <tr><td>Favoris, accès, fils, veille</td><td class="moyen">En partie</td><td>Logique Rust (<code>carnet.rs</code>, <code>model.rs</code>) par une bibliothèque partagée, ou réécrite en Kotlin.</td></tr>
+      <tr><td>Synchro avec le PC</td><td class="non">Nouveau</td><td>Service sur le home lab, envoi des données depuis Trame PC (écran 5).</td></tr>
+      <tr><td>Installation et mises à jour</td><td class="moyen">En partie</td><td>APK signé hors Play Store ; même fiche Firestore que <code>products/trame</code>.</td></tr>
+    </table>
+    </div>
+  </section>
+</div>
+</body>
+</html>
