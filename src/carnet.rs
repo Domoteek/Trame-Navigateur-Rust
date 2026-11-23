@@ -473,11 +473,11 @@ mod tests {
     #[test]
     fn acces_rapide_depuis_une_page() {
         assert_eq!(racine_du_site("https://www.youtube.com/watch?v=abc"), "https://www.youtube.com/");
-        assert_eq!(racine_du_site("http://192.168.1.23:8720/courbes/"), "http://192.168.1.23:8720/");
+        assert_eq!(racine_du_site("http://192.0.2.23:8720/courbes/"), "http://192.0.2.23:8720/");
         assert_eq!(nom_du_site("https://www.youtube.com/watch?v=abc"), "Youtube");
         assert_eq!(nom_du_site("https://www.amazon.fr/dp/123"), "Amazon");
         assert_eq!(nom_du_site("https://www.bbc.co.uk/news"), "Bbc");
-        assert_eq!(nom_du_site("http://192.168.1.23:8720/"), "192.168.1.23:8720");
+        assert_eq!(nom_du_site("http://192.0.2.23:8720/"), "192.0.2.23:8720");
         assert_eq!(nom_du_site("http://localhost:3000/"), "localhost:3000");
     }
 

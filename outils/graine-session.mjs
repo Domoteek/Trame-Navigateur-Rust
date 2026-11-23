@@ -38,8 +38,8 @@ const brut = [
   ["https://blog.rust-lang.org/2026/01/12/Rust-1.93.0.html", "Annonce de Rust 1.93", 2, null, 61, 0.0, 0.18, 0],
 
   // fil 3 — la maison
-  ["https://192.168.1.5:8006/#v1:0:=node/pve", "Proxmox — nœud pve", 3, null, 44, 0.0, 0.55, 2],
-  ["https://192.168.1.1/", "OPNsense", 3, null, 33, 0.0, 0.12, 1],
+  ["https://192.0.2.5:8006/#v1:0:=node/pve", "Proxmox — nœud pve", 3, null, 44, 0.0, 0.55, 2],
+  ["https://192.0.2.1/", "OPNsense", 3, null, 33, 0.0, 0.12, 1],
   ["https://ha.domo-srv.ovh/lovelace/0", "Home Assistant — Vue d'ensemble", 3, null, 21, 0.0, 0.09, 0],
 
   // fil 4

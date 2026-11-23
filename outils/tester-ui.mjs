@@ -278,8 +278,8 @@ async function suite() {
     etat.onglets = [
       onglet(10, 1, "Bitwarden", "chrome-extension://abc/popup/index.html", { actif: true }),
       onglet(11, 1, "Perplexity", "https://www.perplexity.ai/search/new?q=x"),
-      onglet(12, 2, "Proxmox", "https://192.168.1.5:8006/"),
-      onglet(13, 2, "OPNsense", "https://192.168.1.1:4443/"),
+      onglet(12, 2, "Proxmox", "https://192.0.2.5:8006/"),
+      onglet(13, 2, "OPNsense", "https://192.0.2.1:4443/"),
     ];
     await pousser(p, etat);
     const fils = await p.$$eval(".fil", (n) => n.map((x) => x.dataset.fil));
@@ -1027,7 +1027,7 @@ async function suite() {
     etat.carnet = Object.assign({}, etat.carnet, {
       acces: [
         { url: "https://www.youtube.com/", titre: "YouTube", domaine: "youtube.com", groupe: "Loisirs", rail: true, icone: null, ouvert: 4 },
-        { url: "http://192.168.1.23:8720/", titre: "Home lab", domaine: "192.168.1.23", groupe: "Maison", rail: false, icone: null, ouvert: null },
+        { url: "http://192.0.2.23:8720/", titre: "Home lab", domaine: "192.0.2.23", groupe: "Maison", rail: false, icone: null, ouvert: null },
       ],
       accesGroupes: ["Maison", "Loisirs"],
     });
@@ -1039,7 +1039,7 @@ async function suite() {
     egal(await p.$$eval("#tuiles .tuile:not(.ajout) .n", (n) => n.map((x) => x.textContent).join("|")), "Home lab", "filtre Maison");
     await vider(p);
     await p.click("#tuiles .tuile:not(.ajout)");
-    verifier((await messages(p)).some((m) => m.m === "accesOuvrir" && m.url === "http://192.168.1.23:8720/"), "le clic ouvre l'accès");
+    verifier((await messages(p)).some((m) => m.m === "accesOuvrir" && m.url === "http://192.0.2.23:8720/"), "le clic ouvre l'accès");
     // Ajouter : la fenêtre envoie accesEnregistrer avec le groupe filtré.
     await p.click("#tuiles .tuile.ajout");
     await p.fill(".dialogue input >> nth=0", "amazon.fr");
@@ -1121,7 +1121,7 @@ async function suite() {
     etat.onglets = [
       onglet(10, 1, "Bitwarden", "chrome-extension://abc/popup/index.html"),
       onglet(11, 1, "Perplexity", "https://www.perplexity.ai/"),
-      onglet(12, 2, "Proxmox", "https://192.168.1.5:8006/"),
+      onglet(12, 2, "Proxmox", "https://192.0.2.5:8006/"),
     ];
     await pousser(p, etat);
     egal(await p.$$eval(".carte", (n) => n.length), 2, "une carte par fil");

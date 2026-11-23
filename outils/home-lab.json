@@ -1,18 +1,18 @@
 {
   "nom": "Home lab",
   "onglets": [
-    { "url": "https://192.168.1.5:8006", "titre": "Proxmox — nœud pve" },
-    { "url": "https://192.168.1.1:4443", "titre": "OPNsense — pare-feu" },
-    { "url": "http://192.168.1.11:8720", "titre": "Tableau de bord du labo" },
-    { "url": "http://192.168.1.11:8720/accueil/", "titre": "Accueil du foyer" },
-    { "url": "http://192.168.1.10:8123", "titre": "Home Assistant" },
-    { "url": "http://192.168.1.9:81", "titre": "Nginx Proxy Manager" },
-    { "url": "http://192.168.1.16:3000", "titre": "AdGuard Home" },
-    { "url": "http://192.168.1.27", "titre": "Jeedom" },
+    { "url": "https://192.0.2.5:8006", "titre": "Proxmox — nœud pve" },
+    { "url": "https://192.0.2.1:4443", "titre": "OPNsense — pare-feu" },
+    { "url": "http://192.0.2.11:8720", "titre": "Tableau de bord du labo" },
+    { "url": "http://192.0.2.11:8720/accueil/", "titre": "Accueil du foyer" },
+    { "url": "http://192.0.2.10:8123", "titre": "Home Assistant" },
+    { "url": "http://192.0.2.9:81", "titre": "Nginx Proxy Manager" },
+    { "url": "http://192.0.2.16:3000", "titre": "AdGuard Home" },
+    { "url": "http://192.0.2.27", "titre": "Jeedom" },
     { "url": "https://n8n.domo-srv.ovh", "titre": "n8n" },
-    { "url": "http://192.168.1.23:8730/api/sante", "titre": "Relais du hub — santé" },
-    { "url": "http://192.168.1.23:8740/sante", "titre": "Mémoire du hub — santé" },
-    { "url": "http://192.168.1.23:8790", "titre": "Moli OS" },
-    { "url": "http://192.168.1.23:8751/player", "titre": "Karaoké" }
+    { "url": "http://192.0.2.23:8730/api/sante", "titre": "Relais du hub — santé" },
+    { "url": "http://192.0.2.23:8740/sante", "titre": "Mémoire du hub — santé" },
+    { "url": "http://192.0.2.23:8790", "titre": "Moli OS" },
+    { "url": "http://192.0.2.23:8751/player", "titre": "Karaoké" }
   ]
 }

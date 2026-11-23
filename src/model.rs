@@ -1096,8 +1096,8 @@ mod tests {
         let o = Onglet::neuf(1, "https://www.exemple.fr/a".into(), 1, Declencheur::Saisie, 0);
         assert_eq!(o.domaine(), "exemple.fr");
         // Une adresse IP n'a pas de domaine enregistrable : elle se represente elle-meme.
-        let ip = Onglet::neuf(2, "http://192.168.1.5:8006/".into(), 1, Declencheur::Saisie, 0);
-        assert_eq!(ip.domaine(), "192.168.1.5");
+        let ip = Onglet::neuf(2, "http://192.0.2.5:8006/".into(), 1, Declencheur::Saisie, 0);
+        assert_eq!(ip.domaine(), "192.0.2.5");
     }
 
     #[test]

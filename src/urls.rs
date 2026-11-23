@@ -313,7 +313,7 @@ mod tests {
         assert!(normaliser("combien d onglets").starts_with("https://www.perplexity.ai/search?q="));
         assert_eq!(domaine_enregistrable("https://fr.wikipedia.org/wiki/X"), "wikipedia.org");
         assert_eq!(domaine_enregistrable("https://news.bbc.co.uk/x"), "bbc.co.uk");
-        assert_eq!(domaine_enregistrable("https://192.168.1.5:8006/"), "192.168.1.5");
+        assert_eq!(domaine_enregistrable("https://192.0.2.5:8006/"), "192.0.2.5");
         assert_eq!(affichage_court("https://www.example.com/a/"), "example.com/a");
     }
 

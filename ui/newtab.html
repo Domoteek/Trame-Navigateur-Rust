@@ -636,7 +636,7 @@
         function dialogueAcces(a) {
           let iNom, iUrl, iGroupe, iRail;
           ouvrirDialogue(a ? "Modifier l'accès rapide" : "Nouvel accès rapide", (d) => {
-            iUrl = champTexte(d, "Adresse", a ? a.url : "", "ex. amazon.fr ou http://192.168.1.23:8720");
+            iUrl = champTexte(d, "Adresse", a ? a.url : "", "ex. amazon.fr ou http://192.0.2.23:8720");
             iNom = champTexte(d, "Nom", a ? a.titre : "", "Laissé vide : l'adresse");
             iGroupe = champTexte(d, "Groupe", a ? a.groupe : (filtre !== TOUS ? filtre : ""), "Aucun, ou un nom (créé s'il n'existe pas)");
             const gs = groupes();
