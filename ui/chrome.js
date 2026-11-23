@@ -2116,8 +2116,12 @@ function placerMenuPage() {
   colonne.style.marginTop = Math.max(0, Math.min(voulu, maxi)) + "px";
 }
 
-/* Taille du menu de la page, choisie a la poignee du bas (gardee dans ce profil seulement). */
-const CLE_TAILLE_MENU = "trame.menuPage.hauteur";
+/* Taille du menu de la page, choisie a la poignee du bas (gardee dans ce profil seulement).
+   Version 2 de la cle : les hauteurs enregistrees avant la 0.4.57 sont IGNOREES. Constat du
+   2026-11-23 chez Clement — un menu plafonne a 250 px alors qu'il lui en fallait 893, coupe nette,
+   parce qu'une valeur avait ete enregistree par un simple clic sur la poignee (voir `poserPoignee`)
+   et qu'aucun moyen visible ne permettait de revenir en arriere. */
+const CLE_TAILLE_MENU = "trame.menuPage.hauteur.v2";
 function tailleMenuChoisie() {
   try {
     const v = parseInt(localStorage.getItem(CLE_TAILLE_MENU) || "", 10);
@@ -2138,10 +2142,17 @@ function poserPoignee(colonne) {
     p.setPointerCapture(e.pointerId);
     const depart = e.clientY;
     const hDepart = colonne.getBoundingClientRect().height;
+    // Un CLIC sur la poignee ne doit rien enregistrer : seule une vraie traction choisit une
+    // hauteur. Sans cela, un clic (ou un clic droit a cote) memorisait la hauteur du moment —
+    // et un menu plus tardif restait plafonne a cette valeur, coupe au milieu de ses lignes
+    // (constat du 2026-11-23 : 250 px enregistres pour un contenu de 893).
+    let tiree = false;
     // Place reelle : jusqu'au bas de la fenetre (ancre) ou jusqu'aux 720 px de la barre.
     const haut = colonne.getBoundingClientRect().top;
     const limite = Math.max(160, (ancreMenu ? ancreMenu.h : 720) - haut - 8);
     const bouger = (ev) => {
+      if (!tiree && Math.abs(ev.clientY - depart) < 4) return;
+      tiree = true;
       const h = Math.round(Math.min(limite, Math.max(160, hDepart + ev.clientY - depart)));
       colonne.style.maxHeight = h + "px";
       colonne.style.height = h + "px";
@@ -2153,10 +2164,12 @@ function poserPoignee(colonne) {
       p.removeEventListener("pointercancel", lacher);
       const h = Math.round(colonne.getBoundingClientRect().height);
       colonne.style.height = "";
-      try {
-        localStorage.setItem(CLE_TAILLE_MENU, String(h));
-      } catch (err) {
-        /* stockage indisponible : la taille vaut pour cette ouverture */
+      if (tiree) {
+        try {
+          localStorage.setItem(CLE_TAILLE_MENU, String(h));
+        } catch (err) {
+          /* stockage indisponible : la taille vaut pour cette ouverture */
+        }
       }
       placerMenuPage();
       ajusterHauteur();

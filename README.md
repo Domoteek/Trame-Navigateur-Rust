@@ -246,6 +246,15 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.57, publiée et installée le 2026-11-23.** Deuxième cause du même symptôme (« le clic droit,
+> si je clique plusieurs fois ça finit par faire ça ») : la **hauteur du menu mémorisée par la
+> poignée**. Un simple **clic** sur la poignée (sans glisser) enregistrait la hauteur du moment —
+> mesuré : un menu plafonné à **250 px** alors qu'il lui en fallait **893**, coupé net. Trois
+> corrections : la hauteur ne s'enregistre que sur une **vraie traction** (≥ 4 px), la clé de
+> stockage passe en `v2` (les valeurs déjà enregistrées sont **ignorées**), et la barre de
+> défilement du menu devient visible. Banc étendu : clic qui n'enregistre rien, traction qui
+> enregistre (675 px), ancienne clé ignorée.
+>
 > **0.4.56, publiée et installée le 2026-11-23.** Bug signalé par Clément : « le clic droit sur un
 > onglet, si je clique plusieurs fois, ça fait ça » (menu écrasé, fond absent, coupe au milieu des
 > lignes). Cause mesurée : le clic droit vient du **rail**, et la règle « fermer le panneau dès
@@ -308,7 +317,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.56-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.57-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

@@ -2015,7 +2015,9 @@ async function suite() {
 
   await cas("menu de la page : la poignée choisit la hauteur, le menu défile", async () => {
     const p = await page("chrome.html", { query: "?surface=barre" });
-    await p.evaluate(() => localStorage.removeItem("trame.menuPage.hauteur"));
+    // Cle `v2` : celle des versions d'avant la 0.4.57 est ignoree (elle pouvait plafonner le menu
+    // a une hauteur absurde, defaut constate chez Clement le 2026-11-23).
+    await p.evaluate(() => localStorage.removeItem("trame.menuPage.hauteur.v2"));
     const etat = etatDeBase();
     etat.url = "https://youtube.com/";
     etat.carnet = { pageWeb: true, precedent: { id: 2, titre: "Réglages" }, guets: [], memoireLecture: true };
@@ -2026,6 +2028,16 @@ async function suite() {
       const r = n.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     });
+    // Un CLIC sans glissement ne doit rien enregistrer (il le faisait, et le menu restait
+    // plafonne a cette hauteur a chaque ouverture suivante).
+    await p.mouse.move(g.x, g.y);
+    await p.mouse.down();
+    await p.mouse.up();
+    const apresClic = await p.$eval("#menu-page .menu-colonne", (c) => ({
+      garde: localStorage.getItem("trame.menuPage.hauteur.v2"),
+    }));
+    egal(apresClic.garde, null, "un clic sur la poignée n'enregistre rien");
+    // Une vraie traction, elle, choisit la hauteur.
     await p.mouse.move(g.x, g.y);
     await p.mouse.down();
     await p.mouse.move(g.x, g.y - 250, { steps: 4 });
@@ -2033,10 +2045,10 @@ async function suite() {
     const apres = await p.$eval("#menu-page .menu-colonne", (c) => ({
       h: c.getBoundingClientRect().height,
       defile: c.scrollHeight > c.clientHeight,
-      garde: localStorage.getItem("trame.menuPage.hauteur"),
+      garde: localStorage.getItem("trame.menuPage.hauteur.v2"),
     }));
     verifier(apres.defile && apres.h < 500 && apres.garde, `réduit, défilant et gardé : ${JSON.stringify(apres)}`);
-    await p.evaluate(() => localStorage.removeItem("trame.menuPage.hauteur"));
+    await p.evaluate(() => localStorage.removeItem("trame.menuPage.hauteur.v2"));
     await p.close();
   });
 

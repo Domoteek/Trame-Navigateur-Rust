@@ -1152,7 +1152,7 @@ input {
 }
 /* Poignee du bas du menu de la page : glisser pour choisir sa hauteur. Collee au bas de la
    colonne qui defile, pour rester visible meme quand le contenu deborde. */
-.menu-colonne.page { overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--surface-4) transparent; }
+.menu-colonne.page { overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--texte-3) transparent; }
 .menu-poignee {
   position: sticky;
   bottom: -8px;

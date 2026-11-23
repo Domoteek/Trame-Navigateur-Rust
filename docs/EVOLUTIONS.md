@@ -1158,6 +1158,20 @@ de cette règle, comme `bulle` l'était déjà, et `ouvrirPanneau()` remesure la
 panneau est déjà ouvert (un second clic change le contenu, donc la hauteur). Banc neuf :
 `outils/eprouver-menu-onglet.mjs` — trois hauteurs de clic, la barre reste à 886 px et le menu ne
 déborde jamais. Preuves : `cargo test` **212/212**, `tester-ui` **88/88**, banc du menu vert.
+**0.4.57 — deuxième cause du menu écrasé : la hauteur mémorisée par la poignée.** La 0.4.56 avait
+corrigé le panneau qui se refermait ; Clément a constaté que le symptôme revenait. Mesure : avec une
+hauteur mémorisée de **250 px** et un contenu de **893 px**, le menu est **plafonné à 250** — coupe
+nette, sans indice. Origine : la **poignée du bas** enregistrait sa hauteur au `pointerup`, **même
+sans aucun glissement** — un simple clic (ou un clic à côté) figeait la taille du menu, et rien de
+visible ne permettait de revenir en arrière (seul le double-clic sur la poignée, que personne ne
+connaît). Trois corrections : la hauteur ne s'enregistre que sur une **vraie traction** (≥ 4 px de
+déplacement) ; la clé de stockage passe en `trame.menuPage.hauteur.v2`, donc les valeurs déjà
+enregistrées — celle de Clément comprise — sont **ignorées** sans qu'il ait à faire quoi que ce
+soit ; et la barre de défilement du menu devient visible (`--texte-3` au lieu de `--surface-4`,
+quasi invisible), pour qu'un menu réduit se voie réduit. Preuves : `eprouver-menu-onglet.mjs`
+**13 vérifications** (trois clics, barre stable à 886 px, menu jamais débordé, ancienne clé
+ignorée, clic qui n'enregistre rien, traction de 120 px qui enregistre 675 px), `cargo test`
+**212/212**, `tester-ui` **88/88**.
 ## 11. L'état aujourd'hui
 
 ```

@@ -77,6 +77,51 @@ try {
     `la barre garde sa hauteur d'un clic à l'autre (${hauteurs.join(" → ")} px)`
   );
 
+  // ---- la hauteur choisie a la poignee : ni un clic ne l'enregistre, ni une valeur perimee
+  // ne doit plafonner le menu (defaut du 2026-11-23 : 250 px pour un contenu de 893).
+  const lireHauteur = () =>
+    barre.evaluer(`(() => { const c = document.querySelector("#menu-page .menu-colonne");
+      return { choix: localStorage.getItem("trame.menuPage.hauteur.v2"),
+               ancienne: localStorage.getItem("trame.menuPage.hauteur"),
+               haut: c ? Math.round(c.getBoundingClientRect().height) : 0 }; })()`);
+
+  // Une valeur sous l'ANCIENNE cle (celle des versions d'avant la 0.4.57) doit etre ignoree.
+  await barre.evaluer(`localStorage.setItem("trame.menuPage.hauteur", "250")`);
+  await barre.evaluer(`document.getElementById("menu-page").hidden = true`);
+  await rail.evaluer(`window.ipc.postMessage(JSON.stringify({ m: "menuPage", id: 1, y: 300 }))`);
+  await pause(1000);
+  const apresAncienne = await lireHauteur();
+  ok(
+    apresAncienne.haut > 500,
+    `une hauteur enregistrée sous l'ancienne clé est ignorée (menu ${apresAncienne.haut} px)`
+  );
+
+  // Un CLIC sur la poignee — sans glisser — ne doit rien enregistrer.
+  const pt = await barre.evaluer(`(() => {
+    const p = document.querySelector("#menu-page .menu-poignee");
+    const r = p.getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + 4) };
+  })()`);
+  await barre.envoyer("Input.dispatchMouseEvent", { type: "mousePressed", x: pt.x, y: pt.y, button: "left", buttons: 1, clickCount: 1 });
+  await barre.envoyer("Input.dispatchMouseEvent", { type: "mouseReleased", x: pt.x, y: pt.y, button: "left", buttons: 0, clickCount: 1 });
+  await pause(500);
+  const apresClic = await lireHauteur();
+  ok(apresClic.choix === null, `un clic sur la poignée n'enregistre rien (valeur : ${apresClic.choix})`);
+
+  // Une vraie traction, elle, doit enregistrer la hauteur choisie.
+  await barre.envoyer("Input.dispatchMouseEvent", { type: "mousePressed", x: pt.x, y: pt.y, button: "left", buttons: 1, clickCount: 1 });
+  for (let dy = 10; dy <= 120; dy += 10) {
+    await barre.envoyer("Input.dispatchMouseEvent", { type: "mouseMoved", x: pt.x, y: pt.y - dy, button: "left", buttons: 1 });
+    await pause(30);
+  }
+  await barre.envoyer("Input.dispatchMouseEvent", { type: "mouseReleased", x: pt.x, y: pt.y - 120, button: "left", buttons: 0, clickCount: 1 });
+  await pause(700);
+  const apresTraction = await lireHauteur();
+  ok(
+    apresTraction.choix !== null && apresTraction.haut < 795,
+    `une traction de 120 px enregistre la hauteur (${apresTraction.choix} px, menu ${apresTraction.haut} px)`
+  );
+
   rail.fermer();
   barre.fermer();
 } finally {
