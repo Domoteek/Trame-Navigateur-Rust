@@ -723,7 +723,9 @@ function rendreRail(s) {
   // Pendant un rangement, on ne reconstruit rien : la carte saisie doit survivre au geste. Les
   // poussees de l'hote (une toutes les 400 ms) sont rattrapees au relachement, parce que
   // `signatureRail` n'a pas ete mis a jour.
-  if (rangeFil) {
+  // Pendant un renommage aussi : reconstruire effacerait le champ en cours de frappe (un titre
+  // d'onglet qui change suffit). Le blur ou Entree rendent la main.
+  if (rangeFil || document.querySelector("#fils input.saisie")) {
     rendreBudget();
     if (!document.getElementById("volet").hidden) rendreVolet(s);
     return;
@@ -768,11 +770,15 @@ function rendreRail(s) {
 
     const nom = elem("span", "fil-nom", f.nom);
     nom.title = "Double-clic pour renommer";
-    nom.ondblclick = (e) => {
+    tete.appendChild(nom);
+    // Le double-clic s'ecoute sur la tete, pas sur le nom : `saisirRangement` capture le pointeur
+    // sur la tete, et Chromium y renvoie alors click et dblclick — le nom ne les recevait jamais.
+    tete.addEventListener("dblclick", (e) => {
+      if (e.target.closest("button, input")) return;
+      if (!nom.isConnected || window.innerWidth < 130) return; // rail replie : nom cache
       e.stopPropagation();
       renommerFil(f, nom);
-    };
-    tete.appendChild(nom);
+    });
 
     tete.appendChild(elem("span", "fil-compte", `${onglets.length}`));
 
@@ -854,17 +860,21 @@ function renommerFil(fil, span) {
   const champ = elem("input", "fil-nom saisie");
   champ.value = fil.nom;
   let annule = false;
+  let fini = false;
   span.replaceWith(champ);
   champ.focus();
   champ.select();
   const terminer = (valider) => {
-    if (champ.isConnected) {
-      if (valider && !annule && champ.value.trim()) {
-        ipc({ m: "filRenommer", id: fil.id, nom: champ.value.trim() });
-      } else if (etat) {
-        rendreRail(etat);
-      }
-    }
+    // Retirer le champ declenche `blur`, qui rappelle terminer : une seule fois suffit.
+    if (fini || !champ.isConnected) return;
+    fini = true;
+    const nouveau = champ.value.trim();
+    const garder = valider && !annule && nouveau;
+    // Le champ part d'abord : tant qu'il est la, rendreRail ne reconstruit pas le rail.
+    if (garder) span.textContent = nouveau;
+    champ.replaceWith(span);
+    if (garder) ipc({ m: "filRenommer", id: fil.id, nom: nouveau });
+    else if (etat) rendreRail(etat);
   };
   champ.onkeydown = (e) => {
     if (e.key === "Enter") {

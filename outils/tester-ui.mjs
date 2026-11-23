@@ -420,6 +420,31 @@ async function suite() {
     await p.close();
   });
 
+  await cas("rail : un double-clic sur le nom d'un groupe le renomme", async () => {
+    // Vrai geste souris : la tete capture le pointeur (rangement), ce qui detournait le dblclick.
+    const p = await page("chrome.html", { query: "?surface=rail" });
+    const etat = etatDeBase();
+    etat.fils = [{ id: 1, nom: "Ancien", replie: false }];
+    etat.onglets = [onglet(1, 1, "Page", "https://a.fr/")];
+    await pousser(p, etat);
+    await p.dblclick(".fil-nom");
+    const champ = await p.$("#fils input.saisie");
+    verifier(champ, "le champ de saisie doit apparaitre");
+    // Une poussee de l'hote pendant la frappe ne doit pas effacer le champ.
+    etat.onglets = [onglet(1, 1, "Titre change", "https://a.fr/")];
+    await pousser(p, etat);
+    verifier(await p.$("#fils input.saisie"), "le champ survit a une poussee");
+    await p.fill("#fils input.saisie", "Nouveau");
+    await p.press("#fils input.saisie", "Enter");
+    const recus = await messages(p);
+    verifier(
+      recus.some((m) => m.m === "filRenommer" && m.id === 1 && m.nom === "Nouveau"),
+      "filRenommer doit partir avec le nouveau nom"
+    );
+    egal(await p.$("#fils input.saisie"), null, "le champ est parti");
+    await p.close();
+  });
+
   await cas("rail : tout clic dans le rail ferme le panneau de la barre", async () => {
     const p = await page("chrome.html", { query: "?surface=rail" });
     await pousser(p, etatDeBase());
