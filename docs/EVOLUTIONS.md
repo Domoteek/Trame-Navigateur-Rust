@@ -967,11 +967,32 @@ mémorisée, « Afficher dans le dossier » de l'ancienne entrée ouvre **son** 
 Documents. `dist/` 0.4.12 signé (Azure, `Valid`, horodaté) et installé par son propre setup
 (silencieux, code 0, `trame.exe` installé identique à `dist\trame.exe`).
 
+## 10 quindecies. 2026-11-23 — les réglages en six rubriques (0.4.40)
+
+Demande de Clément : « restructurer la page paramétrage ». Maquette choisie :
+`docs/maquettes/reglages.html` (« toutes, de 1 à 9 »).
+
+| Avant | Après |
+|---|---|
+| 16 cartes à la suite, dans l'ordre où elles avaient été ajoutées | une colonne à gauche, six rubriques : Général, Apparence, Onglets et mémoire, Confidentialité, Extensions, Données et sauvegarde ; la dernière ouverte est retenue, `reglages.html#extensions` ouvre la bonne |
+| aucun moyen de trouver un réglage | « Chercher un réglage » : sans accents ni majuscules, toutes rubriques confondues |
+| version, navigateur par défaut et moteur dispersés | bandeau d'état en tête de Général ; point orange sur « Général » si Trame n'est pas le navigateur par défaut ou si une mise à jour attend |
+| la pause des onglets cachés dans « Confidentialité », la barre d'extensions seule, l'historique dans « Système » | chacun rangé avec son sujet |
+| listes déroulantes pour la barre de fenêtre et le plein écran, boutons texte pour la teinte | vignettes dessinées, pastilles de teinte ; le `<select>` reste la source envoyée à l'hôte |
+| extensions Trame et Chrome dans deux cartes, notes techniques toujours affichées | une rubrique, deux onglets, installation en haut, notes repliées sous « Comment ça marche » |
+| compteurs de mémoire en bas de carte | en tête de rubrique, avec une barre Trame / extensions Chrome / mémoire libre (`budget.dispoMo`, `budget.extensionsMo`) |
+| « Vider l'historique » sans confirmation | zone « Effacer » en rouge ; les deux effacements demandent confirmation |
+| « Garder l'affiliation » au même niveau que « Nettoyer » | en retrait dessous, grisé quand le nettoyage est coupé |
+
+Aucun réglage ajouté ni retiré, aucun message vers l'hôte changé : tous les identifiants que le
+script et les tests utilisent sont gardés. Tests : `tester-ui.mjs` 77/77 (les cas des réglages
+passent par la rubrique avant de cliquer ; nouveau cas « rubriques, recherche, vignettes et
+historique confirmé »).
 ## 11. L'état aujourd'hui
 
 ```
 cargo test --release            188/188
-node outils/tester-ui.mjs        76/76
+node outils/tester-ui.mjs        77/77
 node outils/verifier-app.mjs     sans reseau : 24/24 (dont les scenarios `z` et `z2`, sauvegarde)
 node outils/verifier-setup.mjs   refuse (code 3) tant qu'une vraie installation existe — par conception
 ```

@@ -222,6 +222,12 @@ async function vider(p) {
   });
 }
 
+// Les reglages montrent une rubrique a la fois : on y va comme l'utilisateur, par la colonne
+// de gauche, avant de cliquer ce qu'elle contient.
+async function rubrique(p, nom) {
+  await p.click(`#nav a[data-rubrique="${nom}"]`);
+}
+
 // Un geste de pointeur, etape par etape : `[selecteur, type, clientX, clientY]`.
 // Le rangement d'un groupe se fait au pointeur (voir « ranger les groupes » dans chrome.js),
 // pas au glisser-deposer HTML : les evenements sont donc synthetises ici, avec de vraies
@@ -829,6 +835,7 @@ async function suite() {
     const etat = etatDeBase();
     etat.reglages = { ...(etat.reglages || {}), memoireBasse: true };
     await pousser(p, etat);
+    await rubrique(p, "onglets");
     egal(await p.$eval("#bascule-memoire-basse", (n) => n.classList.contains("on")), true, "allume");
     await p.click("#bascule-memoire-basse");
     const recus = await messages(p);
@@ -844,6 +851,7 @@ async function suite() {
     const etat = etatDeBase();
     etat.reglages = { ...(etat.reglages || {}), budgetAuto: true };
     await pousser(p, etat);
+    await rubrique(p, "onglets");
     egal(await p.$eval("#bascule-budget-auto", (n) => n.classList.contains("on")), true, "allume");
     await p.click("#bascule-budget-auto");
     const recus = await messages(p);
@@ -902,6 +910,7 @@ async function suite() {
   await cas("reglages : l'installateur envoie l'identifiant saisi", async () => {
     const p = await page("reglages.html");
     await pousser(p, etatDeBase());
+    await rubrique(p, "extensions");
     // Champ vide : rien ne part, et l'interface le dit.
     await p.click("#btn-chrome-installer");
     // (La page demande a l'ouverture si Trame est le navigateur par defaut : simple lecture.)
@@ -928,6 +937,7 @@ async function suite() {
   await cas("reglages : le bouton fichier demande le selecteur", async () => {
     const p = await page("reglages.html");
     await pousser(p, etatDeBase());
+    await rubrique(p, "extensions");
     await p.click("#btn-chrome-fichier");
     const recus = await messages(p);
     const message = recus.find((m) => m.m === "chromeInstallerFichier");
@@ -1529,9 +1539,13 @@ async function suite() {
     verifier((await p.$eval("#txt-nettoyage", (n) => n.textContent)).includes("3 adresse(s)"), "compteur affiche");
     egal(await p.$eval("#anti-pistage", (n) => n.value), "stricte", "niveau affiche");
     await vider(p);
+    await rubrique(p, "onglets");
     await p.click("#bascule-pause");
+    await rubrique(p, "confidentialite");
     await p.click("#bascule-affiliation");
-    await p.selectOption("#anti-pistage", "equilibree");
+    // Le niveau se choisit par les segments ; le <select> cache reste la source envoyee.
+    await p.click('#seg-pistage button[data-pistage="equilibree"]');
+    egal(await p.$eval("#anti-pistage", (n) => n.value), "equilibree", "le select suit le segment");
     const recus = (await messages(p)).filter((m) => m.m === "confidentialite");
     verifier(recus.some((m) => m.pauseOnglets === false), `pause : ${JSON.stringify(recus)}`);
     verifier(recus.some((m) => m.garderAffiliation === false), `affiliation : ${JSON.stringify(recus)}`);
@@ -2076,6 +2090,7 @@ async function suite() {
     await p.evaluate(() => window.trame.lecturesCompte({ n: 42, mo: 1.5 }));
     verifier((await p.$eval("#txt-lectures", (n) => n.textContent)).includes("42 page(s)"), "compte affiché");
     await vider(p);
+    await rubrique(p, "confidentialite");
     await p.click("#bascule-lecture");
     await p.click(".exclu");
     const recus = await messages(p);
@@ -2105,6 +2120,7 @@ async function suite() {
       "les cases cochees sont celles que l'hote annonce par defaut"
     );
     // Une poussee de l'hote ne doit pas reconstruire les cases (cela decocherait un choix).
+    await rubrique(p, "donnees");
     await p.click("#sauvegarde-contenus input[value=session]");
     await pousser(p, etat);
     egal(await p.$$eval("#sauvegarde-contenus label", (n) => n.length), 3, "pas de doublon apres une poussee");
@@ -2148,6 +2164,7 @@ async function suite() {
       "le fichier est nomme"
     );
     egal((await messages(p)).length, 0, "afficher un resume n'applique rien de lui-meme");
+    await rubrique(p, "donnees");
     await p.click("#btn-restaurer-confirmer");
     verifier(
       (await messages(p)).some((m) => m.m === "sauvegardeRestaurerConfirmer"),
@@ -2165,12 +2182,49 @@ async function suite() {
   await cas("reglages : favoris — exporter et importer envoient leur commande", async () => {
     const p = await page("reglages.html");
     await pousser(p, etatDeBase());
+    await rubrique(p, "donnees");
     await vider(p);
     await p.click("#btn-favoris-exporter");
     await p.click("#btn-favoris-importer");
     const recus = (await messages(p)).map((m) => m.m);
     verifier(recus.includes("favorisExporterHtml"), `export : ${JSON.stringify(recus)}`);
     verifier(recus.includes("favorisImporterHtml"), `import : ${JSON.stringify(recus)}`);
+    await p.close();
+  });
+
+  await cas("reglages : rubriques, recherche, vignettes et historique confirmé", async () => {
+    const p = await page("reglages.html", { query: "#apparence" });
+    const etat = etatDeBase();
+    etat.reglages = { ...(etat.reglages || {}), barreFenetre: "bande", nettoyerAdresses: false, parDefaut: false };
+    await pousser(p, etat);
+    // L'ancre ouvre sa rubrique, et une seule rubrique est montree.
+    egal(await p.$$eval(".rubrique.vue", (n) => n.map((x) => x.id)), ["r-apparence"], "l'ancre ouvre Apparence");
+    // La vignette choisie suit l'etat, et un clic sur une autre part vers l'hote.
+    egal(await p.$eval("#choix-barre-fenetre .option.choisi", (n) => n.dataset.valeur), "bande", "vignette courante");
+    await vider(p);
+    await p.click('#choix-barre-fenetre .option[data-valeur="rail"]');
+    verifier((await messages(p)).some((m) => m.m === "barreFenetre" && m.mode === "rail"), "la vignette envoie son choix");
+    // Point orange : Trame n'est pas le navigateur par defaut.
+    egal(await p.$eval("#nav-alerte", (n) => n.hidden), false, "Général signale ce qui attend");
+    // L'affiliation se grise quand le nettoyage est coupe.
+    egal(await p.$eval("#ligne-affiliation", (n) => n.classList.contains("gris")), true, "affiliation grisée");
+    // La recherche montre les groupes qui repondent, toutes rubriques confondues, sans accents.
+    await p.fill("#recherche", "PISTAGE");
+    const visibles = await p.$$eval(".groupe", (g) => g.filter((x) => x.offsetParent).map((x) => x.closest(".rubrique").id));
+    verifier(visibles.length > 0 && visibles.every((id) => id === "r-confidentialite"), `recherche : ${visibles}`);
+    await p.fill("#recherche", "zzzz");
+    egal(await p.$eval("#vide-recherche", (n) => n.hidden), false, "rien ne correspond");
+    await p.fill("#recherche", "");
+    egal(await p.$$eval(".rubrique.vue", (n) => n.map((x) => x.id)), ["r-apparence"], "la recherche videe rend la rubrique");
+    // Vider l'historique demande confirmation : refuse, rien ne part.
+    await rubrique(p, "confidentialite");
+    await vider(p);
+    p.once("dialog", (d) => d.dismiss());
+    await p.click("#btn-vider-historique");
+    verifier(!(await messages(p)).some((m) => m.m === "historiqueVider"), "refus : l'historique reste");
+    p.once("dialog", (d) => d.accept());
+    await p.click("#btn-vider-historique");
+    verifier((await messages(p)).some((m) => m.m === "historiqueVider"), "accord : l'historique est vidé");
     await p.close();
   });
 
