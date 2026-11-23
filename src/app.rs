@@ -6332,6 +6332,7 @@ fn popup_maj(disponible: &str, actuelle: &str) -> String {
 /// L'installeur ferme Trame pour remplacer `trame.exe` : c'est ce script qui l'attend, puis qui
 /// rallume le programme — sinon on reste devant un navigateur ferme.
 fn lancer_installation(chemin_setup: &str) {
+    use std::os::windows::process::CommandExt;
     let moi = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("trame.exe"));
     let bat = std::env::temp_dir().join("trame-mise-a-jour.bat");
     let contenu = format!(
@@ -6341,8 +6342,12 @@ fn lancer_installation(chemin_setup: &str) {
     );
     match std::fs::write(&bat, contenu) {
         Ok(()) => {
+            // SANS_CONSOLE : sinon une fenetre « Invite de commande » s'ouvre au-dessus du
+            // navigateur (constate par Clement le 2026-11-23). L'installeur, lui, est une
+            // application fenetree : il garde sa fenetre de progression.
             let _ = std::process::Command::new("cmd")
                 .args(["/C", &bat.to_string_lossy().to_string()])
+                .creation_flags(crate::systeme::SANS_CONSOLE)
                 .spawn();
         }
         Err(e) => alerte!("mise a jour : script d'installation impossible ({e})"),
