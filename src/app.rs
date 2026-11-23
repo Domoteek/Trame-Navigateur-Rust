@@ -5073,9 +5073,16 @@ impl App {
             return;
         }
         info!("mise a jour : installation de {} ({})", maj.version, telechargement.chemin);
-        let lancement = std::process::Command::new(&telechargement.chemin)
-            .args(["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/CURRENTUSER"])
-            .spawn();
+        // L'installeur ferme Trame pour se remplacer. C'est donc un `cmd` qui l'attend et qui
+        // RALLUME Trame ensuite — sans ca, l'utilisateur reste devant un navigateur ferme.
+        // On ne compte pas sur l'entree [Run] de l'installeur : elle est sautee en mode silencieux.
+        let moi = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("trame.exe"));
+        let ligne = format!(
+            "/C start \"\" /wait \"{}\" /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /CURRENTUSER && start \"\" \"{}\"",
+            telechargement.chemin,
+            moi.display()
+        );
+        let lancement = std::process::Command::new("cmd").arg(&ligne).spawn();
         match lancement {
             Ok(_) => self.signaler(&format!("Installation de Trame {} en cours…", maj.version)),
             Err(e) => {
@@ -5128,9 +5135,14 @@ impl App {
                 self.maj_a_installer = false;
                 if Path::new(&chemin).exists() {
                     info!("mise a jour : installation de {version} ({chemin})");
-                    let _ = std::process::Command::new(&chemin)
-                        .args(["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/CURRENTUSER"])
-                        .spawn();
+                    // Meme raison que dans `installer_maj` : le `cmd` attend l'installeur puis
+                    // rallume Trame, que l'installeur a du fermer pour se remplacer.
+                    let moi = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("trame.exe"));
+                    let ligne = format!(
+                        "/C start \"\" /wait \"{chemin}\" /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /CURRENTUSER && start \"\" \"{}\"",
+                        moi.display()
+                    );
+                    let _ = std::process::Command::new("cmd").arg(&ligne).spawn();
                     self.signaler(&format!("Installation de Trame {version}…"));
                 }
             }
