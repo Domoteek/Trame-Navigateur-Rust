@@ -1011,6 +1011,11 @@ function ouvrirPanneau() {
   if (!panneauOuvert) {
     panneauOuvert = true;
     ipc({ m: "panneau", open: true });
+    // Ce message sans zone EFFACE la zone cote hote, qui replafonne alors la barre a 72 % de la
+    // fenetre. La mesure qui suit doit donc toujours partir, meme identique a celle d'avant la
+    // fermeture : sans cela, rouvrir le meme menu le coupait net a mi-hauteur (2026-11-23, 0.4.57).
+    derniereHauteur = 0;
+    derniereCle = "";
     document.getElementById("panneau").hidden = false;
     // Pas de requete ici : c'est la saisie (focus, frappe) qui la declenche. Sans cela,
     // cliquer sur ◇ affichait la liste des extensions puis la remplacait aussitot par des

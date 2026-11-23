@@ -1172,6 +1172,20 @@ quasi invisible), pour qu'un menu réduit se voie réduit. Preuves : `eprouver-m
 **13 vérifications** (trois clics, barre stable à 886 px, menu jamais débordé, ancienne clé
 ignorée, clic qui n'enregistre rien, traction de 120 px qui enregistre 675 px), `cargo test`
 **212/212**, `tester-ui` **88/88**.
+
+**0.4.58 — troisième cause : rouvrir le même menu le coupait à 72 % de la fenêtre.** Capture de
+Clément sur la 0.4.57 : menu d'un onglet coupé net vers 637 px dans une fenêtre de 882 (72 %). Deux
+défauts qui ne se voyaient qu'ensemble, après une fermeture du panneau. Barre : l'ouverture envoie
+`panneau` **sans zone**, ce qui efface la zone côté hôte et replafonne la barre à 72 % ; la mesure
+qui suit était ensuite **écartée parce qu'identique à celle d'avant la fermeture** — rien ne
+repartait. Hôte : même renvoyée, une zone qui change avec une hauteur égale ne refaisait que la
+découpe (`superposer`), pas la taille de la barre. Corrections : la barre oublie sa dernière mesure
+à chaque ouverture ; l'hôte réapplique toute la géométrie quand la zone change. Le banc gagne
+« fermer puis rouvrir deux fois » ; il ferme désormais son Trame par `taskkill /F` (une fenêtre
+cachée ignorait la demande polie et gardait le port de débogage, si bien que les essais suivants
+parlaient à l'ancienne instance) et accepte `TRAME_BINAIRE` et `TRAME_PORT_ESSAI`. Preuves :
+`eprouver-menu-onglet.mjs` **15/15** (réouvertures à 886 px ; contre-épreuve sur la 0.4.57 :
+638 px), `cargo test` **212/212**, `tester-ui` **88/88**.
 ## 11. L'état aujourd'hui
 
 ```

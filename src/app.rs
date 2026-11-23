@@ -3980,11 +3980,14 @@ impl App {
                     (Some(x), Some(l)) if l > 10.0 => Some((x, l, v["zone"]["y"].as_f64().unwrap_or(0.0).max(0.0))),
                     _ => None,
                 };
+                // La zone decide AUSSI de la hauteur de la barre (sans zone : plafond de 72 %).
+                // Ne refaire que la decoupe (`superposer`) laissait la barre a 72 % quand la zone
+                // revenait avec une hauteur identique — rouvrir le meme menu d'onglet le coupait
+                // net a mi-hauteur (constat de Clement, 2026-11-23, 0.4.57).
                 if zone != self.panneau_zone {
                     self.panneau_zone = zone;
                     if ouvert && self.panneau_ouvert {
-                        let geo = self.geometrie_courante();
-                        self.superposer(&geo);
+                        self.appliquer_geometrie();
                     }
                 }
                 // Hauteur demandee par l'interface : elle mesure son contenu, ce qui evite un

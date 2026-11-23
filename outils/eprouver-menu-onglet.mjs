@@ -22,8 +22,9 @@ import { tmpdir } from "node:os";
 
 import { attendreCible, connecter, pause } from "./cdp.mjs";
 
-const PORT = 19462;
-const BINAIRE = join(process.cwd(), "target", "release", "trame.exe");
+const PORT = Number(process.env.TRAME_PORT_ESSAI || 19462);
+// TRAME_BINAIRE : un autre binaire (construit ailleurs quand target\release est verrouille).
+const BINAIRE = process.env.TRAME_BINAIRE || join(process.cwd(), "target", "release", "trame.exe");
 const profil = mkdtempSync(join(tmpdir(), "trame-menu-onglet-"));
 
 let echecs = 0;
@@ -77,6 +78,23 @@ try {
     `la barre garde sa hauteur d'un clic à l'autre (${hauteurs.join(" → ")} px)`
   );
 
+  // ---- fermer puis rouvrir le MEME menu (defaut du 2026-11-23, 0.4.57 chez Clement) : le
+  // message d'ouverture sans zone effacait la zone cote hote, et la mesure identique a celle
+  // d'avant la fermeture n'etait jamais renvoyee -> barre plafonnee a 72 % de la fenetre, menu
+  // coupe net a mi-hauteur.
+  for (let essai = 1; essai <= 2; essai += 1) {
+    // Comme un clic dans la page : l'hote referme le panneau, l'etat pousse le dit a la barre.
+    await barre.evaluer(`window.ipc.postMessage(JSON.stringify({ m: "panneau", open: false }))`);
+    await pause(700);
+    await rail.evaluer(`window.ipc.postMessage(JSON.stringify({ m: "menuPage", id: 1, y: 300 }))`);
+    await pause(1000);
+    const m = await mesurer();
+    ok(
+      m.visible && m.bas <= m.viewport && m.viewport === hauteurs[0],
+      `réouverture ${essai} : le menu tient dans la barre (${m.bas} ≤ ${m.viewport}, attendu ${hauteurs[0]})`
+    );
+  }
+
   // ---- la hauteur choisie a la poignee : ni un clic ne l'enregistre, ni une valeur perimee
   // ne doit plafonner le menu (defaut du 2026-11-23 : 250 px pour un contenu de 893).
   const lireHauteur = () =>
@@ -126,7 +144,8 @@ try {
   barre.fermer();
 } finally {
   try {
-    execFileSync("taskkill", ["/PID", String(enfant.pid)], { stdio: "ignore" });
+    // /F : une fenetre cachee (TRAME_CACHEE) ignore la demande polie et restait en vie.
+    execFileSync("taskkill", ["/F", "/PID", String(enfant.pid)], { stdio: "ignore" });
   } catch {
     /* deja parti */
   }
