@@ -2238,141 +2238,33 @@ function brancherRail() {
   window.addEventListener("blur", annulerRangement);
 }
 
-/* ------------------------------------------------------------- infobulles
-   Les `title` du rail donnaient la bulle de Windows : blanche, carree, hors teinte. Ici le rail
-   dessine la sienne. Les `title` restent la source (rien a changer ailleurs) : au survol, le
-   texte passe dans `data-bulle` pour faire taire la bulle native. Rail replie (64 px) : une bulle
-   dessinee dans la page serait coupee par le bord de la webview, on rend la main a Windows.
-   La barre garde les bulles natives pour la meme raison (elle ne fait que 40 px de haut). */
-
-const GESTE_BULLE = /^(Double-clic|Clic droit|Clic du milieu|Glisser)\s+pour\s+(.+)$/;
-let bulle = null;
-let bulleCible = null;
-let bulleMinuterie = 0;
-let bulleVueA = 0; // derniere fermeture : d'une bulle a la voisine, pas de nouveau delai
-
-function texteBulle(el) {
-  if (el.title) {
-    el.dataset.bulle = el.title;
-    el.removeAttribute("title");
-  }
-  return el.dataset.bulle || "";
-}
-
-function remplirBulle(texte) {
-  bulle.textContent = "";
-  let corps = texte;
-  // « Ctrl+B » entre parentheses : une touche, pas du texte.
-  let touche = "";
-  const t = corps.match(/\s*\(([^()]*(?:Ctrl|Maj|Alt|F\d+|Échap|Entrée)[^()]*)\)\s*$/);
-  if (t) {
-    touche = t[1];
-    corps = corps.slice(0, t.index);
-  }
-  const majuscule = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-  const ligne = elem("div", "bulle-ligne");
-  let detail = "";
-  const geste = corps.match(GESTE_BULLE);
-  if (geste) {
-    // « Double-clic pour renommer » : le geste en pastille, l'action en clair.
-    ligne.appendChild(elem("span", "bulle-geste", geste[1]));
-    ligne.appendChild(elem("span", "bulle-titre", majuscule(geste[2])));
-  } else {
-    // « Cloisonner : connexions, cookies… » : l'action en clair, l'explication en dessous.
-    const i = corps.indexOf(" : ");
-    ligne.appendChild(elem("span", "bulle-titre", i > 0 ? corps.slice(0, i) : corps));
-    if (i > 0) detail = majuscule(corps.slice(i + 3));
-  }
-  if (touche) {
-    const kbd = elem("span", "bulle-touches");
-    for (const k of touche.split("+")) kbd.appendChild(elem("kbd", "", k.trim()));
-    ligne.appendChild(kbd);
-  }
-  bulle.appendChild(ligne);
-  if (detail) bulle.appendChild(elem("div", "bulle-detail", detail));
-}
-
-function placerBulle(el) {
-  const r = el.getBoundingClientRect();
-  const marge = 8;
-  bulle.style.left = "0px";
-  bulle.style.top = "0px";
-  const b = bulle.getBoundingClientRect();
-  const largeur = window.innerWidth;
-  const centre = r.left + r.width / 2;
-  const x = Math.max(marge, Math.min(centre - b.width / 2, largeur - b.width - marge));
-  const dessous = r.bottom + 8 + b.height <= window.innerHeight - marge;
-  const y = dessous ? r.bottom + 8 : Math.max(marge, r.top - 8 - b.height);
-  bulle.style.left = `${Math.round(x)}px`;
-  bulle.style.top = `${Math.round(y)}px`;
-  bulle.classList.toggle("dessus", !dessous);
-  // La pointe vise le centre de l'element, meme quand la bulle est poussee contre un bord.
-  bulle.style.setProperty("--pointe", `${Math.round(Math.max(12, Math.min(centre - x, b.width - 12)))}px`);
-}
-
-function montrerBulle(el) {
-  const texte = texteBulle(el);
-  if (!texte || !el.isConnected) return;
-  remplirBulle(texte);
-  bulle.classList.remove("visible");
-  placerBulle(el);
-  void bulle.offsetWidth;
-  bulle.classList.add("visible");
-}
-
-function cacherBulle() {
-  clearTimeout(bulleMinuterie);
-  if (bulle && bulle.classList.contains("visible")) bulleVueA = performance.now();
-  bulleCible = null;
-  if (bulle) bulle.classList.remove("visible");
-}
-
-function brancherBulles() {
-  bulle = elem("div", "bulle");
-  bulle.setAttribute("role", "tooltip");
-  document.body.appendChild(bulle);
-  document.addEventListener("pointerover", (e) => {
-    const el = e.target.closest("[title], [data-bulle]");
-    if (el === bulleCible) return;
-    if (!el) return cacherBulle();
-    if (window.innerWidth < 130) {
-      // Rail replie : la bulle native, qui peut deborder de la webview.
-      if (!el.title && el.dataset.bulle) el.title = el.dataset.bulle;
-      return cacherBulle();
-    }
-    texteBulle(el);
-    const enchaine = performance.now() - bulleVueA < 400 || bulle.classList.contains("visible");
-    cacherBulle();
-    bulleCible = el;
-    bulleMinuterie = setTimeout(() => bulleCible === el && montrerBulle(el), enchaine ? 0 : 450);
-  });
-  document.addEventListener("pointerout", (e) => {
-    if (bulleCible && !bulleCible.contains(e.relatedTarget)) cacherBulle();
-  });
-  for (const type of ["pointerdown", "wheel", "keydown"]) {
-    document.addEventListener(type, cacherBulle, { capture: true, passive: true });
-  }
-  document.addEventListener("scroll", cacherBulle, { capture: true, passive: true });
-  window.addEventListener("blur", cacherBulle);
-  // Le rail se replie : chaque texte deja pris par une bulle dessinee retourne a Windows.
-  window.addEventListener("resize", () => {
-    if (window.innerWidth >= 130) return;
-    cacherBulle();
-    for (const el of document.querySelectorAll("[data-bulle]")) {
-      if (!el.title) el.title = el.dataset.bulle;
-    }
-  });
-}
-
 /* ------------------------------------------------------------------ depart */
 
 if (surface === "rail") {
   document.getElementById("rail").hidden = false;
   brancherRail();
-  brancherBulles();
+  // Rail replie (64 px) : une bulle dessinee serait coupee par le bord de la webview.
+  TrameBulles.brancher({ natif: () => window.innerWidth < 130 });
 } else {
   document.getElementById("barre").hidden = false;
   brancherBarre();
+  // La barre ne fait que 45 a 85 px de haut : une bulle qui n'y tient pas (puces d'extensions,
+  // barre sans rangee d'extensions) passe par la colonne du panneau — l'hote agrandit la barre
+  // et ne decoupe que cette carte, la page reste visible et cliquable autour (`superposer`).
+  TrameBulles.brancher({
+    hote: {
+      montrer(zone, hauteur) {
+        if (panneauOuvert) return 0; // un vrai menu occupe deja la colonne
+        // L'hote borne la hauteur a 150 px au moins : la carte va jusqu'en bas de cette bande.
+        const bas = Math.max(150, zone.y + hauteur);
+        ipc({ m: "panneau", open: true, zone, hauteur: bas });
+        return bas;
+      },
+      cacher() {
+        if (!panneauOuvert) ipc({ m: "panneau", open: false });
+      },
+    },
+  });
 }
 initFenetre();
 

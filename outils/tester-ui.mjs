@@ -453,24 +453,77 @@ async function suite() {
     etat.onglets = [onglet(1, 1, "Page", "https://a.fr/")];
     await pousser(p, etat);
     await p.hover(".fil-nom");
-    await p.waitForSelector(".bulle.visible", { timeout: 2000 });
-    egal(await p.$eval(".bulle-geste", (n) => n.textContent), "Double-clic", "le geste en pastille");
-    egal(await p.$eval(".bulle-titre", (n) => n.textContent), "Renommer", "l'action en clair");
+    await p.waitForSelector(".trame-bulle.visible", { timeout: 2000 });
+    egal(await p.$eval(".trame-bulle .b-geste", (n) => n.textContent), "Double-clic", "le geste en pastille");
+    egal(await p.$eval(".trame-bulle .b-titre", (n) => n.textContent), "Renommer", "l'action en clair");
     egal(await p.$eval(".fil-nom", (n) => n.getAttribute("title")), null, "plus de bulle native");
-    const r = await p.$eval(".bulle", (n) => n.getBoundingClientRect().toJSON());
+    const r = await p.$eval(".trame-bulle", (n) => n.getBoundingClientRect().toJSON());
     verifier(r.left >= 8 && r.right <= 332, `la bulle reste dans le rail (${r.left}..${r.right})`);
     if (process.env.TRAME_CAPTURES) await p.screenshot({ path: `${process.env.TRAME_CAPTURES}/bulle-nom.png`, clip: { x: 0, y: 0, width: 340, height: 330 } });
     // Titre a explication : l'action en gras, le detail en dessous.
     await p.mouse.move(5, 690);
-    await p.waitForSelector(".bulle:not(.visible)");
+    await p.waitForSelector(".trame-bulle:not(.visible)");
     await p.hover(".fil-outils button");
-    await p.waitForSelector(".bulle.visible .bulle-detail", { timeout: 2000 });
+    await p.waitForSelector(".trame-bulle.visible .b-detail", { timeout: 2000 });
     if (process.env.TRAME_CAPTURES) await p.screenshot({ path: `${process.env.TRAME_CAPTURES}/bulle-detail.png`, clip: { x: 0, y: 0, width: 340, height: 330 } });
     // Rail replie : la bulle native revient, une bulle dessinee serait coupee.
     await p.mouse.move(5, 690);
     await p.setViewportSize({ width: 64, height: 700 });
     await p.hover("#btn-rail");
     egal(await p.$eval("#btn-rail", (n) => !!n.getAttribute("title")), true, "title rendu au rail replie");
+    await p.close();
+  });
+
+  await cas("barre : bulle dans la barre si elle y tient, sinon carte demandee a l'hote", async () => {
+    const p = await page("chrome.html", { query: "?surface=barre" });
+    const etat = etatDeBase();
+    etat.barreExtensions = true;
+    etat.extensions = [
+      { id: "compteur", nom: "Compteur de visites", version: "1.0.0", active: true, accent: "#60a5fa",
+        description: "Compte combien de fois tu es venu sur ce site.", motifs: ["*://*/*"] },
+    ];
+    await pousser(p, etat);
+    const hBarre = await p.$eval("body", () => Math.round(document.querySelector(".barre-ligne").getBoundingClientRect().height + document.getElementById("extbar").getBoundingClientRect().height));
+    await p.setViewportSize({ width: 1280, height: hBarre });
+    // Puce d'extension, en bas de la barre : rien n'y tient, la carte part chez l'hote.
+    await p.evaluate(() => (window.__ipc.length = 0));
+    await p.hover(".ext-chip:has(.pt)");
+    await p.waitForSelector(".trame-bulle.visible.carte", { timeout: 2000 });
+    const demande = (await messages(p)).find((m) => m.m === "panneau" && m.open);
+    verifier(demande && demande.zone && demande.zone.y > hBarre, `panneau demande sous la barre ${JSON.stringify(demande)}`);
+    verifier(demande.hauteur >= 150, "hauteur bornee comme l'hote la borne");
+    egal(await p.$eval(".trame-bulle .b-titre", (n) => n.textContent), "Compteur de visites", "titre sans la version");
+    egal(await p.$eval(".trame-bulle .b-version", (n) => n.textContent), "v1.0.0", "version a part");
+    egal(await p.$eval(".trame-bulle .b-motif", (n) => n.textContent), "*://*/*", "motif en police fixe");
+    egal(await p.$eval(".trame-bulle .b-pied .b-geste", (n) => n.textContent), "Clic", "« Cliquer pour » devient un geste");
+    // L'hote agrandit la barre : on simule, pour la capture.
+    await p.setViewportSize({ width: 1280, height: demande.hauteur });
+    if (process.env.TRAME_CAPTURES) await p.screenshot({ path: `${process.env.TRAME_CAPTURES}/bulle-extension.png`, clip: { x: 0, y: 0, width: 700, height: demande.hauteur } });
+    await p.evaluate(() => (window.__ipc.length = 0));
+    await p.mouse.move(640, 2);
+    await p.mouse.move(1270, demande.hauteur - 2);
+    await p.waitForSelector(".trame-bulle:not(.visible)");
+    verifier((await messages(p)).some((m) => m.m === "panneau" && m.open === false), "la carte est rendue a l'hote");
+    await p.close();
+  });
+
+  await cas("reglages : les infobulles des pages internes sont celles de Trame", async () => {
+    const p = await page("reglages.html");
+    await p.waitForFunction(() => !!window.__trameBulles);
+    // Les title des reglages vivent dans des rubriques fermees : un bouton pose suffit a
+    // prouver que la page dessine ses bulles.
+    await p.evaluate(() => {
+      const b = document.createElement("button");
+      b.id = "essai-bulle";
+      b.textContent = "essai";
+      b.title = "Vider le cache : les pages se rechargeront depuis le réseau";
+      b.style.cssText = "position:fixed;left:40px;top:40px;z-index:99";
+      document.body.appendChild(b);
+    });
+    const avecTitre = p.locator("#essai-bulle");
+    await avecTitre.hover();
+    await p.waitForSelector(".trame-bulle.visible", { timeout: 2000 });
+    egal(await avecTitre.evaluate((n) => n.getAttribute("title")), null, "plus de bulle native");
     await p.close();
   });
 
@@ -1881,6 +1934,8 @@ async function suite() {
       };
     });
     verifier(pied.droite <= 64 && pied.anneau && /%$/.test(pied.jauge) && !pied.texte, `replié : icône sans texte, jauge en anneau ${JSON.stringify(pied)}`);
+    // Le title revient a Windows a l'evenement `resize`, qui suit le changement de taille.
+    await r.waitForFunction(() => !!document.getElementById("btn-veille").getAttribute("title"), null, { timeout: 2000 }).catch(() => {});
     verifier(((await r.getAttribute("#btn-veille", "title")) || "").includes("éveillé"), "l'anneau donne le détail au survol");
   });
 
