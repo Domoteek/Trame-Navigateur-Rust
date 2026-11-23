@@ -1186,6 +1186,14 @@ cachée ignorait la demande polie et gardait le port de débogage, si bien que l
 parlaient à l'ancienne instance) et accepte `TRAME_BINAIRE` et `TRAME_PORT_ESSAI`. Preuves :
 `eprouver-menu-onglet.mjs` **15/15** (réouvertures à 886 px ; contre-épreuve sur la 0.4.57 :
 638 px), `cargo test` **212/212**, `tester-ui` **88/88**.
+
+**0.4.59 — une barre de défilement qu'on voit.** Clément : « je dois à peine la voir ». Le menu
+portait `scrollbar-width: thin` + `scrollbar-color` ; dans Chromium ces deux propriétés **désactivent**
+les règles `::-webkit-scrollbar` et donnaient un fil de 2-3 px gris sur gris. Désormais : rail de
+12 px visible (blanc à 6 %), pouce à la **teinte d'accent** (60 %, 85 % au survol, plein pendant la
+traction), 40 px de haut au moins, pour toutes les colonnes de menu. Preuves : capture du vrai
+moteur (Trame caché, menu bridé à 420 px), `eprouver-menu-onglet.mjs` 15/15, `tester-ui` 88/88,
+`cargo test` 212/212.
 ## 11. L'état aujourd'hui
 
 ```
