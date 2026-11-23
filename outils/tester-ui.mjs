@@ -2252,6 +2252,10 @@ async function suite() {
     egal(vus.size, 5, "cinq teintes, cinq aspects distincts");
     await pousser(p, { ...etatDeBase(), theme: "dynamique", teinteSite: "#e11d48" });
     egal((await lire()).rgb, "225, 29, 72", "dynamique : l'accent du site, transparences comprises");
+    // Une couleur de site en rgb() se lit sans passer par le navigateur (1,7 ms -> 0,005 ms).
+    await pousser(p, { ...etatDeBase(), theme: "dynamique", teinteSite: "rgb(12, 200, 99)" });
+    egal((await lire()).rgb, "12, 200, 99", "dynamique : couleur rgb() du site");
+    egal(await p.evaluate(() => [window.TrameTeintes.rgb("rgba(1, 2, 3, .5)"), window.TrameTeintes.rgb("rgb(1 2 3 / 50%)"), window.TrameTeintes.rgb("hsl(0, 100%, 50%)"), window.TrameTeintes.rgb("rgb(300, 1, 1)")]), ["1, 2, 3", "1, 2, 3", "255, 0, 0", null], "rgba, syntaxe moderne, hsl par le navigateur, valeur hors bornes refusée");
     await pousser(p, { ...etatDeBase(), theme: "defaut" });
     const retour = await lire();
     egal(retour.fond, origine.fond, "défaut : fond d'origine");

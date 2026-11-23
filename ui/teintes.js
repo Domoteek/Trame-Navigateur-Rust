@@ -46,25 +46,42 @@
   // d'origine — une couleur de site en fond de navigateur casserait le contraste.
   const DYNAMIQUE = { nom: "Dynamique" };
 
-  /** « r, g, b » d'une couleur CSS quelconque (#abc, #aabbcc, rgb(), hsl()…), ou null. */
+  /** « r, g, b » d'une couleur CSS quelconque (#abc, #aabbcc, rgb(), hsl()…), ou null.
+   *
+   *  Vitesse (mesuree sur le vrai binaire, 2026-11-23) : passer par le navigateur (element
+   *  temporaire + getComputedStyle) coutait 1,7 ms a chaque changement d'onglet en mode
+   *  dynamique, car il force un recalcul de style. Hexadecimal et rgb()/rgba() se lisent donc
+   *  directement, et chaque reponse est gardee : un site annonce toujours la meme couleur. */
+  const memo = new Map();
   function rgb(couleur) {
     if (!couleur) return null;
-    const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(couleur.trim());
+    const c = couleur.trim();
+    if (memo.has(c)) return memo.get(c);
+    let r = null;
+    const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c);
+    const fn = !hex && /^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})\s*(?:[,/][^)]*)?\)$/i.exec(c);
     if (hex) {
       let h = hex[1];
-      if (h.length === 3) h = h.split("").map((c) => c + c).join("");
-      return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)).join(", ");
+      if (h.length === 3) h = h.split("").map((x) => x + x).join("");
+      r = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)).join(", ");
+    } else if (fn) {
+      const v = [fn[1], fn[2], fn[3]].map(Number);
+      if (v.every((x) => x <= 255)) r = v.join(", ");
+    } else {
+      // Le reste (hsl(), noms de couleur) : le navigateur sait le lire.
+      const sonde = document.createElement("span");
+      sonde.style.color = c;
+      if (sonde.style.color) {
+        sonde.style.display = "none";
+        document.documentElement.appendChild(sonde);
+        const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(getComputedStyle(sonde).color);
+        sonde.remove();
+        if (m) r = `${m[1]}, ${m[2]}, ${m[3]}`;
+      }
     }
-    // Le navigateur sait lire le reste : on lui fait calculer la couleur.
-    const sonde = document.createElement("span");
-    sonde.style.color = couleur;
-    if (!sonde.style.color) return null;
-    sonde.style.display = "none";
-    document.documentElement.appendChild(sonde);
-    const lu = getComputedStyle(sonde).color;
-    sonde.remove();
-    const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(lu);
-    return m ? `${m[1]}, ${m[2]}, ${m[3]}` : null;
+    if (memo.size > 64) memo.clear();
+    memo.set(c, r);
+    return r;
   }
 
   const VARIABLES = [

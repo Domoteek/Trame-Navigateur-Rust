@@ -11,6 +11,37 @@ machine à 16 cœurs, et distinguent deux choses :
 
 La distinction est le point central : sans elle, on optimise du bruit de moteur.
 
+## 0. 2026-11-23 — les teintes (0.4.41 → 0.4.44), mesurées sur le vrai binaire
+
+Profil neuf, **fenêtre cachée** (`TRAME_CACHEE=1`, rien ne vole le focus), lecture par CDP.
+
+| Mesure | Résultat |
+|---|---|
+| Clic sur une teinte → rail repeint (aller-retour par l'hôte) | **12 ms** médiane, 17 ms au pire (18 changements) — moins d'une image à 60 Hz |
+| Coût d'un changement de teinte | rail : style 2,1 ms, mise en page 0,1 ms ; barre : style 3,7 ms |
+| `TrameTeintes.appliquer` (teinte prédéfinie) | 0,006 ms |
+| Idem en mode dynamique, couleur de site en `rgb()` | **1,676 ms → 0,005 ms** (corrigé en 0.4.44) |
+| Poussée d'état sans changement de teinte | 0,01 ms (la teinte n'est reposée que si elle change) |
+
+**Le correctif de la 0.4.44** : pour lire une couleur `rgb()`, `teintes.js` créait un élément
+temporaire et appelait `getComputedStyle`, ce qui force un recalcul de style — à chaque
+changement d'onglet en mode dynamique. L'hexadécimal et `rgb()`/`rgba()` se lisent désormais
+directement, et chaque réponse est gardée (un site annonce toujours la même couleur). Seuls
+`hsl()` et les noms de couleur passent encore par le navigateur.
+
+**Avant / après le travail sur les teintes** (0.4.40 recompilée à part, même banc, même machine) :
+
+| | 0.4.40 | 0.4.44 |
+|---|---|---|
+| Mémoire de l'arbre au repos | 537 Mo (9 processus) | 535 Mo (9 processus) |
+| CPU de l'arbre au repos | 1,25 % d'un cœur | 0,86 % (bruit) |
+| Démarrage (lancement → rail et barre prêts), 5 lancements | 886 ms médiane | 874 ms médiane |
+
+Rien ne bouge au-delà du bruit : les teintes ne coûtent rien au repos.
+
+⚠️ `node outils/mesurer-ressources.mjs --demarrer` ouvre une **fenêtre visible** et a donné
+1 331 Mo / 19 processus le même jour, contre 535 Mo / 9 processus en fenêtre cachée : les deux
+chiffres ne se comparent pas. Comparer toujours deux versions dans le même mode.
 ## 1. Ce qui a été fait
 
 ### 1.1 La mesure de mémoire ne relit plus tout le système toutes les 4 s
