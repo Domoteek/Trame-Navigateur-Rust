@@ -10,15 +10,19 @@
      sont injectees dans une balise <style>). Ils privilegient les noms stables du site (balises
      personnalisees, attributs aria/title/role, classes lisibles) plutot que les positions. */
   if (window.__trame_pick_fin) { window.__trame_pick_fin(); return; }
+  // La teinte de Trame, posee par Rust a l'injection (src/teinte.rs remplace __TRAME_TEINTE__) ;
+  // sans elle (banc d'essai), l'aspect d'origine.
+  const T = (typeof __TRAME_TEINTE__ !== "undefined" && __TRAME_TEINTE__) ||
+    { fond: "#080b11", surface: "#101521", surface2: "#151c2a", accent: "#60a5fa", rgb: "96, 165, 250", clair: "#dbe9ff" };
 
   const racine = document.body || document.documentElement;
   const Z = 2147483646;
   const halo = document.createElement("div");
-  halo.style.cssText = `position:fixed;z-index:${Z};pointer-events:none;border:2px solid #60a5fa;background:rgba(96,165,250,.16);border-radius:4px;box-sizing:border-box;left:0;top:0;width:0;height:0;transition:all .05s`;
+  halo.style.cssText = `position:fixed;z-index:${Z};pointer-events:none;border:2px solid ${T.accent};background:rgba(${T.rgb},.16);border-radius:4px;box-sizing:border-box;left:0;top:0;width:0;height:0;transition:all .05s`;
   const semblablesHalo = document.createElement("div");
   semblablesHalo.style.cssText = `position:fixed;inset:0;z-index:${Z - 1};pointer-events:none`;
   const etiquette = document.createElement("div");
-  etiquette.style.cssText = `position:fixed;z-index:${Z};pointer-events:none;max-width:460px;padding:6px 9px;border-radius:7px;background:#0d1016;color:#dbe7f7;font:12px/1.4 "Segoe UI",system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.45);border:1px solid rgba(96,165,250,.35)`;
+  etiquette.style.cssText = `position:fixed;z-index:${Z};pointer-events:none;max-width:460px;padding:6px 9px;border-radius:7px;background:${T.surface};color:${T.clair};font:12px/1.4 "Segoe UI",system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.45);border:1px solid rgba(${T.rgb},.35)`;
   racine.appendChild(semblablesHalo);
   racine.appendChild(halo);
   racine.appendChild(etiquette);
@@ -128,7 +132,7 @@
     const n = compter(sel);
     etiquette.textContent = "";
     const l1 = document.createElement("div");
-    l1.style.cssText = "font:11px Consolas,monospace;color:#a9c6ee";
+    l1.style.cssText = `font:11px Consolas,monospace;color:${T.clair}`;
     l1.textContent = sel;
     const l2 = document.createElement("div");
     l2.textContent = `${n} semblable${n > 1 ? "s" : ""} sur la page · molette : bloc parent / enfant · clic : choisir · Échap`;
@@ -145,7 +149,7 @@
         const ra = autre.getBoundingClientRect();
         if (ra.bottom < 0 || ra.top > innerHeight || !ra.width) continue;
         const d = document.createElement("div");
-        d.style.cssText = `position:fixed;left:${ra.left}px;top:${ra.top}px;width:${ra.width}px;height:${ra.height}px;border:1px dashed rgba(96,165,250,.7);border-radius:4px;box-sizing:border-box`;
+        d.style.cssText = `position:fixed;left:${ra.left}px;top:${ra.top}px;width:${ra.width}px;height:${ra.height}px;border:1px dashed rgba(${T.rgb},.7);border-radius:4px;box-sizing:border-box`;
         semblablesHalo.appendChild(d);
       }
     }
@@ -209,10 +213,10 @@
     champ.type = type;
     champ.value = defaut;
     champ.placeholder = titre;
-    champ.style.cssText = "flex:1;min-width:0;padding:7px 9px;border-radius:7px;border:1px solid rgba(96,165,250,.4);background:#161b24;color:#dbe7f7;font:inherit";
+    champ.style.cssText = `flex:1;min-width:0;padding:7px 9px;border-radius:7px;border:1px solid rgba(${T.rgb},.4);background:${T.surface2};color:${T.clair};font:inherit`;
     const ok = document.createElement("button");
     ok.textContent = "OK";
-    ok.style.cssText = "padding:7px 12px;border:0;border-radius:7px;background:rgba(96,165,250,.25);color:#dbe7f7;cursor:pointer;font:inherit";
+    ok.style.cssText = `padding:7px 12px;border:0;border-radius:7px;background:rgba(${T.rgb},.25);color:${T.clair};cursor:pointer;font:inherit`;
     const valider = () => { const v = champ.value.trim(); if (v) suite(v); };
     ok.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); valider(); }, true);
     champ.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); valider(); } if (e.key === "Escape") fin(); }, true);
@@ -248,12 +252,12 @@
   };
   const afficherMenu = (x, y, options) => {
     menu = document.createElement("div");
-    menu.style.cssText = `position:fixed;z-index:${Z};left:${Math.min(x, innerWidth - 380)}px;top:${Math.min(y, innerHeight - 40 * options.length - 20)}px;min-width:300px;max-width:420px;padding:6px;border-radius:10px;background:#0d1016;border:1px solid rgba(96,165,250,.4);box-shadow:0 10px 30px rgba(0,0,0,.5);font:13px/1.35 "Segoe UI",system-ui,sans-serif`;
+    menu.style.cssText = `position:fixed;z-index:${Z};left:${Math.min(x, innerWidth - 380)}px;top:${Math.min(y, innerHeight - 40 * options.length - 20)}px;min-width:300px;max-width:420px;padding:6px;border-radius:10px;background:${T.surface};border:1px solid rgba(${T.rgb},.4);box-shadow:0 10px 30px rgba(0,0,0,.5);font:13px/1.35 "Segoe UI",system-ui,sans-serif`;
     for (const [texte, action] of options) {
       const b = document.createElement("button");
       b.textContent = texte;
-      b.style.cssText = "display:block;width:100%;text-align:left;margin:2px 0;padding:8px 10px;border:0;border-radius:7px;background:transparent;color:#dbe7f7;cursor:pointer;font:inherit";
-      b.onmouseenter = () => (b.style.background = "rgba(96,165,250,.16)");
+      b.style.cssText = `display:block;width:100%;text-align:left;margin:2px 0;padding:8px 10px;border:0;border-radius:7px;background:transparent;color:${T.clair};cursor:pointer;font:inherit`;
+      b.onmouseenter = () => (b.style.background = `rgba(${T.rgb},.16)`);
       b.onmouseleave = () => (b.style.background = "transparent");
       b.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); action(); }, true);
       menu.appendChild(b);

@@ -2288,6 +2288,28 @@ async function suite() {
     }
   });
 
+  await cas("teintes : les scripts posés dans les pages prennent la palette que Trame leur donne", async () => {
+    // Ce que fait src/teinte.rs : `__TRAME_TEINTE__` remplacé par l'objet de couleurs.
+    const menthe = { fond: "#07100e", surface: "#0d1a18", surface2: "#122321", accent: "#34d399", rgb: "52, 211, 153", clair: "#aeedd6" };
+    const avec = (fichier) => fs.readFileSync(path.join(UI, fichier), "utf8").replaceAll("__TRAME_TEINTE__", JSON.stringify(menthe));
+    const p = await page("newtab.html");
+    // Recherche dans la page (Ctrl+F)
+    await p.evaluate(avec("recherche.js"));
+    const barre = await p.$eval("#trame-recherche", (n) => ({ fond: getComputedStyle(n).backgroundColor, bord: getComputedStyle(n).borderTopColor }));
+    egal(barre.fond, "rgb(13, 26, 24)", "recherche : fond menthe");
+    verifier(barre.bord.startsWith("rgba(52, 211, 153"), `recherche : bord menthe (${barre.bord})`);
+    // Sélecteur de Zap : le halo prend l'accent
+    await p.evaluate(avec("zap-choisir.js"));
+    const halo = await p.evaluate(() => [...document.querySelectorAll("div")].map((d) => d.style.borderColor || d.style.border).find((b) => b && b.includes("52, 211, 153")));
+    verifier(!!halo, "zap : le halo prend l'accent menthe");
+    // Sans palette (banc d'essai), les scripts gardent l'aspect d'origine au lieu de planter
+    const q = await page("newtab.html");
+    await q.evaluate(fs.readFileSync(path.join(UI, "recherche.js"), "utf8"));
+    egal(await q.$eval("#trame-recherche", (n) => getComputedStyle(n).backgroundColor), "rgb(16, 21, 33)", "sans palette : fond d'origine");
+    await q.close();
+    await p.close();
+  });
+
   // ---------------------------------------------------------------- contrat UI <-> hôte
 
   await cas("contrat : tout message envoye par l'interface est traite par l'hote", async () => {

@@ -12,6 +12,7 @@
         --surface-3: #1b2434;
         --accent-rgb: 96, 165, 250;
         --accent-2-rgb: 167, 139, 250;
+      --accent-clair: color-mix(in srgb, var(--accent) 40%, #ffffff);
         --bord: rgba(255, 255, 255, 0.08);
         --texte: #e9eefa;
         --texte-2: #97a4bb;
@@ -23,7 +24,7 @@
       * { box-sizing: border-box; }
       html, body { margin: 0; height: 100%; overflow: hidden; }
       body {
-        background: linear-gradient(180deg, #0b1017, var(--fond));
+        background: linear-gradient(180deg, var(--fond-2), var(--fond));
         color: var(--texte);
         font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
         font-size: 12.5px;
@@ -69,7 +70,7 @@
         margin-top: 10px;
         background: rgba(var(--accent-rgb), 0.14);
         border-color: rgba(var(--accent-rgb), 0.35);
-        color: #cfe2ff;
+        color: var(--accent-clair);
         font-weight: 600;
       }
       button.principal:hover { background: rgba(var(--accent-rgb), 0.24); }
@@ -101,7 +102,7 @@
       .selecteur {
         font-family: ui-monospace, Consolas, monospace;
         font-size: 10.5px;
-        color: #a9c6ee;
+        color: var(--accent-clair);
         word-break: break-all;
         line-height: 1.35;
       }
@@ -138,7 +139,7 @@
       .compte { font-size: 10.5px; margin-top: 3px; font-variant-numeric: tabular-nums; color: var(--texte-3); }
       .compte.actif { color: #86efac; }
       .compte.casse { color: #fbbf24; }
-      .texte-cond { font-size: 10.5px; color: #cfe2ff; margin-top: 2px; }
+      .texte-cond { font-size: 10.5px; color: var(--accent-clair); margin-top: 2px; }
       .groupe-titre .mini { margin-left: auto; padding: 1px 6px; font-size: 9.5px; border-radius: 6px; letter-spacing: 0; text-transform: none; }
       .groupe-titre .mini + .mini { margin-left: 4px; }
       .formulaire { display: flex; gap: 6px; margin: 0 0 8px; }
@@ -156,7 +157,7 @@
       #origine.appuye { background: rgba(251, 191, 36, 0.18); border-color: rgba(251, 191, 36, 0.45); color: #fde68a; }
       .action {
         display: inline-block; font-size: 9.5px; letter-spacing: .04em; padding: 1px 6px; margin-bottom: 3px;
-        border-radius: 999px; background: rgba(var(--accent-rgb), 0.14); color: #cfe2ff;
+        border-radius: 999px; background: rgba(var(--accent-rgb), 0.14); color: var(--accent-clair);
       }
     </style>
   </head>

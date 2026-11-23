@@ -25,6 +25,10 @@
     return;
   }
 
+  // La teinte de Trame, posee par Rust a l'injection (src/teinte.rs remplace __TRAME_TEINTE__) ;
+  // sans elle (banc d'essai), l'aspect d'origine.
+  const T = (typeof __TRAME_TEINTE__ !== "undefined" && __TRAME_TEINTE__) ||
+    { fond: "#080b11", surface: "#101521", surface2: "#151c2a", accent: "#60a5fa", rgb: "96, 165, 250", clair: "#dbe9ff" };
   const boite = document.createElement("div");
   boite.id = ID;
   // Styles ecrits en une fois : `all: initial` isole la barre des feuilles du site.
@@ -39,8 +43,8 @@
     "gap: 6px",
     "padding: 6px 8px",
     "border-radius: 10px",
-    "background: #12161f",
-    "border: 1px solid rgba(160, 180, 210, 0.35)",
+    `background: ${T.surface}`,
+    `border: 1px solid rgba(${T.rgb}, 0.35)`,
     "box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45)",
     "font: 13px/1.4 'Segoe UI', system-ui, sans-serif",
     "color: #e6ecf6",
@@ -55,7 +59,7 @@
     "font: 13px 'Segoe UI', system-ui, sans-serif",
     "color: #e6ecf6",
     "background: rgba(255, 255, 255, 0.06)",
-    "border: 1px solid rgba(160, 180, 210, 0.25)",
+    `border: 1px solid rgba(${T.rgb}, 0.25)`,
     "border-radius: 7px",
     "padding: 5px 8px",
     "width: 220px",

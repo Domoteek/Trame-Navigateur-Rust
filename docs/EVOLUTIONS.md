@@ -1008,11 +1008,24 @@ Sur le **vrai binaire** (profil jetable, fenêtre cachée, CDP) : pour chacune d
 barre et réglages lisent les mêmes `--fond`, `--surface-2`, `--accent`, `--accent-rgb`, et le
 fond peint change ; `reglages.json` garde le choix ; le journal note chaque teinte.
 **0.4.42** : le Nouvel onglet, les téléchargements, le coup d'œil (`trame.html`) et Zap suivent aussi la teinte (`TrameTeintes.suivre(s)` dans leur `etat`, 18 transparences et 3 fonds en dur remplacés). Vérifié sur le vrai binaire : Ambre puis Violet repeignent Nouvel onglet et téléchargements, Défaut rend l'origine.
+**0.4.43 — tout suit la teinte, popups compris.** Les éléments que Trame pose DANS les pages web
+ne voient pas les variables de la coquille : ils avaient leurs couleurs en dur. Désormais
+`src/teinte.rs` relit `ui/teintes.js` (embarqué, une seule source) et remplace `__TRAME_TEINTE__`
+par la palette du moment dans : le **popup de mise à jour** (bouton Installer = accent, texte
+sombre), la **barre du coup d'œil**, la **recherche dans la page** (Ctrl+F), le **sélecteur de
+Zap** (halo, étiquette, menu, champ) et la **pastille des vidéos** (à la création de l'onglet).
+Le fond des webviews avant le premier rendu prend le fond de la teinte (au lieu d'un bleu fixe).
+Dans la coquille : menus, poignées de défilement, pastilles et textes bleu clair passent par
+`--surface-4` et `--accent-clair` (dérivés par `color-mix`). Seul reste fixe ce qui a un sens :
+rouge = fermer/danger, vert = actif, ambre = tiède, blanc = texte, carré du logo.
+Preuves : `cargo test` **194/194** (palette lue dans `teintes.js`, popup injecté), `tester-ui`
+**79/79** (scripts injectés avec une palette Menthe) ; vrai binaire en Ambre : la recherche dans la
+page et la barre du coup d'œil sont ambrées (captures).
 ## 11. L'état aujourd'hui
 
 ```
-cargo test --release            188/188
-node outils/tester-ui.mjs        78/78
+cargo test --release            194/194
+node outils/tester-ui.mjs        79/79
 node outils/verifier-app.mjs     sans reseau : 24/24 (dont les scenarios `z` et `z2`, sauvegarde)
 node outils/verifier-setup.mjs   refuse (code 3) tant qu'une vraie installation existe — par conception
 ```

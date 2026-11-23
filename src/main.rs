@@ -32,6 +32,7 @@ mod sauvegarde;
 mod search;
 mod shell;
 mod systeme;
+mod teinte;
 mod telechargements;
 mod urls;
 mod vitality;

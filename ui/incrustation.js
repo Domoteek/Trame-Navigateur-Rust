@@ -146,6 +146,11 @@
     }
   };
 
+  // La teinte de Trame, posee par Rust a la creation de l'onglet (src/teinte.rs) ; sans elle,
+  // l'aspect d'origine. Fond de la pastille = surface de la teinte, en verre sur la video.
+  const T = (typeof __TRAME_TEINTE__ !== "undefined" && __TRAME_TEINTE__) ||
+    { fond: "#080b11", surface: "#101521", surface2: "#151c2a", accent: "#60a5fa", rgb: "96, 165, 250", clair: "#dbe9ff" };
+
   const construire = () => {
     hote = document.createElement("trame-incrustation");
     hote.style.cssText =
@@ -156,7 +161,7 @@
       .pastille {
         position: fixed; display: none; align-items: stretch; height: 30px;
         border-radius: 15px; overflow: hidden; pointer-events: auto;
-        background: rgba(12, 14, 20, .78); box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+        background: ${T.surface}c7; box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
         opacity: 0; transform: translate(-50%, -4px);
         transition: opacity .15s ease, transform .15s ease;
         -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
@@ -169,7 +174,8 @@
       }
       button:hover { background: rgba(255, 255, 255, .12); }
       button:active { background: rgba(255, 255, 255, .2); }
-      button:focus-visible { outline: 2px solid #7aa7ff; outline-offset: -2px; }
+      button:hover { color: ${T.clair}; }
+      button:focus-visible { outline: 2px solid ${T.accent}; outline-offset: -2px; }
       .principal { padding: 0 11px 0 9px; }
       .onglet { padding: 0 9px; border-left: 1px solid rgba(255, 255, 255, .16); }
       svg { width: 16px; height: 16px; flex: none; }
@@ -182,7 +188,7 @@
       }
       .barre.vu { opacity: 1; }
       .barre .titre { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: .85; }
-      .barre button { height: 26px; padding: 0 9px; border-radius: 13px; background: rgba(12, 14, 20, .6); }
+      .barre button { height: 26px; padding: 0 9px; border-radius: 13px; background: ${T.surface}99; }
     `;
 
     pastille = document.createElement("div");

@@ -379,7 +379,6 @@ mod fenetre;
 mod flottant;
 mod outils;
 
-const COULEUR_FOND: (u8, u8, u8, u8) = (13, 16, 22, 255);
 
 /// Mesure la taille naturelle d'une fenetre d'extension : la boite du `body` (ses marges
 /// comprises), pas celle de la fenetre — sinon elle ne pourrait jamais retrecir.
@@ -1083,6 +1082,16 @@ impl App {
         self.nettoyage.1.store(self.reglages.garder_affiliation, Relaxed);
     }
 
+    /// La teinte courante, pour ce qui ne lit pas les variables CSS (voir src/teinte.rs).
+    fn palette(&self) -> crate::teinte::Palette {
+        crate::teinte::palette(&self.reglages.theme, self.teinte_site.as_deref())
+    }
+
+    /// Le fond d'une webview avant qu'elle ne peigne : celui de la teinte, pas un bleu fixe.
+    fn couleur_fond(&self) -> (u8, u8, u8, u8) {
+        crate::teinte::couleur_fond(&self.palette())
+    }
+
     fn creer_surface(&mut self, nom: &str, source: Source) -> Option<WebView> {
         let racine = self.racine_ui();
         let geo = self.geometrie_courante();
@@ -1096,7 +1105,7 @@ impl App {
             .habiller(WebViewBuilder::new_with_web_context(&mut contexte))
             .with_url(url)
             .with_bounds(rect)
-            .with_background_color(COULEUR_FOND)
+            .with_background_color(self.couleur_fond())
             .with_visible(true)
             .with_focused(false)
             .with_navigation_handler(garde)
@@ -1137,7 +1146,7 @@ impl App {
             .habiller(WebViewBuilder::new_with_web_context(&mut contexte))
             .with_url("trame://localhost/trame.html")
             .with_bounds(geo.contenu)
-            .with_background_color(COULEUR_FOND)
+            .with_background_color(self.couleur_fond())
             .with_visible(false)
             .with_focused(false)
             .with_navigation_handler(garde)
@@ -1162,6 +1171,8 @@ impl App {
 
     fn creer_onglet_webview(&mut self, id: TabId) -> Option<WebView> {
         let onglet = self.trouver(id)?.clone();
+        // La pastille video prend la teinte du moment ; un onglet reveille la reprend a jour.
+        let palette_onglet = self.palette();
         let geo = self.geometrie_courante();
         let racine = self.racine_ui();
         let visible = self.actif == Some(id) && !self.vue_trame;
@@ -1204,7 +1215,7 @@ impl App {
             .with_bounds(geo.contenu)
             .with_visible(visible)
             .with_focused(false)
-            .with_background_color(COULEUR_FOND)
+            .with_background_color(self.couleur_fond())
             .with_devtools(true)
             .with_navigation_handler(garde);
         // Sondes de diagnostic (comparaison) : `TRAME_SANS_AMORCE` n'injecte pas les scripts de
@@ -1220,7 +1231,7 @@ impl App {
             ))
             // Aussi dans les cadres : un lecteur YouTube integre a un autre site doit avoir sa
             // pastille (`with_initialization_script` ne vise que la page principale).
-            .with_initialization_script_for_main_only(INCRUSTATION, false)
+            .with_initialization_script_for_main_only(&crate::teinte::injecter(INCRUSTATION, &palette_onglet), false)
         };
         let builder = if std::env::var("TRAME_SANS_PROTOCOLE").is_ok() {
             builder
@@ -1948,6 +1959,7 @@ impl App {
     /// Coup d'oeil : ouvre `url` dans un apercu flottant, par-dessus la page, dans le profil du
     /// fil affiche (cloison comprise). Un second coup d'oeil remplace le premier.
     fn ouvrir_apercu(&mut self, url: &str) {
+        let palette_apercu = self.palette();
         let url = urls::nettoyer(url, self.reglages.garder_affiliation)
             .filter(|_| self.reglages.nettoyer_adresses)
             .unwrap_or_else(|| url.to_string());
@@ -1977,9 +1989,9 @@ impl App {
             .with_bounds(geo.contenu)
             .with_visible(true)
             .with_focused(true)
-            .with_background_color(COULEUR_FOND)
+            .with_background_color(self.couleur_fond())
             .with_navigation_handler(garde)
-            .with_initialization_script(APERCU)
+            .with_initialization_script(&crate::teinte::injecter(APERCU, &palette_apercu))
             .with_on_page_load_handler(move |_, url| {
                 let _ = p_charge.send_event(UserEvent::ApercuAdresse(url));
             })
@@ -4665,11 +4677,12 @@ impl App {
         if self.vue_trame {
             return;
         }
+        let recherche = crate::teinte::injecter(RECHERCHE_PAGE, &self.palette());
         let Some(w) = self.webviews.get(&id) else {
             self.signaler("Cet onglet est en veille : un clic le réveille d'abord.");
             return;
         };
-        if let Err(e) = w.evaluate_script(RECHERCHE_PAGE) {
+        if let Err(e) = w.evaluate_script(&recherche) {
             alerte!("recherche dans la page impossible : {e}");
             return;
         }
@@ -4808,7 +4821,7 @@ impl App {
         let resultat = builder
             .with_url("trame://localhost/zap.html")
             .with_bounds(geo.zap)
-            .with_background_color(COULEUR_FOND)
+            .with_background_color(self.couleur_fond())
             .with_visible(false)
             .with_focused(false)
             .with_navigation_handler(garde)
@@ -5007,7 +5020,7 @@ impl App {
             info!("mise a jour : {} disponible ({})", nouveaute.version, nouveaute.url);
             self.signaler(&format!("Trame {} est disponible.", nouveaute.version));
         }
-        let js = popup_maj(&nouveaute.version, crate::maj::ACTUELLE);
+        let js = popup_maj(&nouveaute.version, crate::maj::ACTUELLE, &self.palette());
         match self.actif {
             Some(id) => {
                 info!("mise a jour : popup pose dans l'onglet {id}");
@@ -6123,7 +6136,8 @@ impl App {
     fn demarrer_selecteur(&mut self) {
         self.selection_guet = false;
         let Some(id) = self.actif else { return };
-        self.eval_sur(Source::Onglet(id), SELECTEUR_JS);
+        let selecteur = crate::teinte::injecter(SELECTEUR_JS, &self.palette());
+        self.eval_sur(Source::Onglet(id), &selecteur);
         self.signaler("Cliquez l'élément à masquer — Échap annule.");
     }
 
@@ -6283,12 +6297,14 @@ const RACCOURCIS: &str = include_str!("../ui/raccourcis.js");
 /// au-dessus de la page, non. Les deux boutons passent par le pont des pages, deja eprouve par
 /// la pastille video.
 const POPUP_MAJ: &str = r#"(function () {
+  // La teinte de Trame, posee par Rust (src/teinte.rs) a l'injection.
+  var T = __TRAME_TEINTE__;
   var id = 'trame-popup-maj';
   var ancien = document.getElementById(id);
   if (ancien) ancien.remove();
   var boite = document.createElement('div');
   boite.id = id;
-  boite.setAttribute('style', 'position:fixed;z-index:2147483647;right:22px;bottom:22px;width:340px;padding:18px 20px;border-radius:14px;background:#121722;color:#e9eefa;font:14px system-ui;box-shadow:0 18px 50px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.16)');
+  boite.setAttribute('style', 'position:fixed;z-index:2147483647;right:22px;bottom:22px;width:340px;padding:18px 20px;border-radius:14px;background:' + T.surface + ';color:#e9eefa;font:14px system-ui;box-shadow:0 18px 50px rgba(0,0,0,.6);border:1px solid rgba(' + T.rgb + ',.35)');
   var titre = document.createElement('div');
   titre.textContent = 'Une nouvelle version de Trame est disponible';
   titre.setAttribute('style', 'font-weight:600;font-size:14.5px;margin-bottom:7px;line-height:1.3');
@@ -6297,18 +6313,19 @@ const POPUP_MAJ: &str = r#"(function () {
   detail.setAttribute('style', 'font-size:12.5px;color:#9fb0c9;margin-bottom:15px');
   var rangee = document.createElement('div');
   rangee.setAttribute('style', 'display:flex;gap:10px;justify-content:flex-end');
-  function bouton(texte, fond, message) {
+  function bouton(texte, fond, encre, message) {
     var b = document.createElement('button');
     b.textContent = texte;
-    b.setAttribute('style', 'padding:8px 15px;border-radius:9px;border:1px solid rgba(255,255,255,.18);background:' + fond + ';color:#fff;font-size:13px;cursor:pointer');
+    b.setAttribute('style', 'padding:8px 15px;border-radius:9px;border:1px solid rgba(255,255,255,.18);background:' + fond + ';color:' + encre + ';font-size:13px;font-weight:600;cursor:pointer');
     b.onclick = function () {
       boite.remove();
       try { window.ipc.postMessage(JSON.stringify({ m: message })); } catch (e) {}
     };
     rangee.appendChild(b);
   }
-  bouton('Plus tard', '#1c2433', 'majPlusTard');
-  bouton('Installer', '#2563eb', 'majInstaller');
+  bouton('Plus tard', T.surface2, '#e9eefa', 'majPlusTard');
+  // Texte sombre sur l'accent : lisible sur le bleu comme sur l'ambre ou la menthe.
+  bouton('Installer', T.accent, '#0b0f17', 'majInstaller');
   boite.appendChild(titre);
   boite.appendChild(detail);
   boite.appendChild(rangee);
@@ -6316,8 +6333,8 @@ const POPUP_MAJ: &str = r#"(function () {
 })();"#;
 
 /// Le popup, avec les deux versions ecrites dedans.
-fn popup_maj(disponible: &str, actuelle: &str) -> String {
-    POPUP_MAJ
+fn popup_maj(disponible: &str, actuelle: &str, palette: &crate::teinte::Palette) -> String {
+    crate::teinte::injecter(POPUP_MAJ, palette)
         .replace("__VERSION__", disponible)
         .replace("__ACTUELLE__", actuelle)
 }
@@ -6651,6 +6668,16 @@ mod tests {
         // Le script est injecte tel quel dans la page : il doit etre une expression
         // immediate, sans dependance a Trame, et refermer la barre sur Echap.
         assert!(RECHERCHE_PAGE.contains("trame-recherche"));
+        // Popup de mise a jour, coup d'oeil, recherche et selecteur de Zap : tous attendent la
+        // palette, et la recoivent remplie (aucun `__TRAME_TEINTE__` ne doit fuir dans une page).
+        for script in [POPUP_MAJ, APERCU, RECHERCHE_PAGE, SELECTEUR_JS, INCRUSTATION] {
+            assert!(script.contains("__TRAME_TEINTE__"), "un script pose dans les pages ignore la teinte");
+        }
+        let ambre = crate::teinte::palette("ambre", None);
+        let popup = popup_maj("9.9.9", "0.4.43", &ambre);
+        assert!(popup.contains("\"accent\":\"#fbbf24\"") && popup.contains("T.accent"), "le bouton Installer prend l'accent");
+        assert!(!popup.contains("__TRAME_TEINTE__") && !popup.contains("#2563eb"));
+        assert!(popup.contains("Trame 9.9.9"));
         assert!(RECHERCHE_PAGE.contains("Escape"));
         assert!(RECHERCHE_PAGE.contains("window.find"));
         // Commentaire d'en-tete admis, mais le script doit etre une expression immediate :

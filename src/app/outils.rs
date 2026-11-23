@@ -1255,7 +1255,8 @@ impl App {
             return;
         }
         self.selection_guet = true;
-        self.eval_sur(Source::Onglet(id), SELECTEUR_JS);
+        let selecteur = crate::teinte::injecter(SELECTEUR_JS, &self.palette());
+        self.eval_sur(Source::Onglet(id), &selecteur);
         self.signaler("Cliquez l'élément à guetter (un prix, un stock, un résultat) — Échap annule.");
     }
 

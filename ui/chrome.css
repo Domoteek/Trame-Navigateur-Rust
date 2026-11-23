@@ -23,6 +23,10 @@
      Poses par ui/teintes.js selon la teinte ; ces valeurs-ci sont celles de « Defaut ». */
   --accent-rgb: 96, 165, 250;
   --accent-2-rgb: 167, 139, 250;
+  /* Derivees de la teinte : un texte d'accent lisible sur fond sombre, et une surface plus claire
+     (poignees de defilement, pastilles). Recalculees seules quand ui/teintes.js change l'accent. */
+  --accent-clair: color-mix(in srgb, var(--accent) 40%, #ffffff);
+  --surface-4: color-mix(in srgb, var(--surface-3) 88%, #ffffff);
   --danger: #f87171;
   --r: 12px;
   --r-s: 9px;
@@ -183,10 +187,10 @@ input {
   overflow-x: hidden;
   padding: 0 0 12px;
   scrollbar-width: thin;
-  scrollbar-color: #2a3448 transparent;
+  scrollbar-color: var(--surface-4) transparent;
 }
 .fils::-webkit-scrollbar { width: 8px; }
-.fils::-webkit-scrollbar-thumb { background: #222c3d; border-radius: 8px; }
+.fils::-webkit-scrollbar-thumb { background: var(--surface-4); border-radius: 8px; }
 
 .fil {
   position: relative;
@@ -358,11 +362,11 @@ input {
   font-size: 9px;
   font-weight: 700;
   color: #0a1018;
-  background: #2a3548;
+  background: var(--surface-4);
   overflow: hidden;
 }
 .pastille img { width: 16px; height: 16px; border-radius: 5px; object-fit: contain; }
-.pastille.lettre { background: linear-gradient(135deg, #2a3548, #1a2231); color: #9fb0c9; }
+.pastille.lettre { background: linear-gradient(135deg, var(--surface-4), var(--surface-2)); color: #9fb0c9; }
 .onglet .texte {
   flex: 1;
   min-width: 0;
@@ -746,7 +750,7 @@ input {
   flex: 0 0 auto;
 }
 .resultat .genre.fil { background: rgba(94, 234, 212, 0.15); color: #9df0e0; }
-.resultat .genre.navigation { background: rgba(var(--accent-rgb), 0.18); color: #bcd8ff; }
+.resultat .genre.navigation { background: rgba(var(--accent-rgb), 0.18); color: var(--accent-clair); }
 .resultat .genre.commande { background: rgba(var(--accent-2-rgb), 0.16); color: #c9b8ff; }
 .resultat .genre.historique { background: rgba(251, 191, 36, 0.14); color: #f7d489; }
 .resultat .corps { flex: 1; min-width: 0; }
@@ -852,13 +856,13 @@ input {
   padding: 0 9px;
   border-radius: 6px;
   font-size: 11px;
-  color: #a7c3f2;
+  color: var(--accent-clair);
   background: rgba(var(--accent-rgb), 0.12);
   border: 1px solid rgba(var(--accent-rgb), 0.30);
   flex: 0 0 auto;
   max-width: 190px;
 }
-.moteur-chip:hover { background: rgba(var(--accent-rgb), 0.22); color: #dbe9ff; }
+.moteur-chip:hover { background: rgba(var(--accent-rgb), 0.22); color: var(--accent-clair); }
 .moteur-chip .ic { width: 13px; height: 13px; opacity: 0.9; }
 .moteur-chip .moteur-nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -925,7 +929,7 @@ input {
   flex-direction: column;
   gap: 2px;
   padding: 6px 6px 8px;
-  background: linear-gradient(180deg, #121826, #0c111b);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
   border: 1px solid var(--bord-fort);
   border-top: none;
   border-radius: 0 0 12px 12px;
@@ -947,11 +951,11 @@ input {
   align-items: center;
   gap: 5px;
   font-size: 11px;
-  color: #a9c8f7;
+  color: var(--accent-clair);
   padding: 3px 7px;
   border-radius: 6px;
 }
-.menu-lien:hover { background: rgba(var(--accent-rgb), 0.12); color: #dbe9ff; }
+.menu-lien:hover { background: rgba(var(--accent-rgb), 0.12); color: var(--accent-clair); }
 .menu-lien .ic.petit { width: 12px; height: 12px; }
 /* Memoire libre faible : le pied du rail le dit en ambre (le detail est dans l'infobulle). */
 .txt-budget.limite { color: var(--tiede); }
@@ -1067,7 +1071,7 @@ input {
   max-width: 78%;
   padding: 9px 14px;
   border-radius: 10px;
-  background: rgba(20, 27, 40, 0.96);
+  background: var(--surface-2);
   border: 1px solid var(--bord-fort);
   box-shadow: var(--ombre);
   font-size: 11.5px;
@@ -1136,7 +1140,7 @@ input {
 }
 /* Poignee du bas du menu de la page : glisser pour choisir sa hauteur. Collee au bas de la
    colonne qui defile, pour rester visible meme quand le contenu deborde. */
-.menu-colonne.page { overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #3a4760 transparent; }
+.menu-colonne.page { overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--surface-4) transparent; }
 .menu-poignee {
   position: sticky;
   bottom: -8px;
@@ -1145,7 +1149,7 @@ input {
   display: grid;
   place-items: center;
   cursor: ns-resize;
-  background: linear-gradient(180deg, rgba(12, 17, 27, 0), #0c111b 45%);
+  background: linear-gradient(180deg, transparent, var(--surface) 45%);
   flex: 0 0 auto;
 }
 .menu-poignee .trait {
@@ -1182,7 +1186,7 @@ input {
   display: grid;
   place-items: center;
   background: rgba(255, 255, 255, 0.05);
-  color: #a9c8f7;
+  color: var(--accent-clair);
   flex: 0 0 auto;
 }
 .menu-ligne.on .menu-icone.page { color: #fbbf24; }
@@ -1199,7 +1203,7 @@ input {
   transition: background 0.12s, color 0.12s;
 }
 .puce:hover { background: rgba(var(--accent-rgb), 0.18); color: #ffffff; }
-.puce.on { background: rgba(var(--accent-rgb), 0.22); color: #dbe9ff; }
+.puce.on { background: rgba(var(--accent-rgb), 0.22); color: var(--accent-clair); }
 .puce.annuler { background: transparent; color: var(--texte-3); box-shadow: inset 0 0 0 1px var(--bord-fort); }
 .puce.annuler:hover { color: var(--texte); }
 .menu-ligne.guet .menu-principal { padding-left: 10px; }
@@ -1210,7 +1214,7 @@ input {
 
 .marque-mini.revenu { color: #7fd8c7; background: rgba(94, 234, 212, 0.14); }
 .marque-mini.fermeture { color: #fca5a5; background: rgba(248, 113, 113, 0.12); }
-.marque-mini.cote { color: #bcd8ff; background: rgba(var(--accent-rgb), 0.16); }
+.marque-mini.cote { color: var(--accent-clair); background: rgba(var(--accent-rgb), 0.16); }
 .attente {
   display: flex;
   align-items: center;

@@ -10,7 +10,10 @@
 (() => {
   if (window.__trame_apercu) return;
   window.__trame_apercu = true;
-
+  // La teinte de Trame, posee par Rust a l'injection (src/teinte.rs remplace __TRAME_TEINTE__) ;
+  // sans elle (banc d'essai), l'aspect d'origine.
+  const T = (typeof __TRAME_TEINTE__ !== "undefined" && __TRAME_TEINTE__) ||
+    { fond: "#080b11", surface: "#101521", surface2: "#151c2a", accent: "#60a5fa", rgb: "96, 165, 250", clair: "#dbe9ff" };
   const envoi = (o) => {
     try {
       window.ipc.postMessage(JSON.stringify(o));
@@ -45,14 +48,14 @@
     ombre.innerHTML = `
       <style>
         .barre { display: flex; gap: 4px; padding: 4px; border-radius: 12px;
-          background: rgba(16, 21, 33, 0.92); border: 1px solid rgba(255, 255, 255, 0.14);
+          background: ${T.surface}eb; border: 1px solid rgba(${T.rgb}, 0.30);
           box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); font: 12px/1 "Segoe UI", system-ui, sans-serif;
           backdrop-filter: blur(8px); }
         button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
           padding: 7px 10px; border-radius: 8px; color: #e9eefa; }
         button:hover { background: rgba(255, 255, 255, 0.10); }
-        button.garder { background: rgba(96, 165, 250, 0.22); color: #dbe9ff; }
-        button.garder:hover { background: rgba(96, 165, 250, 0.34); }
+        button.garder { background: rgba(${T.rgb}, 0.22); color: ${T.clair}; }
+        button.garder:hover { background: rgba(${T.rgb}, 0.34); }
         svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.9;
           stroke-linecap: round; stroke-linejoin: round; }
       </style>
