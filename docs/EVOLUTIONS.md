@@ -1202,6 +1202,19 @@ qu'elle s'efface). Extension en **1.1.0** : sans cette montée de version, le pr
 aurait gardé la 1.0.0 (une extension livrée ne remplace celle du profil que si elle est plus
 récente). Preuves : Chromium à horloge simulée (visible à 14 s, partie à 16 s, effacée moins d'1 s
 après un clic), `cargo test` 212/212, `tester-ui` 88/88.
+
+## 10 septendecies. 2026-11-23 — Trame sur Android : la piste choisie (rien de construit)
+
+Question de Clément : « est-ce que l'on peut imaginer avoir le navigateur sur Android ? » Trois
+pistes posées : (1) wry sur la WebView d'Android, sans aucune extension ; (2) une coquille Kotlin
+autour de **GeckoView**, le seul moteur intégrable sur Android qui fait tourner des extensions
+(WebExtensions : saute-pub porté, Bitwarden pour Firefox) ; (3) la synchro seule par le home lab.
+Clément a demandé la maquette de la 2 : `docs/maquettes/android.html` (0385008), six écrans
+(nouvel onglet, adresse en bas, fils en cartes, menu extensions/teintes, onglets du PC, vidéo en
+incrustation Android). **« Tous me vont »** : les six écrans sont validés tels quels. Outils
+présents sur le PC le 23/11 : Android Studio, SDK + NDK dans `%LOCALAPPDATA%\Android\Sdk`,
+JDK 21 (Microsoft). Aucun code Android n'est écrit à cette date.
+
 ## 11. L'état aujourd'hui
 
 ```
