@@ -258,6 +258,13 @@
     true
   );
 
+  // Une SURFACE d'interface (rail, barre) ne recoit que les touches. Le defilement, l'apercu
+  // Alt+clic et le clic « page » n'ont de sens que dans une page visitee : sans cette garde, le
+  // defilement du rail ecraserait la position de lecture de l'onglet actif, et un Alt+clic sur un
+  // acces rapide ouvrirait un apercu.
+  const surface = /[?&]surface=/.test(location.search);
+  if (surface) return;
+
   // Defilement : sert a restaurer la position de lecture au reveil. Delai pour ne pas noyer
   // l'hote sous un message par pixel.
   let dernier = 0;

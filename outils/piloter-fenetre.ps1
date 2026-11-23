@@ -26,6 +26,7 @@ param(
   [string]$Sonde = "",
   [string]$Texte = "",
   [switch]$Ctrl,
+  [switch]$Maj,
   [int]$Vk = 0,
   [switch]$Entree,
   [int]$Attente = 350
@@ -89,11 +90,13 @@ public class Pilote {
     foreach (char c in texte) { Caractere(c); System.Threading.Thread.Sleep(8); }
   }
 
-  public static void Touche(int vk, bool ctrl) {
+  public static void Touche(int vk, bool ctrl, bool maj) {
     if (ctrl) ToucheBrute(0x11, false);           // VK_CONTROL
+    if (maj) ToucheBrute(0x10, false);            // VK_SHIFT
     ToucheBrute((ushort)vk, false);
     System.Threading.Thread.Sleep(30);
     ToucheBrute((ushort)vk, true);
+    if (maj) ToucheBrute(0x10, true);
     if (ctrl) ToucheBrute(0x11, true);
   }
 
@@ -178,7 +181,7 @@ if ($Click -ne "") {
 }
 
 if ($Vk -ne 0) {
-  [Pilote]::Touche($Vk, $Ctrl.IsPresent)
+  [Pilote]::Touche($Vk, $Ctrl.IsPresent, $Maj.IsPresent)
   Start-Sleep -Milliseconds 150
 }
 

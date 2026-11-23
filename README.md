@@ -245,6 +245,15 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.52, publiée et installée le 2026-11-23.** Deux défauts de la 0.4.51, trouvés par le banc
+> d'essai et corrigés : l'onglet privé naissait dans le profil **principal** avant d'être déplacé
+> (donc les cookies n'étaient pas isolés — il naît maintenant directement dans le fil privé,
+> `ouvrir_onglet_dans`), et **les raccourcis ne marchaient pas quand le clavier était dans le
+> rail ou la barre** (les surfaces ne recevaient pas `raccourcis.js` ; elles le reçoivent, en ne
+> gardant que les touches). Preuves : `cargo test` **204/204**, `tester-ui` **87/87**,
+> `outils/eprouver-prive.mjs` **tout tient** — dont « le cookie est dans le profil privé, **pas**
+> dans le principal » et « Ctrl+Maj+N marche aussi depuis le rail ».
+>
 > **0.4.51, publiée et installée le 2026-11-23.** Deux manques comblés : la **sauvegarde
 > automatique** du profil (Réglages > Données et sauvegarde : dossier, intervalle, rotation) et la
 > **navigation privée** (`Ctrl+Maj+N`). Les deux livrables sont `Valid` (horodatés,
@@ -263,7 +272,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.51-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.52-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

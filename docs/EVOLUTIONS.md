@@ -1077,6 +1077,22 @@ réapparaître **vide** — insister ne converge pas), et la purge doit passer *
 `Ctrl+Maj+N` dans le tableau des touches), `outils/eprouver-prive.mjs` sur le vrai binaire
 (**cookie posé dans la session privée, absent après** ; session écrite sans le fil), et un profil
 d'essai pour la sauvegarde (archive écrite, une ancienne effacée, `notes.txt` intact).
+**0.4.52 — deux défauts de la 0.4.51, trouvés par le banc.** Clément a demandé « on est pas censé
+avoir la navigation privée ? » : elle existait, mais deux choses la rendaient inopérante.
+(1) **L'onglet privé naissait dans le profil principal** : `ouvrir_prive` appelait `ouvrir_onglet`,
+qui crée la webview **dans** la fonction (avec `cloison_du_fil` appliqué avant le déplacement), puis
+`deplacer_vers_fil` changeait le fil — trop tard. Les cookies de la « navigation privée » étaient
+donc ceux du navigateur ; le banc le voyait en ne trouvant **aucun** dossier `WV2Profile_prive-*`.
+Correction : `ouvrir_onglet_dans(.., fil_impose)`, l'onglet naît dans le fil privé, la webview est
+créée avec le profil jetable. (2) **Les raccourcis ne marchaient pas quand le clavier était dans le
+rail ou la barre** : les surfaces recoivent `AMORCE_UI`, pas `raccourcis.js`, et `chrome.js` ne
+gère que `Échap`. Correction : les surfaces recoivent `raccourcis.js`, qui s'arrête aux touches
+quand `location.search` porte `surface=` (sinon le défilement du rail écraserait la position de
+lecture de l'onglet actif, et un Alt+clic sur un accès ouvrirait un aperçu). Preuves :
+`eprouver-prive.mjs` **tout tient** (touche réelle dans une webview puis **depuis le rail**, fil
+visible dans le rail, profil séparé, cookie dans le profil privé et **pas** dans le principal,
+session écrite sans rien de privé, purge au démarrage, cookie disparu), `cargo test` **204/204**,
+`tester-ui` **87/87**.
 ## 11. L'état aujourd'hui
 
 ```

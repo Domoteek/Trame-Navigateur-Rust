@@ -1236,6 +1236,11 @@ impl App {
             .with_focused(false)
             .with_navigation_handler(garde)
             .with_initialization_script(AMORCE_UI)
+            // Les touches travaillent aussi quand le clavier est dans le rail ou dans la barre :
+            // sans cela, Ctrl+Maj+N (ou Ctrl+T) ne faisait rien apres un clic dans le rail, et
+            // rien ne le disait (constate le 2026-11-23). Le script s'en tient aux touches dans
+            // une surface — pas de defilement, pas d'apercu Alt+clic.
+            .with_initialization_script(RACCOURCIS)
             .with_custom_protocol("trame".to_string(), move |_id, req| {
                 protocol::repondre(&racine_handler, &req.uri().to_string())
             })
@@ -1829,6 +1834,22 @@ impl App {
         declencheur: Declencheur,
         parent: Option<TabId>,
     ) -> TabId {
+        self.ouvrir_onglet_dans(url, declencheur, parent, None)
+    }
+
+    /// Ouvre un onglet en imposant son fil, sans passer par le tissage.
+    ///
+    /// C'est ce qu'il faut pour la navigation privee : la webview est creee **dans** cette
+    /// fonction, donc deplacer l'onglet apres coup le laisserait dans le profil principal — le
+    /// fil prive n'aurait alors qu'un nom (defaut constate le 2026-11-23 par le banc, qui ne
+    /// voyait aucun profil `prive-*` sur le disque).
+    pub fn ouvrir_onglet_dans(
+        &mut self,
+        url: String,
+        declencheur: Declencheur,
+        parent: Option<TabId>,
+        fil_impose: Option<ThreadId>,
+    ) -> TabId {
         let url = self.adresse_propre(url);
         // Une adresse interne de Chromium ne mene nulle part ici : WebView2 la refuse et la
         // webview reste bloquee sur « ERR_INVALID_URL ». Mieux vaut un onglet neuf et une
@@ -1850,19 +1871,22 @@ impl App {
 
         // Tissage : on cherche un fil d'accueil.
         let candidat = weave::evaluer(&onglet, &self.session.onglets, &self.session.fils, now);
-        let fil = match candidat {
-            Some((fil, score)) if score >= weave::SEUIL_TISSAGE => fil,
-            _ => {
-                let nom = weave::nommer(&[], &self.session.onglets);
-                let id_fil = self.prochain_id_fil();
-                let nom = if nom.trim().is_empty() || nom == "Fil" {
-                    format!("Fil {id_fil}")
-                } else {
-                    nom
-                };
-                self.session.fils.push(Fil::neuf(id_fil, nom, now));
-                id_fil
-            }
+        let fil = match fil_impose {
+            Some(f) => f,
+            None => match candidat {
+                Some((fil, score)) if score >= weave::SEUIL_TISSAGE => fil,
+                _ => {
+                    let nom = weave::nommer(&[], &self.session.onglets);
+                    let id_fil = self.prochain_id_fil();
+                    let nom = if nom.trim().is_empty() || nom == "Fil" {
+                        format!("Fil {id_fil}")
+                    } else {
+                        nom
+                    };
+                    self.session.fils.push(Fil::neuf(id_fil, nom, now));
+                    id_fil
+                }
+            },
         };
         onglet.fil = fil;
         if let Some(f) = self.fil_mut(fil) {
@@ -6046,8 +6070,14 @@ impl App {
                 id
             }
         };
-        let onglet = self.ouvrir_onglet(urls::NOUVEL_ONGLET.to_string(), Declencheur::Saisie, None);
-        self.deplacer_vers_fil(onglet, fil);
+        // L'onglet nait DIRECTEMENT dans le fil prive : sa webview est creee plus bas, avec le
+        // profil jetable. Le deplacer apres coup le laisserait dans le profil principal.
+        let onglet = self.ouvrir_onglet_dans(
+            urls::NOUVEL_ONGLET.to_string(),
+            Declencheur::Saisie,
+            None,
+            Some(fil),
+        );
         self.activer(onglet);
         self.signaler("Navigation privée : onglets, cookies et historique disparaissent à la fermeture.");
         self.marquer_modifie();
