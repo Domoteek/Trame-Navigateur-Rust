@@ -1203,6 +1203,15 @@ aurait gardé la 1.0.0 (une extension livrée ne remplace celle du profil que si
 récente). Preuves : Chromium à horloge simulée (visible à 14 s, partie à 16 s, effacée moins d'1 s
 après un clic), `cargo test` 212/212, `tester-ui` 88/88.
 
+**0.4.61 — un Nouvel onglet plus serré.** Clément : « optimiser l'espace pris dans la page, un tout
+petit peu ». Maquette `docs/maquettes/nouvel-onglet-espacements.html` (trois variantes), choix de
+Clément : la 3. Page de 1 240 px au lieu de 1 020 (4 fils par rangée sur son écran, moins sur une
+fenêtre étroite), titre « Trame Bonsoir. date » sur une ligne, marges du haut et entre sections
+réduites d'environ un tiers, tuiles et cartes un peu moins hautes, et chaque carte de fil garde sa
+hauteur (`align-items: start` : une rangée ne prend plus celle du fil le plus rempli). Preuves :
+`tester-ui` 88/88, rendu vérifié à 1 610 px (4 colonnes) et à 900 px (2 colonnes, sans défilement
+de côté).
+
 ## 10 septendecies. 2026-11-23 — Trame sur Android : la piste choisie (rien de construit)
 
 Question de Clément : « est-ce que l'on peut imaginer avoir le navigateur sur Android ? » Trois
