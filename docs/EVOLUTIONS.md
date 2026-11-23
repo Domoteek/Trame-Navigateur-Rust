@@ -1087,8 +1087,10 @@ node outils/verifier-setup.mjs   refuse (code 3) tant qu'une vraie installation 
   synchronisation.
 - Le **clavier** est testé dans Chromium (17 combinaisons), mais pas dans la fenêtre : piloter le
   clavier depuis un autre processus perd des frappes.
-- Le dossier **est un dépôt git** (`main`, de la 0.4.10 à la 0.4.12), mais **aucun dépôt distant**
-  n'est configuré : l'histoire est locale, rien n'est publié.
+- Le dossier **est un dépôt git** (`main`), et **il est publié depuis le 2026-11-23** :
+  `https://github.com/Domoteek/Trame-Navigateur-Rust` — `main` poussé avec ses 21 étiquettes
+  `v0.4.x`, et une **release GitHub** pour la 0.4.50 portant les deux livrables signés.
+  Avant cette date, l'histoire était locale : `origin/main` s'arrêtait à la 0.4.38.
 - La **sauvegarde du profil est manuelle** : rien ne la planifie (pas de copie à date fixe dans
   un dossier choisi).
 - L'**import** de favoris HTML aplatit les dossiers de Chrome : un favori n'a pas de groupe dans

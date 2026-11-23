@@ -243,7 +243,25 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
-> **0.4.12, signée et installée le 2026-11-23.** `dist\trame.exe` et `dist\Trame-0.4.12-setup.exe`
+> **0.4.50, publiée et installée le 2026-11-23.** Les deux livrables sont `Valid`
+> (horodatés, `CN=CAHAGNE CLEMENT`), empreintes dans `dist\SHA256SUMS.txt`. Elle est **en ligne**
+> de trois façons : la fiche `products/trame` du projet Firebase `desktopiconviewer` (ce que lit
+> `src/maj.rs` pour proposer une mise à jour — outil `node outils/mettre-en-ligne.mjs`), la
+> **release GitHub** `https://github.com/Domoteek/Trame-Navigateur-Rust/releases/tag/v0.4.50`
+> (setup, portable et `SHA256SUMS.txt`), et **sur le poste de Clément** — installée en silence
+> (code 0), entrée « Applications » à `0.4.50`, le `trame.exe` installé étant **octet pour
+> octet** celui qui a été signé.
+>
+> ```powershell
+> dist\Trame-0.4.50-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+>   "/DIR=%LOCALAPPDATA%\Programs\Trame"
+> ```
+>
+> ⚠️ Fermer Trame **proprement** avant d'installer (croix, ou `taskkill /PID <pid>` sans `/F`) :
+> la session s'écrit sur `CloseRequested` (`main.rs`), et un arrêt forcé la perdrait.
+>
+> **0.4.12, signée et installée le 2026-11-23** (état antérieur, gardé pour l'histoire).
+> `dist\trame.exe` et `dist\Trame-0.4.12-setup.exe`
 > sont `Valid`, horodatés (DigiCert), signataire `CN=CAHAGNE CLEMENT` ; empreintes dans
 > `dist\SHA256SUMS.txt`. Elle contient la **sauvegarde du profil** (0.4.11), le **téléchargement
 > fini qui ne reste plus « en cours »** (0.4.11) et **« Afficher dans le dossier » qui ouvre
