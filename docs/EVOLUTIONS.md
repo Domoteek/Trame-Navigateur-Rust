@@ -988,11 +988,31 @@ Aucun réglage ajouté ni retiré, aucun message vers l'hôte changé : tous les
 script et les tests utilisent sont gardés. Tests : `tester-ui.mjs` 77/77 (les cas des réglages
 passent par la rubrique avant de cliquer ; nouveau cas « rubriques, recherche, vignettes et
 historique confirmé »).
+## 10 sexdecies. 2026-11-23 — une teinte change vraiment la coquille (0.4.41)
+
+Constat en éprouvant les teintes : `chrome.css` gardait **28 bleus et violets écrits en dur**
+(`rgba(96,165,250,…)`), `--surface` n'y servait qu'une fois, les fonds ne bougeaient jamais,
+« Ciel » avait les couleurs exactes de « Défaut », et les pastilles des réglages dessinaient
+d'autres couleurs que celles appliquées.
+
+| Correction | Où |
+|---|---|
+| Une seule table de teintes (fonds, trois surfaces, deux accents), lue par la coquille ET les réglages | `ui/teintes.js` (`window.TrameTeintes`) |
+| Toutes les transparences d'accent passent par `--accent-rgb` / `--accent-2-rgb` ; trois fonds en dur deviennent des variables | `ui/chrome.css` |
+| « Ciel » devient un vrai bleu ciel (`#38bdf8`), distinct de « Défaut » | `ui/teintes.js` |
+| Les pastilles montrent les vraies couleurs ; la page des réglages prend elle aussi la teinte ; les vignettes suivent les surfaces | `ui/reglages.html` |
+| « Dynamique » n'est plus annoncé « pas encore branché » : il l'est (meta `theme-color`, validée par l'hôte) | `ui/reglages.html` |
+
+Preuves : `tester-ui.mjs` **78/78**, dont « teintes : chacune repeint fonds, surfaces et accents ».
+Sur le **vrai binaire** (profil jetable, fenêtre cachée, CDP) : pour chacune des 7 teintes, rail,
+barre et réglages lisent les mêmes `--fond`, `--surface-2`, `--accent`, `--accent-rgb`, et le
+fond peint change ; `reglages.json` garde le choix ; le journal note chaque teinte.
+Les autres pages internes (Nouvel onglet, téléchargements) ne suivent pas encore la teinte.
 ## 11. L'état aujourd'hui
 
 ```
 cargo test --release            188/188
-node outils/tester-ui.mjs        77/77
+node outils/tester-ui.mjs        78/78
 node outils/verifier-app.mjs     sans reseau : 24/24 (dont les scenarios `z` et `z2`, sauvegarde)
 node outils/verifier-setup.mjs   refuse (code 3) tant qu'une vraie installation existe — par conception
 ```

@@ -16,6 +16,11 @@
         --vif: #5eead4;
         --accent: #60a5fa;
         --accent-2: #a78bfa;
+        --accent-rgb: 96, 165, 250;
+        --accent-2-rgb: 167, 139, 250;
+        --fond-2: #0b0f17;
+        --surface-2: #151c2a;
+        --surface-3: #1b2434;
         --ambre: #fbbf24;
         --danger: #f87171;
       }
@@ -23,8 +28,8 @@
       html, body { margin: 0; min-height: 100%; }
       body {
         background:
-          radial-gradient(55% 40% at 12% 0%, rgba(96, 165, 250, 0.10), transparent 62%),
-          radial-gradient(50% 35% at 92% 4%, rgba(167, 139, 250, 0.09), transparent 60%),
+          radial-gradient(55% 40% at 12% 0%, rgba(var(--accent-rgb), 0.10), transparent 62%),
+          radial-gradient(50% 35% at 92% 4%, rgba(var(--accent-2-rgb), 0.09), transparent 60%),
           var(--fond);
         background-attachment: fixed;
         color: var(--texte);
@@ -54,7 +59,7 @@
         padding: 8px 10px 8px 30px; border-radius: 9px;
         background: rgba(255, 255, 255, 0.05); border: 1px solid var(--bord);
       }
-      #recherche:focus { outline: none; border-color: rgba(96, 165, 250, 0.55); }
+      #recherche:focus { outline: none; border-color: rgba(var(--accent-rgb), 0.55); }
       nav { display: flex; flex-direction: column; gap: 2px; }
       nav a {
         display: flex; align-items: center; gap: 10px;
@@ -62,7 +67,7 @@
         color: var(--texte-2); text-decoration: none; cursor: pointer; user-select: none;
       }
       nav a:hover { background: rgba(255, 255, 255, 0.05); color: var(--texte); }
-      nav a.actif { background: rgba(96, 165, 250, 0.12); border-color: rgba(96, 165, 250, 0.35); color: var(--texte); }
+      nav a.actif { background: rgba(var(--accent-rgb), 0.12); border-color: rgba(var(--accent-rgb), 0.35); color: var(--texte); }
       nav a svg { flex: 0 0 auto; }
       nav a { white-space: nowrap; }
       nav a .nb { margin-left: auto; font-size: 10.5px; color: var(--texte-3); }
@@ -120,7 +125,7 @@
         transition: all 0.15s;
       }
       .moteur:hover { border-color: var(--bord-fort); background: rgba(255, 255, 255, 0.05); }
-      .moteur.choisi { border-color: rgba(96, 165, 250, 0.55); background: rgba(96, 165, 250, 0.10); }
+      .moteur.choisi { border-color: rgba(var(--accent-rgb), 0.55); background: rgba(var(--accent-rgb), 0.10); }
       .moteur .puce { width: 13px; text-align: center; color: var(--accent); font-size: 11px; }
       .moteur .nom { flex: 1; min-width: 0; }
       .moteur .langue {
@@ -136,12 +141,12 @@
         transition: border-color 0.15s, background 0.15s;
       }
       .option:hover { border-color: var(--bord-fort); }
-      .option.choisi { border-color: rgba(96, 165, 250, 0.6); background: rgba(96, 165, 250, 0.08); }
+      .option.choisi { border-color: rgba(var(--accent-rgb), 0.6); background: rgba(var(--accent-rgb), 0.08); }
       .option .titre { font-weight: 600; font-size: 12px; }
       .option .titre small { display: block; font-weight: 400; color: var(--texte-3); font-size: 10.5px; margin-top: 2px; }
-      .mini { height: 74px; border-radius: 7px; background: #0b0f18; border: 1px solid var(--bord); position: relative; overflow: hidden; }
-      .mini .r { position: absolute; background: #1b2232; border-radius: 3px; }
-      .mini .pg { position: absolute; background: #222b3d; border-radius: 3px; }
+      .mini { height: 74px; border-radius: 7px; background: var(--fond); border: 1px solid var(--bord); position: relative; overflow: hidden; }
+      .mini .r { position: absolute; background: var(--surface-3); border-radius: 3px; }
+      .mini .pg { position: absolute; background: var(--surface-2); border-radius: 3px; }
       .mini .b { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #8c9ab1; }
       .mini .b.x { background: #f87171; }
       .mini .vid { position: absolute; background: linear-gradient(135deg, #2563eb, #7c3aed); border-radius: 3px; }
@@ -157,16 +162,15 @@
       .teinte:hover .rond { border-color: var(--bord-fort); }
       .teinte.choisi .rond { border-color: var(--texte); }
       .teinte.choisi { color: var(--texte); }
-      .teinte .bientot { color: var(--texte-3); font-size: 9.5px; margin-top: -4px; }
 
       /* ---------- segments ---------- */
       .segments { display: inline-flex; border: 1px solid var(--bord); border-radius: 9px; overflow: hidden; flex-wrap: wrap; }
       .segments button { border: 0; border-radius: 0; border-right: 1px solid var(--bord); background: transparent; padding: 7px 14px; }
       .segments button:last-child { border-right: 0; }
-      .segments button.choisi { background: rgba(96, 165, 250, 0.2); color: #fff; }
+      .segments button.choisi { background: rgba(var(--accent-rgb), 0.2); color: #fff; }
       .explication {
         margin: 12px 0 0; padding: 9px 12px; border-radius: 9px;
-        background: rgba(96, 165, 250, 0.06); border: 1px solid rgba(96, 165, 250, 0.18);
+        background: rgba(var(--accent-rgb), 0.06); border: 1px solid rgba(var(--accent-rgb), 0.18);
         color: var(--texte-2); font-size: 11.5px; line-height: 1.5;
       }
 
@@ -199,15 +203,15 @@
       .ext .badge-info { font-size: 9.5px; letter-spacing: 0.04em; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.12); color: #9fb0c8; }
       .ext .badge-info.active { color: #7fd8c7; border-color: rgba(94, 234, 212, 0.4); }
       .ext .badge-info.coupee { color: #f0b46a; border-color: rgba(240, 180, 106, 0.4); }
-      .ext .badge-info.magasin { color: #93c5fd; border-color: rgba(96, 165, 250, 0.4); }
-      .ext .perm { font-size: 10px; padding: 1px 6px; border-radius: 4px; color: #c3cfe0; background: rgba(167, 139, 250, 0.13); border: 1px solid rgba(167, 139, 250, 0.26); }
+      .ext .badge-info.magasin { color: #93c5fd; border-color: rgba(var(--accent-rgb), 0.4); }
+      .ext .perm { font-size: 10px; padding: 1px 6px; border-radius: 4px; color: #c3cfe0; background: rgba(var(--accent-2-rgb), 0.13); border: 1px solid rgba(var(--accent-2-rgb), 0.26); }
       .ext-icone { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 7px; background: rgba(255, 255, 255, 0.04); }
       .ext-icone img { width: 22px; height: 22px; object-fit: contain; }
       .ext-icone.initiale { font-size: 12px; font-weight: 700; color: #1b1230; background: #c4b5fd; }
       .ext.off .ext-icone { filter: grayscale(1); opacity: 0.5; }
       .ext-icone.tourne {
         width: 22px; height: 22px; margin: 3px; border-radius: 50%; background: none;
-        border: 2px solid rgba(96, 165, 250, 0.25); border-top-color: var(--accent);
+        border: 2px solid rgba(var(--accent-rgb), 0.25); border-top-color: var(--accent);
         animation: tourner 0.8s linear infinite;
       }
       @keyframes tourner { to { transform: rotate(360deg); } }
@@ -217,7 +221,7 @@
         flex: 1; min-width: 220px; font: inherit; font-size: 12px; padding: 7px 10px; border-radius: 8px;
         color: var(--texte); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--bord);
       }
-      #chrome-saisie:focus { outline: none; border-color: rgba(96, 165, 250, 0.55); }
+      #chrome-saisie:focus { outline: none; border-color: rgba(var(--accent-rgb), 0.55); }
       #chrome-etat { color: var(--texte-2); font-size: 11px; margin: 0; }
       .onglets-ext { margin: 0 0 10px; }
       .liste-ext[hidden] { display: none; }
@@ -254,8 +258,8 @@
          texte clair de la page sur le blanc de Windows — illisibles (vu le 2026-11-22). */
       select option { background: #161b24; color: #e6edf6; }
       select option:checked { background: #24456e; color: #ffffff; }
-      button.principal { background: rgba(96, 165, 250, 0.18); border-color: rgba(96, 165, 250, 0.5); }
-      button.principal:hover { background: rgba(96, 165, 250, 0.28); }
+      button.principal { background: rgba(var(--accent-rgb), 0.18); border-color: rgba(var(--accent-rgb), 0.5); }
+      button.principal:hover { background: rgba(var(--accent-rgb), 0.28); }
       button.danger { color: #fca5a5; border-color: rgba(248, 113, 113, 0.35); }
       button.danger:hover { background: rgba(248, 113, 113, 0.14); }
       button[hidden] { display: none; }
@@ -400,8 +404,10 @@
             <div class="carte">
               <div class="teintes" id="teintes"></div>
               <p class="note">
-                Teinte choisie : <b id="theme-actuel">Défaut</b>. « Dynamique » suivra la couleur annoncée
-                par le site consulté : pas encore branché, la teinte reste celle par défaut en attendant.
+                Teinte choisie : <b id="theme-actuel">Défaut</b>. Elle change les fonds, les surfaces et
+                les couleurs d'accent du rail, de la barre, des panneaux et de cette page.
+                « Dynamique » prend la couleur annoncée par le site affiché ; un site qui n'en annonce
+                pas garde l'aspect d'origine.
               </p>
             </div>
           </div>
@@ -762,6 +768,7 @@
       </main>
     </div>
 
+    <script src="teintes.js"></script>
     <script>
       /* Portee fermee : wry pose `window.ipc` en propriete non configurable, donc un
          `const ipc` de premier niveau jetterait une SyntaxError fatale. */
@@ -770,6 +777,7 @@
           try { window.ipc.postMessage(JSON.stringify(o)); } catch (e) {}
         };
         let etat = null;
+        let teinteReglages = "";
         const $ = (id) => document.getElementById(id);
 
         /* ------------------------------------------------------------ rubriques
@@ -848,7 +856,7 @@
             ["rail", "Dans le rail", "en haut du rail",
               `<i class="r" style="left:4px;top:4px;width:32px;bottom:4px"></i>${B(7, 9)}<i class="r" style="left:40px;top:4px;right:4px;height:12px"></i><i class="pg" style="left:40px;top:20px;right:4px;bottom:4px"></i>`],
             ["windows", "Barre de Windows", "la classique",
-              `<i class="r" style="left:0;top:0;right:0;height:13px;border-radius:0;background:#2b3245"></i>${B("d", 4)}<i class="r" style="left:4px;top:17px;width:22px;bottom:4px"></i><i class="r" style="left:30px;top:17px;right:4px;height:10px"></i><i class="pg" style="left:30px;top:31px;right:4px;bottom:4px"></i>`],
+              `<i class="r" style="left:0;top:0;right:0;height:13px;border-radius:0;background:var(--texte-3)"></i>${B("d", 4)}<i class="r" style="left:4px;top:17px;width:22px;bottom:4px"></i><i class="r" style="left:30px;top:17px;right:4px;height:10px"></i><i class="pg" style="left:30px;top:31px;right:4px;bottom:4px"></i>`],
           ],
           "plein-ecran": [
             ["fenetre", "Toute la fenêtre", "le rail et la barre s'effacent", `<i class="vid" style="left:3px;top:3px;right:3px;bottom:3px"></i>`],
@@ -936,35 +944,40 @@
 
         // Apparence : une pastille par teinte. L'hote la garde dans reglages.json ; la coquille se
         // repeint d'elle-meme, l'etat redescend.
-        const TEINTES = [
-          ["defaut", "Défaut", "#60a5fa", "#a78bfa"],
-          ["menthe", "Menthe", "#5eead4", "#34d399"],
-          ["ciel", "Ciel", "#38bdf8", "#60a5fa"],
-          ["violet", "Violet", "#a78bfa", "#e879f9"],
-          ["ambre", "Ambre", "#fbbf24", "#fb923c"],
-          ["ardoise", "Ardoise", "#94a3b8", "#64748b"],
-          ["dynamique", "Dynamique", "#f87171", "#60a5fa"],
-        ];
-        const NOMS_TEINTES = Object.fromEntries(TEINTES.map(([id, nom]) => [id, nom]));
-        for (const [id, nom, a, b] of TEINTES) {
+        // Les pastilles sont dessinees avec les VRAIES couleurs de la coquille (ui/teintes.js) :
+        // fond, surface du rail, accent et second accent — ce qu'on voit est ce qu'on obtient.
+        const TABLE = (window.TrameTeintes && window.TrameTeintes.TEINTES) || {};
+        const NOMS_TEINTES = { dynamique: "Dynamique" };
+        const pastille = (t) =>
+          `<span class="rond" style="background:${t.fond}">` +
+          `<svg width="30" height="22"><rect x="0" y="0" width="8" height="22" rx="2" fill="${t.surface2}"/>` +
+          `<rect x="1.5" y="3" width="5" height="3" rx="1.5" fill="${t.accent}"/>` +
+          `<rect x="11" y="0" width="19" height="5" rx="2" fill="${t.surface3}"/>` +
+          `<rect x="13" y="1.5" width="8" height="2" rx="1" fill="${t.accent2}"/>` +
+          `<rect x="11" y="8" width="19" height="14" rx="2" fill="${t.surface}"/></svg></span>`;
+        const ajouterTeinte = (id, nom, dessin) => {
+          NOMS_TEINTES[id] = nom;
           const bouton = document.createElement("button");
           bouton.className = "teinte";
           bouton.dataset.teinte = id;
           bouton.title = nom;
-          bouton.innerHTML =
-            `<span class="rond" style="background:linear-gradient(135deg,${a}55,${b}22),#101521">` +
-            `<svg width="26" height="18"><rect x="0" y="0" width="6" height="18" rx="2" fill="${a}"/><rect x="9" y="0" width="17" height="4" rx="2" fill="${b}"/><rect x="9" y="7" width="17" height="11" rx="2" fill="#2a3346"/></svg></span>`;
+          bouton.innerHTML = dessin;
           const libelle = document.createElement("span");
           libelle.textContent = nom;
           bouton.appendChild(libelle);
-          if (id === "dynamique") {
-            const bientot = document.createElement("span");
-            bientot.className = "bientot";
-            bientot.textContent = "bientôt";
-            bouton.appendChild(bientot);
-          }
           bouton.onclick = () => ipc({ m: "theme", valeur: id });
           $("teintes").appendChild(bouton);
+        };
+        for (const [id, t] of Object.entries(TABLE)) ajouterTeinte(id, t.nom, pastille(t));
+        // Dynamique : les surfaces d'origine, l'accent pris au site affiché (ici, un arc de
+        // couleurs pour dire « ça dépend du site »).
+        if (TABLE.defaut) {
+          ajouterTeinte("dynamique", "Dynamique", pastille({
+            ...TABLE.defaut,
+            accent: "url(#arc)",
+            accent2: "url(#arc)",
+          }).replace("<svg width=\"30\" height=\"22\">",
+            '<svg width="30" height="22"><defs><linearGradient id="arc" x1="0" x2="1"><stop offset="0" stop-color="#f87171"/><stop offset=".5" stop-color="#fbbf24"/><stop offset="1" stop-color="#34d399"/></linearGradient></defs>'));
         }
 
         setInterval(() => {
@@ -972,6 +985,12 @@
           $("maj-version").textContent = etat.version || "—";
           const theme = etat.theme || "defaut";
           $("theme-actuel").textContent = NOMS_TEINTES[theme] || theme;
+          // La page prend la teinte, comme la coquille.
+          const cle = theme + "|" + (etat.teinteSite || "");
+          if (window.TrameTeintes && cle !== teinteReglages) {
+            teinteReglages = cle;
+            window.TrameTeintes.appliquer(theme, theme === "dynamique" ? etat.teinteSite : "");
+          }
           document.querySelectorAll(".teinte").forEach((t) => t.classList.toggle("choisi", t.dataset.teinte === theme));
           const ligne = $("maj-etat");
           $("maj-installer").hidden = !etat.maj;

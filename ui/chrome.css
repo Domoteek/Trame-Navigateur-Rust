@@ -19,6 +19,10 @@
   --dormant: #8b7cf6;
   --accent: #60a5fa;
   --accent-2: #a78bfa;
+  /* Les memes accents en « r, g, b », pour les transparences : rgba(var(--accent-rgb), .2).
+     Poses par ui/teintes.js selon la teinte ; ces valeurs-ci sont celles de « Defaut ». */
+  --accent-rgb: 96, 165, 250;
+  --accent-2-rgb: 167, 139, 250;
   --danger: #f87171;
   --r: 12px;
   --r-s: 9px;
@@ -60,7 +64,7 @@ input {
   outline: none;
   user-select: text;
 }
-::selection { background: rgba(96, 165, 250, 0.35); }
+::selection { background: rgba(var(--accent-rgb), 0.35); }
 .surface { height: 100%; }
 [hidden] { display: none !important; }
 
@@ -97,8 +101,8 @@ input {
   flex-direction: column;
   height: 100%;
   background:
-    radial-gradient(120% 60% at 0% 0%, rgba(96, 165, 250, 0.10), transparent 60%),
-    radial-gradient(90% 50% at 10% 100%, rgba(167, 139, 250, 0.08), transparent 55%),
+    radial-gradient(120% 60% at 0% 0%, rgba(var(--accent-rgb), 0.10), transparent 60%),
+    radial-gradient(90% 50% at 10% 100%, rgba(var(--accent-2-rgb), 0.08), transparent 55%),
     linear-gradient(180deg, var(--fond-2), var(--fond));
   border-right: 1px solid var(--bord);
 }
@@ -125,7 +129,7 @@ input {
   display: grid;
   place-items: center;
   /* Le « T tisse », comme l'icone de l'application (ressources/trame.svg). */
-  box-shadow: 0 4px 14px rgba(96, 165, 250, 0.22);
+  box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.22);
 }
 .glyphe svg { width: 22px; height: 22px; display: block; }
 .nom-marque {
@@ -306,7 +310,7 @@ input {
   top: 0;
   bottom: 10px;
   width: 1px;
-  background: linear-gradient(180deg, rgba(94, 234, 212, 0.45), rgba(96, 165, 250, 0.18) 60%, rgba(96, 165, 250, 0));
+  background: linear-gradient(180deg, rgba(94, 234, 212, 0.45), rgba(var(--accent-rgb), 0.18) 60%, rgba(var(--accent-rgb), 0));
 }
 
 .onglet {
@@ -322,8 +326,8 @@ input {
 }
 .onglet:hover { background: rgba(255, 255, 255, 0.055); }
 .onglet.actif {
-  background: linear-gradient(90deg, rgba(96, 165, 250, 0.20), rgba(96, 165, 250, 0.05));
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.28);
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.20), rgba(var(--accent-rgb), 0.05));
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.28);
 }
 /* le noeud sur la chaine : sa couleur dit la vitalite */
 .onglet .noeud {
@@ -393,7 +397,7 @@ input {
   background: rgba(255, 255, 255, 0.07);
   color: var(--texte-2);
 }
-.marque-mini.ancre { color: var(--accent); background: rgba(96, 165, 250, 0.14); }
+.marque-mini.ancre { color: var(--accent); background: rgba(var(--accent-rgb), 0.14); }
 .marque-mini.alire { color: var(--tiede); background: rgba(251, 191, 36, 0.13); }
 .marque-mini.veille { color: var(--dormant); background: rgba(139, 124, 246, 0.14); }
 .onglet .fermer {
@@ -483,7 +487,7 @@ input {
   right: 8px;
   z-index: 50;
   padding: 5px;
-  background: #151c2a;
+  background: var(--surface-2);
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: var(--r-s, 10px);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
@@ -564,7 +568,7 @@ input {
 .volet {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, #0c1119, #080b11);
+  background: linear-gradient(180deg, var(--fond-2), var(--fond));
   z-index: 5;
   display: flex;
   flex-direction: column;
@@ -620,7 +624,7 @@ input {
    dessous, comme un onglet choisi (maquettes 1 et 2, choix de Clement du 2026-11-22). */
 .nav { position: relative; }
 .nav.ouvert,
-.nav.ouvert:hover { background: rgba(96, 165, 250, 0.16); color: var(--accent); }
+.nav.ouvert:hover { background: rgba(var(--accent-rgb), 0.16); color: var(--accent); }
 .nav.ouvert::after {
   content: "";
   position: absolute;
@@ -648,9 +652,9 @@ input {
   position: relative;
 }
 .couture:focus-within {
-  border-color: rgba(96, 165, 250, 0.55);
-  background: rgba(96, 165, 250, 0.07);
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.10);
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: rgba(var(--accent-rgb), 0.07);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.10);
 }
 .couture .ic.loupe { width: 15px; height: 15px; color: #7d8ba3; margin-right: 1px; }
 .couture:focus-within .ic.loupe { color: var(--accent); }
@@ -718,7 +722,7 @@ input {
   border-top: 1px solid var(--bord);
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, rgba(16, 21, 33, 0.96), rgba(8, 11, 17, 0.99));
+  background: linear-gradient(180deg, var(--surface), var(--fond));
 }
 .resultats { overflow-y: auto; padding: 6px; flex: 1; scrollbar-width: thin; }
 .resultat {
@@ -729,7 +733,7 @@ input {
   border-radius: var(--r-s);
   cursor: pointer;
 }
-.resultat.sur { background: rgba(96, 165, 250, 0.14); box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.25); }
+.resultat.sur { background: rgba(var(--accent-rgb), 0.14); box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.25); }
 .resultat:hover { background: rgba(255, 255, 255, 0.05); }
 .resultat .genre {
   font-size: 9px;
@@ -742,8 +746,8 @@ input {
   flex: 0 0 auto;
 }
 .resultat .genre.fil { background: rgba(94, 234, 212, 0.15); color: #9df0e0; }
-.resultat .genre.navigation { background: rgba(96, 165, 250, 0.18); color: #bcd8ff; }
-.resultat .genre.commande { background: rgba(167, 139, 250, 0.16); color: #c9b8ff; }
+.resultat .genre.navigation { background: rgba(var(--accent-rgb), 0.18); color: #bcd8ff; }
+.resultat .genre.commande { background: rgba(var(--accent-2-rgb), 0.16); color: #c9b8ff; }
 .resultat .genre.historique { background: rgba(251, 191, 36, 0.14); color: #f7d489; }
 .resultat .corps { flex: 1; min-width: 0; }
 .resultat .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
@@ -849,12 +853,12 @@ input {
   border-radius: 6px;
   font-size: 11px;
   color: #a7c3f2;
-  background: rgba(96, 165, 250, 0.12);
-  border: 1px solid rgba(96, 165, 250, 0.30);
+  background: rgba(var(--accent-rgb), 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.30);
   flex: 0 0 auto;
   max-width: 190px;
 }
-.moteur-chip:hover { background: rgba(96, 165, 250, 0.22); color: #dbe9ff; }
+.moteur-chip:hover { background: rgba(var(--accent-rgb), 0.22); color: #dbe9ff; }
 .moteur-chip .ic { width: 13px; height: 13px; opacity: 0.9; }
 .moteur-chip .moteur-nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -873,7 +877,7 @@ input {
   transition: background 0.13s;
 }
 .pin-chip:hover { background: rgba(255, 255, 255, 0.08); }
-.pin-chip.on { background: rgba(96, 165, 250, 0.16); }
+.pin-chip.on { background: rgba(var(--accent-rgb), 0.16); }
 .pin-chip.on::after {
   content: "";
   position: absolute;
@@ -947,7 +951,7 @@ input {
   padding: 3px 7px;
   border-radius: 6px;
 }
-.menu-lien:hover { background: rgba(96, 165, 250, 0.12); color: #dbe9ff; }
+.menu-lien:hover { background: rgba(var(--accent-rgb), 0.12); color: #dbe9ff; }
 .menu-lien .ic.petit { width: 12px; height: 12px; }
 /* Memoire libre faible : le pied du rail le dit en ambre (le detail est dans l'infobulle). */
 .txt-budget.limite { color: var(--tiede); }
@@ -970,7 +974,7 @@ input {
   transition: background 0.12s;
 }
 .menu-ligne:hover { background: rgba(255, 255, 255, 0.045); }
-.menu-ligne.ouverte { background: rgba(96, 165, 250, 0.10); }
+.menu-ligne.ouverte { background: rgba(var(--accent-rgb), 0.10); }
 .menu-principal {
   flex: 1;
   min-width: 0;
@@ -1019,7 +1023,7 @@ input {
 .menu-ligne.installation .n { color: var(--texte-2); }
 .menu-icone.tourne {
   border-radius: 50%;
-  border: 2px solid rgba(96, 165, 250, 0.25);
+  border: 2px solid rgba(var(--accent-rgb), 0.25);
   border-top-color: var(--accent);
   width: 16px;
   height: 16px;
@@ -1194,8 +1198,8 @@ input {
   color: #dbe4f5;
   transition: background 0.12s, color 0.12s;
 }
-.puce:hover { background: rgba(96, 165, 250, 0.18); color: #ffffff; }
-.puce.on { background: rgba(96, 165, 250, 0.22); color: #dbe9ff; }
+.puce:hover { background: rgba(var(--accent-rgb), 0.18); color: #ffffff; }
+.puce.on { background: rgba(var(--accent-rgb), 0.22); color: #dbe9ff; }
 .puce.annuler { background: transparent; color: var(--texte-3); box-shadow: inset 0 0 0 1px var(--bord-fort); }
 .puce.annuler:hover { color: var(--texte); }
 .menu-ligne.guet .menu-principal { padding-left: 10px; }
@@ -1206,7 +1210,7 @@ input {
 
 .marque-mini.revenu { color: #7fd8c7; background: rgba(94, 234, 212, 0.14); }
 .marque-mini.fermeture { color: #fca5a5; background: rgba(248, 113, 113, 0.12); }
-.marque-mini.cote { color: #bcd8ff; background: rgba(96, 165, 250, 0.16); }
+.marque-mini.cote { color: #bcd8ff; background: rgba(var(--accent-rgb), 0.16); }
 .attente {
   display: flex;
   align-items: center;

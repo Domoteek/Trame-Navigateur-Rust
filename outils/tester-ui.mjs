@@ -2228,6 +2228,50 @@ async function suite() {
     await p.close();
   });
 
+  await cas("teintes : chacune repeint fonds, surfaces et accents de la coquille, Défaut rend l'origine", async () => {
+    const p = await page("chrome.html", { query: "?surface=rail" });
+    const lire = () =>
+      p.evaluate(() => {
+        const cs = getComputedStyle(document.documentElement);
+        const v = (n) => cs.getPropertyValue(n).trim();
+        return { fond: v("--fond"), surface: v("--surface-2"), accent: v("--accent"), rgb: v("--accent-rgb"), corps: getComputedStyle(document.body).backgroundColor };
+      });
+    const origine = await lire();
+    const vus = new Set();
+    for (const id of ["menthe", "ciel", "violet", "ambre", "ardoise"]) {
+      await pousser(p, { ...etatDeBase(), theme: id });
+      const t = await lire();
+      const attendu = await p.evaluate((i) => window.TrameTeintes.TEINTES[i], id);
+      egal(t.fond, attendu.fond, `${id} : fond`);
+      egal(t.surface, attendu.surface2, `${id} : surface`);
+      egal(t.accent, attendu.accent, `${id} : accent`);
+      verifier(t.corps !== origine.corps, `${id} : le fond peint doit changer (${t.corps})`);
+      verifier(t.rgb !== origine.rgb, `${id} : les transparences d'accent doivent suivre`);
+      vus.add(t.fond + t.accent);
+    }
+    egal(vus.size, 5, "cinq teintes, cinq aspects distincts");
+    await pousser(p, { ...etatDeBase(), theme: "dynamique", teinteSite: "#e11d48" });
+    egal((await lire()).rgb, "225, 29, 72", "dynamique : l'accent du site, transparences comprises");
+    await pousser(p, { ...etatDeBase(), theme: "defaut" });
+    const retour = await lire();
+    egal(retour.fond, origine.fond, "défaut : fond d'origine");
+    egal(retour.accent, origine.accent, "défaut : accent d'origine");
+    egal(retour.rgb, origine.rgb, "défaut : transparences d'origine");
+    await p.close();
+
+    // Les pastilles des réglages : les mêmes couleurs, et un clic annonce la teinte à l'hôte.
+    const r = await page("reglages.html", { query: "#apparence" });
+    await pousser(r, { ...etatDeBase(), theme: "ambre" });
+    egal(await r.$$eval(".teinte", (n) => n.map((x) => x.dataset.teinte)),
+      ["defaut", "menthe", "ciel", "violet", "ambre", "ardoise", "dynamique"], "sept pastilles");
+    await r.waitForFunction(() => document.querySelector(".teinte.choisi")?.dataset.teinte === "ambre");
+    egal(await r.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()), "#fbbf24", "la page prend la teinte");
+    await vider(r);
+    await r.click('.teinte[data-teinte="ciel"]');
+    verifier((await messages(r)).some((m) => m.m === "theme" && m.valeur === "ciel"), "clic : teinte envoyée");
+    await r.close();
+  });
+
   // ---------------------------------------------------------------- contrat UI <-> hôte
 
   await cas("contrat : tout message envoye par l'interface est traite par l'hote", async () => {
