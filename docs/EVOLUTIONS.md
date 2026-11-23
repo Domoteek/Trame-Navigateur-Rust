@@ -1043,6 +1043,13 @@ Puces d'extensions : carte sous la barre. Rail replié (64 px) : message `bulle`
 une icône du bas ; ce message ne referme pas un menu ouvert. Preuves : `tester-ui` **84/84**,
 `cargo test` **194/194**, `outils/eprouver-bulles.mjs` sur le vrai binaire caché (barre
 76 → 198 px puis retour ; carte du rail collée à l'icône, texte entier dans la fenêtre).
+(0.4.48 construite mais pas mise en ligne : la 0.4.49 la contient.)
+**0.4.49 — le clic droit d'un accès du rail replié.** Replié, le rail ouvrait un Nouvel onglet à
+la place du menu (« le clic droit ne fonctionne pas », Clément, 23/11). Il envoie `menuAcces`,
+l'hôte le relaie à la barre avec la hauteur de la fenêtre, et la barre dessine le même menu
+(`menuAcces` dans `chrome.js`, commun aux deux) collé au rail, à la hauteur de l'icône. Preuves :
+`tester-ui` **85/85** (menu, Ouvrir, Modifier avec l'ancienne adresse et le groupe), banc
+`eprouver-bulles.mjs` sur le vrai binaire (clic droit réel : menu dans la barre, entier).
 ## 11. L'état aujourd'hui
 
 ```
