@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Saute-pub YouTube",
+  "version": "2.0.0",
+  "description": "Le saute-pub de Trame, au format Firefox : mêmes scripts que sur le PC (extensions/saute-pub), copiés à la construction.",
+  "browser_specific_settings": { "gecko": { "id": "saute-pub@trame.app" } },
+  "permissions": ["storage", "declarativeNetRequest", "nativeMessaging", "nativeMessagingFromContent", "geckoViewAddons"],
+  "host_permissions": ["*://*.youtube.com/*", "*://www.youtube-nocookie.com/*", "https://sponsor.ajay.app/*"],
+  "declarative_net_request": {
+    "rule_resources": [{ "id": "pubs", "enabled": true, "path": "regles.json" }]
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/*", "*://m.youtube.com/*", "*://youtube.com/*", "*://www.youtube-nocookie.com/*"],
+      "js": ["debut.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["*://www.youtube.com/*", "*://m.youtube.com/*", "*://youtube.com/*", "*://www.youtube-nocookie.com/*"],
+      "js": ["contenu.js", "journal.js"],
+      "css": ["style.css"],
+      "run_at": "document_end"
+    }
+  ]
+}

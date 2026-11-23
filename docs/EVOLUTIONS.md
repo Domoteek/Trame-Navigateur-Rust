@@ -1224,6 +1224,31 @@ incrustation Android). **« Tous me vont »** : les six écrans sont validés te
 présents sur le PC le 23/11 : Android Studio, SDK + NDK dans `%LOCALAPPDATA%\Android\Sdk`,
 JDK 21 (Microsoft). Aucun code Android n'est écrit à cette date.
 
+**Le soir même, choix « la 1 » : premier APK (écran 2), dans `android/`.** Coquille Kotlin sans
+Compose (vues Android) autour de GeckoView 160 : barre d'adresse en bas, cinq boutons, onglets
+(liste), menu en feuille (Recharger, Partager, extensions avec interrupteur), invites des pages
+(alert, confirm, select), plein écran vidéo, onglets gardés d'un lancement à l'autre (seul le
+montré se charge). Page d'accueil provisoire `assets/accueil.html`. Recherche = Perplexity,
+comme `MOTEUR_DEFAUT`.
+- **Saute-pub** : les scripts du PC (`extensions/saute-pub`) sont copiés à la construction ;
+  manifeste Firefox MV3 à part (`debut.js` en `world: "MAIN"`, blocage par
+  `declarativeNetRequest`, `regles.json`), `journal.js` relaie l'état à l'appli (pastille 🛡) par
+  `sendNativeMessage`. Seule retouche, faite par Gradle : `window.__trameSansPub` lu par
+  `wrappedJSObject` (monde isolé de Firefox). **Éprouvé sur émulateur** (Pixel 3a, Android 14,
+  m.youtube.com) : `debut.js` actif, `retirees: 1` (pub retirée de la réponse du lecteur),
+  lecteur suivi, pastille « 🛡 1 ». Aucune vraie pub vidéo vue à l'émulateur.
+- **Bitwarden** : installé par l'appli depuis addons.mozilla.org au premier lancement
+  (2026.11.0), sa page d'accueil s'ouvre en onglet (tabs.create), son popup s'affiche en feuille
+  (écran de connexion vu). Piège : `Action.click()` ne rend aucun popup (Gecko ne trouve pas
+  d'onglet actif), d'où un repli qui ouvre `popup/index.html` à l'adresse de l'extension
+  (`POPUPS`). Connexion au coffre non essayée (compte de Clément).
+- **Construction** : GeckoView 160 impose AGP 9.1 (Gradle 9.3.1, compileSdk 37) et Kotlin 2.4
+  (plugin posé sur le classpath). `./gradlew assembleDebug` (toutes architectures, ~530 Mo, pour
+  l'émulateur), `assembleRelease` (arm64, bibliothèques compressées, **96 Mo**, signé avec la clé
+  de débogage) → `dist/Trame-android-0.1.0.apk`. La version release n'a pas encore tourné.
+- Pas encore là : barre qui se replie au défilement, glisser sur l'adresse, fils, teintes,
+  téléchargements, vidéo en incrustation.
+
 ## 11. L'état aujourd'hui
 
 ```

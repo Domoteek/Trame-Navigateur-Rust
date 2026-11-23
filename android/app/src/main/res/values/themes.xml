@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Couleurs de la teinte « Défaut » de Trame (ui/teintes.js). -->
+    <color name="fond">#080B11</color>
+    <color name="fond2">#0B0F17</color>
+    <color name="surface">#101521</color>
+    <color name="surface2">#151C2A</color>
+    <color name="surface3">#1B2434</color>
+    <color name="texte">#E9EEFA</color>
+    <color name="texte2">#97A4BB</color>
+    <color name="texte3">#616E85</color>
+    <color name="accent">#60A5FA</color>
+    <color name="vif">#5EEAD4</color>
+    <color name="bord">#12FFFFFF</color>
+
+    <style name="Theme.Trame" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fond</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:colorPrimary">@color/fond2</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <style name="Theme.Trame.Dialogue" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:colorBackground">@color/surface</item>
+        <item name="android:textColorPrimary">@color/texte</item>
+        <item name="android:textColorSecondary">@color/texte2</item>
+    </style>
+</resources>
