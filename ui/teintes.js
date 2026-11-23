@@ -94,5 +94,18 @@
     document.documentElement.dataset.teinte = id || "defaut";
   }
 
-  window.TrameTeintes = { TEINTES, DYNAMIQUE, appliquer, rgb };
+  /** Suit l'etat pousse par l'hote (`theme`, `teinteSite`) : ne repose que si la teinte change,
+   *  l'etat arrivant plusieurs fois par seconde. Pour les pages internes (Nouvel onglet,
+   *  telechargements, coup d'oeil, Zap) : une ligne dans leur `etat(s)`. */
+  let posee = null;
+  function suivre(s) {
+    const id = (s && s.theme) || "defaut";
+    const site = id === "dynamique" ? (s && s.teinteSite) || "" : "";
+    const cle = id + "|" + site;
+    if (cle === posee) return;
+    posee = cle;
+    appliquer(id, site);
+  }
+
+  window.TrameTeintes = { TEINTES, DYNAMIQUE, appliquer, suivre, rgb };
 })();

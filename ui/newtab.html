@@ -7,6 +7,11 @@
     <style>
       :root {
         --fond: #080b11;
+        --fond-2: #0b0f17;
+        --surface-2: #151c2a;
+        --surface-3: #1b2434;
+        --accent-rgb: 96, 165, 250;
+        --accent-2-rgb: 167, 139, 250;
         --surface: #101521;
         --bord: rgba(255, 255, 255, 0.08);
         --texte: #e9eefa;
@@ -22,8 +27,8 @@
       html, body { margin: 0; min-height: 100%; }
       body {
         background:
-          radial-gradient(60% 45% at 18% 0%, rgba(96, 165, 250, 0.13), transparent 60%),
-          radial-gradient(50% 40% at 90% 10%, rgba(167, 139, 250, 0.11), transparent 60%),
+          radial-gradient(60% 45% at 18% 0%, rgba(var(--accent-rgb), 0.13), transparent 60%),
+          radial-gradient(50% 40% at 90% 10%, rgba(var(--accent-2-rgb), 0.11), transparent 60%),
           radial-gradient(70% 50% at 50% 110%, rgba(94, 234, 212, 0.07), transparent 60%),
           var(--fond);
         color: var(--texte);
@@ -43,7 +48,7 @@
         background: rgba(255, 255, 255, 0.04);
         transition: border-color .18s, box-shadow .18s;
       }
-      .recherche:focus-within { border-color: rgba(96, 165, 250, .55); box-shadow: 0 0 0 4px rgba(96, 165, 250, .09); }
+      .recherche:focus-within { border-color: rgba(var(--accent-rgb), .55); box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .09); }
       .recherche input { flex: 1; background: transparent; border: 0; outline: none; color: var(--texte); font: inherit; font-size: 14px; }
       .recherche input::placeholder { color: var(--texte-3); }
       .touche { font-size: 10.5px; color: var(--texte-3); border: 1px solid var(--bord); border-radius: 6px; padding: 2px 7px; }
@@ -148,7 +153,7 @@
       .fav .x:hover { color: #f87171; background: rgba(248,113,113,.1); }
 
       .menu {
-        position: fixed; z-index: 20; min-width: 210px; background: #151c2a; border: 1px solid rgba(255,255,255,.16);
+        position: fixed; z-index: 20; min-width: 210px; background: var(--surface-2); border: 1px solid rgba(255,255,255,.16);
         border-radius: 10px; padding: 5px; box-shadow: 0 14px 34px rgba(0,0,0,.5); font-size: 12.5px;
       }
       .menu button {
@@ -162,17 +167,17 @@
 
       .voile { position: fixed; inset: 0; z-index: 30; background: rgba(4,6,10,.55); display: grid; place-items: center; }
       .dialogue {
-        width: 360px; max-width: calc(100vw - 32px); background: #101521; border: 1px solid rgba(255,255,255,.16);
+        width: 360px; max-width: calc(100vw - 32px); background: var(--surface); border: 1px solid rgba(255,255,255,.16);
         border-radius: 14px; padding: 18px; box-shadow: 0 16px 40px rgba(0,0,0,.5);
       }
       .dialogue h3 { margin: 0 0 14px; font-size: 14px; font-weight: 600; }
       .champ { margin-bottom: 11px; }
       .champ label { display: block; color: var(--texte-2); font-size: 11px; margin-bottom: 5px; }
       .champ input {
-        width: 100%; background: #0b0f17; border: 1px solid var(--bord); border-radius: 8px; padding: 8px 10px;
+        width: 100%; background: var(--fond-2); border: 1px solid var(--bord); border-radius: 8px; padding: 8px 10px;
         color: var(--texte); font: inherit; font-size: 13px; outline: none;
       }
-      .champ input:focus { border-color: rgba(96,165,250,.55); }
+      .champ input:focus { border-color: rgba(var(--accent-rgb), .55); }
       .coche { display: flex; align-items: center; gap: 8px; color: var(--texte-2); font-size: 12.5px; margin: 12px 0 16px; cursor: pointer; }
       .coche input { accent-color: var(--vif); }
       .boutons { display: flex; justify-content: flex-end; gap: 8px; }
@@ -231,6 +236,7 @@
       </div>
     </div>
 
+    <script src="teintes.js"></script>
     <script>
       /* Portee fermee : wry definit `window.ipc` en propriete NON configurable. Un `const ipc`
          de premier niveau jetterait donc une SyntaxError (« Identifier 'ipc' has already been
@@ -249,7 +255,7 @@
         }
 
         window.trame = {
-          etat(s) { etat = s; rendre(); },
+          etat(s) { etat = s; if (window.TrameTeintes) window.TrameTeintes.suivre(s); rendre(); },
           budget() {},
           resultats() {},
           toast() {},

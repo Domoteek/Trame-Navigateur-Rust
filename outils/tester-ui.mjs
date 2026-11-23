@@ -2270,6 +2270,22 @@ async function suite() {
     await r.click('.teinte[data-teinte="ciel"]');
     verifier((await messages(r)).some((m) => m.m === "theme" && m.valeur === "ciel"), "clic : teinte envoyée");
     await r.close();
+
+    // Les pages internes suivent la même teinte, et reviennent à l'origine avec « Défaut ».
+    for (const fichier of ["newtab.html", "telechargements.html", "zap.html", "trame.html"]) {
+      const q = await page(fichier);
+      const fondOrigine = await q.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      await pousser(q, { ...etatDeBase(), theme: "menthe" });
+      const vu = await q.evaluate(() => {
+        const cs = getComputedStyle(document.documentElement);
+        return { fond: cs.getPropertyValue("--fond").trim(), rgb: cs.getPropertyValue("--accent-rgb").trim() };
+      });
+      egal(vu.fond, "#07100e", `${fichier} : fond menthe`);
+      egal(vu.rgb, "52, 211, 153", `${fichier} : accent menthe`);
+      await pousser(q, { ...etatDeBase(), theme: "defaut" });
+      egal(await q.evaluate(() => getComputedStyle(document.body).backgroundColor), fondOrigine, `${fichier} : retour à l'origine`);
+      await q.close();
+    }
   });
 
   // ---------------------------------------------------------------- contrat UI <-> hôte

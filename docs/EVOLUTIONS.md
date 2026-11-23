@@ -1007,7 +1007,7 @@ Preuves : `tester-ui.mjs` **78/78**, dont « teintes : chacune repeint fonds, su
 Sur le **vrai binaire** (profil jetable, fenêtre cachée, CDP) : pour chacune des 7 teintes, rail,
 barre et réglages lisent les mêmes `--fond`, `--surface-2`, `--accent`, `--accent-rgb`, et le
 fond peint change ; `reglages.json` garde le choix ; le journal note chaque teinte.
-Les autres pages internes (Nouvel onglet, téléchargements) ne suivent pas encore la teinte.
+**0.4.42** : le Nouvel onglet, les téléchargements, le coup d'œil (`trame.html`) et Zap suivent aussi la teinte (`TrameTeintes.suivre(s)` dans leur `etat`, 18 transparences et 3 fonds en dur remplacés). Vérifié sur le vrai binaire : Ambre puis Violet repeignent Nouvel onglet et téléchargements, Défaut rend l'origine.
 ## 11. L'état aujourd'hui
 
 ```
