@@ -1,4 +1,35 @@
 /**
+ * Teinte du site, pour le mode « dynamique » des reglages.
+ *
+ * La page annonce sa couleur dans `<meta name="theme-color">` — c'est fait pour ca, et beaucoup
+ * de sites la posent. On la relit a chaque fois que la page devient VISIBLE (changement
+ * d'onglet), pour que la coquille suive l'onglet actif et pas le dernier site charge.
+ *
+ * Rien n'est devine : pas de meta, pas de message, et la coquille garde l'aspect d'origine.
+ * Trame valide la couleur avant de s'en servir (une page ne pose pas n'importe quoi dans le
+ * style du navigateur).
+ */
+(function signalerTeinte() {
+  function envoyer() {
+    try {
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (!meta) return;
+      var valeur = (meta.getAttribute('content') || '').trim();
+      if (!valeur) return;
+      window.ipc.postMessage(JSON.stringify({ m: 'couleur', valeur: valeur }));
+    } catch (e) {
+      /* une page sans pont n'est pas une panne */
+    }
+  }
+  if (document.visibilityState === 'visible') envoyer();
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') envoyer();
+  });
+  // Un site pose souvent son meta apres le premier rendu : un second passage ne coute rien.
+  setTimeout(envoyer, 1500);
+})();
+
+/**
  * Video flottante, injectee dans chaque page visitee (et dans ses cadres).
  *
  * Au survol d'une video, une pastille apparait en haut de l'image, en deux parties :

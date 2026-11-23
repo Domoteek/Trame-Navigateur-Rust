@@ -216,6 +216,8 @@ pub struct App {
     telechargements: Vec<crate::telechargements::Telechargement>,
     /// Dossier ou vont les telechargements, partage avec les gestionnaires du moteur.
     dossier_dl: std::rc::Rc<std::cell::RefCell<PathBuf>>,
+    /// Couleur annoncee par la page visible (`<meta name="theme-color">`), en mode dynamique.
+    teinte_site: Option<String>,
     /// Version plus recente annoncee par la fiche produit, si elle a ete lue.
     maj: Option<crate::maj::Nouveaute>,
     zap_ouvert: bool,
@@ -601,6 +603,7 @@ impl App {
             muets: std::collections::HashSet::new(),
             telechargements: Vec::new(),
             dossier_dl: std::rc::Rc::new(std::cell::RefCell::new(PathBuf::new())),
+            teinte_site: None,
             maj: None,
             zap_ouvert: false,
             panneau_extension: None,
@@ -2758,6 +2761,8 @@ impl App {
             "panneau": self.panneau_ouvert,
             "version": crate::maj::ACTUELLE,
             "theme": self.reglages.theme,
+            // La teinte du site n'est poussee qu'en mode dynamique : ailleurs elle ne sert a rien.
+            "teinteSite": if self.reglages.theme == "dynamique" { self.teinte_site.clone() } else { None },
             "maj": self.maj.as_ref().map(|m| json!({ "version": m.version, "url": m.url })),
             "moteur": {
                 "id": urls::moteur(&self.reglages.moteur).id,
@@ -4126,6 +4131,17 @@ impl App {
                     self.reglages.theme = voulu;
                     self.profil.sauver_reglages(&self.reglages);
                     self.pousser_etat();
+                }
+            }
+            // Une page annonce sa couleur (script de contenu, sur changement de visibilite : seule
+            // la page VISIBLE parle, donc c'est bien la teinte de l'onglet actif).
+            "couleur" => {
+                let brute = v["valeur"].as_str().unwrap_or("").trim().to_string();
+                if couleur_valide(&brute) && self.teinte_site.as_deref() != Some(brute.as_str()) {
+                    self.teinte_site = Some(brute);
+                    if self.reglages.theme == "dynamique" {
+                        self.pousser_etat();
+                    }
                 }
             }
             "muet" => {
@@ -6170,6 +6186,21 @@ const ZAP_VIVANT_JS: &str = include_str!("../ui/zap-vivant.js");
 /// Raccourcis clavier, joues dans chaque page. Le script vit dans `ui/raccourcis.js` :
 /// il est embarque a la compilation et teste par `outils/tester-ui.mjs` (vraies frappes).
 const RACCOURCIS: &str = include_str!("../ui/raccourcis.js");
+
+/// La couleur annoncee par une page est-elle une couleur CSS raisonnable ?
+///
+/// On ne l'injecte pas telle quelle dans le style de la coquille : une page ne doit pas pouvoir
+/// y poser n'importe quoi.
+fn couleur_valide(valeur: &str) -> bool {
+    if valeur.is_empty() || valeur.len() > 32 {
+        return false;
+    }
+    let forme = valeur.starts_with('#')
+        || (valeur.starts_with("rgb(") && valeur.ends_with(')'))
+        || (valeur.starts_with("rgba(") && valeur.ends_with(')'))
+        || (valeur.starts_with("hsl(") && valeur.ends_with(')'));
+    forme && valeur.chars().all(|c| c.is_ascii_hexdigit() || " #(),.%rgbahsl".contains(c))
+}
 
 /// Video flottante : pastille au survol d'une video, et Alt+P (`ui/incrustation.js`).
 const INCRUSTATION: &str = include_str!("../ui/incrustation.js");

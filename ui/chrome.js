@@ -150,7 +150,11 @@ function rendreFenetre(s) {
     ardoise: "#94a3b8",
   };
   const teinte = (s && s.theme) || "defaut";
-  if (TEINTES[teinte]) document.documentElement.style.setProperty("--accent", TEINTES[teinte]);
+  if (teinte === "dynamique") {
+    // La couleur du site, quand il en annonce une ; sinon l'aspect d'origine.
+    if (s && s.teinteSite) document.documentElement.style.setProperty("--accent", s.teinteSite);
+    else document.documentElement.style.removeProperty("--accent");
+  } else if (TEINTES[teinte]) document.documentElement.style.setProperty("--accent", TEINTES[teinte]);
   else document.documentElement.style.removeProperty("--accent");
   if (agrandie !== fenetreAgrandie) {
     fenetreAgrandie = agrandie;
