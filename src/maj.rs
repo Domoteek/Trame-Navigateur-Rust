@@ -61,9 +61,31 @@ pub fn verifier(actuelle: &str) -> Option<Nouveaute> {
         .output()
         .ok()?;
     if !sortie.status.success() {
+        crate::alerte!("mise a jour : la fiche n'a pas repondu (curl)");
         return None;
     }
-    lire(&String::from_utf8_lossy(&sortie.stdout), actuelle)
+    let texte = String::from_utf8_lossy(&sortie.stdout);
+    // Trace volontairement bavarde : sans elle, un « rien de plus recent » ne dit pas si la fiche
+    // annoncait une version plus ancienne, la meme, ou rien du tout — et on cherche a l'aveugle
+    // (constate le 2026-11-23 : binaire en 0.4.36 qui se croyait en 0.4.37).
+    let lue = lire_version(&texte);
+    crate::info!(
+        "mise a jour : fiche {} / binaire {}",
+        lue.as_deref().unwrap_or("(illisible ou desactivee)"),
+        actuelle
+    );
+    lire(&texte, actuelle)
+}
+
+/// La version annoncee par la fiche, meme si elle n'est pas plus recente (pour le journal).
+fn lire_version(json: &str) -> Option<String> {
+    let valeur: serde_json::Value = serde_json::from_str(json).ok()?;
+    valeur
+        .get("fields")?
+        .get("version")?
+        .get("stringValue")?
+        .as_str()
+        .map(str::to_string)
 }
 
 /// Extrait la nouveaute d'une reponse Firestore (texte JSON), si elle est plus recente.
