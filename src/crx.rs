@@ -314,6 +314,10 @@ pub fn identite(octets: &[u8]) -> Option<Identite> {
 }
 
 /// Identifiant porte par l'en-tete du CRX (cf. `identite`).
+///
+/// Le binaire ne s'en sert pas encore (les tests, si) : c'est la porte d'entree de la
+/// verification de signature CRX3, qui lira l'identifiant et le comparera aux preuves.
+#[allow(dead_code)]
 pub fn identifiant_du_crx(octets: &[u8]) -> Option<String> {
     identite(octets).map(|i| i.identifiant)
 }

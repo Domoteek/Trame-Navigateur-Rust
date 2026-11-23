@@ -150,8 +150,9 @@ pub fn classer(
 
 /// Actions proposees quand la requete commence par `>` (et au clic droit sur le logo du rail).
 pub fn commandes(requete: &str) -> Vec<Resultat> {
-    const TABLE: [(&str, &str, &str); 15] = [
+    const TABLE: [(&str, &str, &str); 16] = [
         ("nouvel-onglet", "Nouvel onglet", "Ctrl+T"),
+        ("prive", "Navigation privée : rien n'est gardé", "Ctrl+Maj+N"),
         ("fermer-onglet", "Fermer l'onglet", "Ctrl+W"),
         ("rouvrir", "Rouvrir le dernier onglet ferme", "Ctrl+Maj+T"),
         ("reglages", "Reglages : moteur de recherche, extensions, veille", "Ctrl+,"),

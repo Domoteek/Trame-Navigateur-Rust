@@ -379,6 +379,17 @@ pub struct App {
     message_restauration: Option<String>,
     /// Trame doit se fermer : une restauration s'applique au demarrage suivant.
     quitter: bool,
+
+    // ---- sauvegarde automatique (voir `sauvegarde_auto.rs`)
+    /// Derniere sauvegarde automatique (instant, fichier, erreur), relu au demarrage.
+    auto_etat: crate::sauvegarde_auto::Etat,
+    /// Chemin de l'archive que l'automatisation est en train d'ecrire. `None` = sauvegarde
+    /// manuelle : c'est ce qui distingue les deux dans `fin_sauvegarde`.
+    auto_en_cours: Option<std::path::PathBuf>,
+    /// Une tentative a echoue : on n'insiste pas a chaque battement (une heure d'attente).
+    auto_prochain_essai: u64,
+    /// Instant d'une nouvelle tentative de purge des profils prives (0 = rien a reprendre).
+    purge_prives_prochain: u64,
 }
 
 mod fenetre;
@@ -565,6 +576,97 @@ fn verrou_contexte() -> std::sync::MutexGuard<'static, wry::WebContext> {
         .expect("verrou du contexte WebView2")
 }
 
+/// Efface les profils WebView2 jetables d'une navigation privee precedente.
+///
+/// Un profil prive vit dans `<dossier WebView2>/EBWebView/WV2Profile_prive-<id>`. Sa session
+/// n'est jamais ecrite : rien ne le rouvrira. Le laisser sur le disque garderait les cookies,
+/// les connexions et le cache d'une session censee ne rien laisser derriere elle.
+///
+/// **Effacer le dossier ne suffit pas** (mesure du 2026-11-23) : Chromium garde la liste des
+/// profils connus dans `EBWebView\Local State` et **recree le dossier au demarrage suivant**,
+/// avec `History`, `Cookies`, `Login Data` et le reste. Il faut donc d'abord le faire oublier,
+/// puis effacer. Appele au demarrage et une seconde fois quelques secondes plus tard, parce que
+/// le moteur peut reecrire `Local State` pendant qu'il s'installe.
+fn purger_profils_prives(dossier_webview2: &std::path::Path) -> usize {
+    let racine = dossier_webview2.join("EBWebView");
+    let Ok(entrees) = std::fs::read_dir(&racine) else {
+        return 0;
+    };
+    let noms: Vec<String> = entrees
+        .flatten()
+        .filter_map(|entree| {
+            let chemin = entree.path();
+            let nom = chemin.file_name()?.to_str()?.to_string();
+            if chemin.is_dir() && nom.starts_with("WV2Profile_prive-") {
+                Some(nom)
+            } else {
+                None
+            }
+        })
+        .collect();
+    if noms.is_empty() {
+        return 0;
+    }
+    faire_oublier_profils(&racine.join("Local State"), &noms);
+    for nom in &noms {
+        let chemin = racine.join(nom);
+        match std::fs::remove_dir_all(&chemin) {
+            Ok(()) => info!("profil prive efface : {}", chemin.display()),
+            // Un dossier encore tenu par le moteur n'est pas une panne : la seconde passe le
+            // reprendra.
+            Err(e) => info!("profil prive non efface ({}) : {e}", chemin.display()),
+        }
+    }
+    // Le nombre de profils VUS : c'est lui qui decide si une seconde passe est utile, et un
+    // dossier qu'on n'a pas pu effacer doit la declencher aussi.
+    noms.len()
+}
+
+/// Retire les profils prives de `Local State`, la liste des profils connus de Chromium.
+///
+/// Ne touche qu'aux deux tables qui nomment un profil (`profile.info_cache` et
+/// `variations_google_groups`), et seulement pour les noms commencant par `WV2Profile_prive-`.
+/// Un fichier illisible est laisse tel quel : on ne detruit jamais un `Local State` qu'on n'a
+/// pas su lire.
+fn faire_oublier_profils(local_state: &std::path::Path, profils: &[String]) -> usize {
+    let Ok(texte) = std::fs::read_to_string(local_state) else {
+        return 0;
+    };
+    let Ok(mut valeur) = serde_json::from_str::<serde_json::Value>(texte.trim_start_matches('\u{feff}')) else {
+        alerte!("Local State illisible : les profils prives resteront listes");
+        return 0;
+    };
+    let mut retires = 0;
+    for table in ["profile", "variations_google_groups"] {
+        let Some(objet) = valeur
+            .get_mut(table)
+            .and_then(|t| if table == "profile" { t.get_mut("info_cache") } else { Some(t) })
+            .and_then(|t| t.as_object_mut())
+        else {
+            continue;
+        };
+        for nom in profils {
+            if objet.remove(nom).is_some() {
+                retires += 1;
+            }
+        }
+    }
+    if retires == 0 {
+        return 0;
+    }
+    match serde_json::to_string(&valeur) {
+        Ok(sortie) => {
+            if let Err(e) = crate::profile::ecrire_atomique(local_state, &sortie) {
+                alerte!("Local State non reecrit ({e}) : les profils prives resteront listes");
+                return 0;
+            }
+            info!("Local State : {retires} entree(s) de profil prive retirees");
+        }
+        Err(e) => alerte!("Local State non serialise ({e})"),
+    }
+    retires
+}
+
 impl App {
     pub fn nouveau(window: Window, profil: Profil, proxy: EventLoopProxy<UserEvent>) -> App {
         // Tout ce dont le navigateur a besoin vit dans le profil :
@@ -574,8 +676,16 @@ impl App {
         //  3. le contexte WebView2 est cree sur ce dossier, une fois pour toutes.
         ressources::au_demarrage(profil.racine());
         let webview2 = profil.rapatrier_webview2();
+        // AVANT `preparer_contexte` : des que le moteur demarre, il lit la liste des profils de
+        // `Local State`, rouvre celui d'une navigation privee precedente et en tient les
+        // fichiers — la purge echouerait alors sur « fichier utilise par un autre processus »
+        // (mesure du 2026-11-23 09:23). Rend le nombre de profils prives VUS : s'il y en avait,
+        // une seconde passe est armee, au cas ou le moteur en recreerait un.
+        let prives_vus = purger_profils_prives(&webview2);
         preparer_contexte(&webview2);
         info!("profil WebView2 : {}", webview2.display());
+        // Etat de la sauvegarde automatique, relu avant que le champ `profil` ne bouge.
+        let racine_auto = profil.racine().to_path_buf();
 
         let mut app = App {
             window,
@@ -708,6 +818,14 @@ impl App {
             restauration: None,
             message_restauration: None,
             quitter: false,
+            auto_etat: crate::sauvegarde_auto::lire(racine_auto.as_path()),
+            auto_en_cours: None,
+            auto_prochain_essai: 0,
+            // La purge d'avant le moteur a vu des profils prives : une tentative de plus, une
+            // seule, quelques secondes apres le demarrage. Chromium peut avoir recree le dossier
+            // dans l'intervalle (mesure du 2026-11-23) ; insister davantage ne converge pas, le
+            // moteur recreant a chaque fois ce qu'il connait — le demarrage suivant reprend.
+            purge_prives_prochain: if prives_vus > 0 { maintenant_ms() + 5_000 } else { 0 },
         };
         {
             use tao::platform::windows::WindowExtWindows;
@@ -2352,7 +2470,24 @@ impl App {
 
     fn nettoyer_fils(&mut self) {
         let utilises: Vec<ThreadId> = self.session.onglets.iter().map(|o| o.fil).collect();
+        // Un fil prive qui disparait emporte son profil WebView2 : c'est la seule facon d'etre
+        // sur que rien de la session privee ne reste sur le disque.
+        let prives_perdus: Vec<ThreadId> = self
+            .session
+            .fils
+            .iter()
+            .filter(|f| f.prive && !utilises.contains(&f.id))
+            .map(|f| f.id)
+            .collect();
         self.session.fils.retain(|f| utilises.contains(&f.id));
+        if !prives_perdus.is_empty() {
+            // Les webviews de ces fils sont deja detruites (on ne ferme un fil qu'une fois ses
+            // onglets fermes) : le dossier n'est plus tenu par le moteur.
+            for _ in prives_perdus {
+                self.purger_prives();
+            }
+            info!("navigation privee : fil ferme, profil efface");
+        }
     }
 
     fn renommer_fils_auto(&mut self) {
@@ -2556,7 +2691,16 @@ impl App {
         self.secours_chargement(now);
         self.relever_liens_externes();
         self.outils_tick(now);
-
+        self.sauvegarde_auto_tick(now);
+        // Une seule tentative de plus sur les profils prives, quelques secondes apres le
+        // demarrage : Chromium peut avoir recree le dossier de celui qu'il connaissait. Insister
+        // davantage ne converge pas (il le recree a chaque effacement) — le demarrage suivant
+        // reprend le travail, et c'est sans consequence : le dossier recree est vide.
+        if self.purge_prives_prochain != 0 && now >= self.purge_prives_prochain {
+            self.purge_prives_prochain = 0;
+            let dossier = self.profil.dossier_webview2();
+            purger_profils_prives(&dossier);
+        }
         // 8 s au lieu de 3 : chaque sauvegarde fait un `fsync` (ecriture atomique), et pendant
         // une lecture on marque l'etat modifie a chaque defilement — soit un fsync toutes les
         // 3 s pour une position de lecture. La session est de toute facon sauvegardee a la
@@ -2679,7 +2823,9 @@ impl App {
         self.session.actif = self.actif;
         // On ne touche JAMAIS a l'etat d'execution en memoire : la copie persistee n'a pas
         // a connaitre les webviews vivantes, mais l'application, elle, en a besoin.
-        let mut session = self.session.clone();
+        // Les fils prives sont retires ici, et nulle part ailleurs : ce qui n'est pas ecrit ne
+        // peut pas etre relu au demarrage suivant.
+        let mut session = crate::model::session_sans_prives(&self.session);
         for o in session.onglets.iter_mut() {
             o.eveille = false;
             o.chargement = false;
@@ -2748,6 +2894,9 @@ impl App {
                     "domaine": weave::domaine_du_fil(f.id, &self.session.onglets),
                     "onglets": membres,
                     "cloison": f.cloison.as_ref().map(|c| json!({ "extensions": c.extensions })),
+                    // La navigation privee se voit dans le rail : sans marque, un fil qui ne
+                    // survivra pas au redemarrage ressemblerait aux autres.
+                    "prive": f.prive,
                 })
             })
             .collect();
@@ -2914,6 +3063,24 @@ impl App {
             },
             "historique": self.historique.len(),
             "telechargements": self.telechargements_json(),
+            // Ce que la page des reglages montre de la sauvegarde automatique : l'etat vient
+            // d'ici, elle ne le devine pas.
+            "sauvegardeAuto": {
+                "actif": self.reglages.sauvegarde_auto,
+                "dossier": self.reglages.dossier_sauvegardes,
+                "heures": self.reglages.sauvegarde_heures_bornees(),
+                "garder": self.reglages.sauvegarde_garder_bornees(),
+                "heuresPossibles": crate::model::SAUVEGARDE_HEURES,
+                "garderPossibles": crate::model::SAUVEGARDE_GARDER,
+                "enCours": self.auto_en_cours.is_some(),
+                "derniere": self.auto_etat.derniere_ms,
+                "fichier": self.auto_etat.fichier,
+                "erreur": self.auto_etat.erreur,
+                "effaces": self.auto_etat.effaces,
+                // Un interrupteur allume sans dossier ne sauvegarde rien : l'interface doit
+                // pouvoir le dire plutot que de laisser croire que c'est en place.
+                "pret": self.reglages.sauvegarde_auto_prete(),
+            },
             "zap": {
                 "ouvert": self.zap_ouvert,
                 "domaine": self.domaine_actif(),
@@ -3467,8 +3634,8 @@ impl App {
             self.recharger_onglet(id);
         }
 
-        // Historique : uniquement du web reel.
-        if url.starts_with("http") {
+        // Historique : uniquement du web reel, et jamais depuis une navigation privee.
+        if url.starts_with("http") && !self.onglet_prive(id) {
             let titre = self.trouver(id).map(|o| o.libelle()).unwrap_or_default();
             let deja = self
                 .historique
@@ -4683,6 +4850,7 @@ impl App {
                 }
             }
             "rouvrir" => self.rouvrir_ferme(),
+            "prive" => self.ouvrir_prive(),
             "reglages" => self.ouvrir_reglages(),
             "telechargements" => self.ouvrir_page_interne(PAGE_TELECHARGEMENTS),
             "zap" => self.basculer_zap(),
@@ -4826,6 +4994,8 @@ impl App {
                 }
             }
             "reouverture" => self.rouvrir_ferme(),
+            // Navigation privee (Ctrl+Maj+N) : un fil a part, profil jetable.
+            "prive" => self.ouvrir_prive(),
             "zoomPlus" => self.zoom_pas(1),
             "zoomMoins" => self.zoom_pas(-1),
             "zoomZero" => self.zoom_reinitialiser(),
@@ -5448,6 +5618,55 @@ impl App {
                 self.pousser_etat();
             }
             "ouvrirTelechargements" => self.ouvrir_page_interne(PAGE_TELECHARGEMENTS),
+            // ---- sauvegarde automatique
+            "sauvegardeAuto" => {
+                self.reglages.sauvegarde_auto = v["actif"]
+                    .as_bool()
+                    .unwrap_or(!self.reglages.sauvegarde_auto);
+                self.profil.sauver_reglages(&self.reglages);
+                // Un interrupteur allume sans dossier ne sauvegarde rien : le dire tout de suite
+                // plutot que de laisser croire que c'est en place.
+                if self.reglages.sauvegarde_auto && self.reglages.dossier_sauvegardes.trim().is_empty() {
+                    self.signaler("Sauvegarde automatique : choisissez un dossier, sinon rien ne sera écrit.");
+                } else {
+                    info!(
+                        "sauvegarde automatique : {}",
+                        if self.reglages.sauvegarde_auto { "allumee" } else { "coupee" }
+                    );
+                }
+                self.pousser_etat();
+            }
+            "sauvegardeAutoDossier" => {
+                match crate::systeme::choisir_dossier("Dossier des sauvegardes Trame") {
+                    Ok(Some(d)) => {
+                        self.reglages.dossier_sauvegardes = d.clone();
+                        self.profil.sauver_reglages(&self.reglages);
+                        info!("sauvegarde automatique : dossier {d}");
+                        self.signaler(&format!("Sauvegardes dans : {d}"));
+                        self.pousser_etat();
+                    }
+                    Ok(None) => {}
+                    Err(e) => self.signaler(&e),
+                }
+            }
+            "sauvegardeAutoHeures" => {
+                if let Some(h) = v["heures"].as_u64() {
+                    self.reglages.sauvegarde_heures = (h as u32).clamp(1, 168);
+                    self.profil.sauver_reglages(&self.reglages);
+                    info!("sauvegarde automatique : toutes les {} h", self.reglages.sauvegarde_heures);
+                    self.pousser_etat();
+                }
+            }
+            "sauvegardeAutoGarder" => {
+                if let Some(n) = v["garder"].as_u64() {
+                    self.reglages.sauvegarde_garder = (n as u32).clamp(1, 50);
+                    self.profil.sauver_reglages(&self.reglages);
+                    self.pousser_etat();
+                }
+            }
+            "sauvegardeMaintenant" => self.sauvegarder_maintenant(),
+            // ---- navigation privee
+            "prive" => self.ouvrir_prive(),
             _ => {}
         }
     }
@@ -5662,6 +5881,187 @@ impl App {
     /// Pourquoi un fil : les trois passent par le selecteur de Windows, qui **bloque** le fil
     /// appelant. Sur la boucle d'evenements, la fenetre entiere se figerait — c'est la lecon
     /// des 24 s d'installation d'uBlock Origin Lite (voir `installation.rs`).
+    // ---- sauvegarde automatique (voir `sauvegarde_auto.rs`)
+
+    /// Le dossier des sauvegardes automatiques, cree au besoin. `None` si l'utilisateur n'en a
+    /// pas choisi — auquel cas **rien ne part** : on ne devine pas ou mettre une sauvegarde.
+    fn dossier_sauvegardes(&mut self) -> Option<PathBuf> {
+        let choisi = self.reglages.dossier_sauvegardes.trim().to_string();
+        if choisi.is_empty() {
+            return None;
+        }
+        let dossier = PathBuf::from(choisi);
+        if !dossier.is_dir() {
+            // Recree a la demande : un dossier choisi puis efface ne doit pas arreter
+            // l'automatisation sans le dire.
+            if let Err(e) = std::fs::create_dir_all(&dossier) {
+                alerte!(
+                    "sauvegarde automatique : dossier {} inutilisable ({e})",
+                    dossier.display()
+                );
+                return None;
+            }
+        }
+        Some(dossier)
+    }
+
+    /// Appele a chaque battement : ecrit la sauvegarde si elle est due.
+    fn sauvegarde_auto_tick(&mut self, now: u64) {
+        if !self.reglages.sauvegarde_auto_prete() || self.auto_en_cours.is_some() {
+            return;
+        }
+        if now < self.auto_prochain_essai {
+            return;
+        }
+        let heures = self.reglages.sauvegarde_heures_bornees();
+        if !crate::sauvegarde_auto::due(self.auto_etat.derniere_ms, heures, now) {
+            return;
+        }
+        let Some(dossier) = self.dossier_sauvegardes() else {
+            // Pas de dossier utilisable : on reessaie dans une heure plutot qu'a chaque battement.
+            self.auto_prochain_essai = now + 3_600_000;
+            return;
+        };
+        let chemin = dossier.join(crate::sauvegarde_auto::nom_maintenant());
+        info!("sauvegarde automatique : ecriture de {}", chemin.display());
+        self.auto_en_cours = Some(chemin.clone());
+        self.lancer_sauvegarde(crate::sauvegarde::Demande::Sauver {
+            chemin: Some(chemin),
+            contenus: crate::sauvegarde::cles_par_defaut(),
+        });
+    }
+
+    /// « Sauvegarder maintenant » : la meme chose, tout de suite, sans attendre l'echeance.
+    fn sauvegarder_maintenant(&mut self) {
+        if self.auto_en_cours.is_some() {
+            self.signaler("Une sauvegarde automatique est déjà en cours.");
+            return;
+        }
+        let Some(dossier) = self.dossier_sauvegardes() else {
+            self.signaler("Choisissez d'abord un dossier de sauvegarde.");
+            return;
+        };
+        let chemin = dossier.join(crate::sauvegarde_auto::nom_maintenant());
+        info!("sauvegarde a la demande : ecriture de {}", chemin.display());
+        self.auto_en_cours = Some(chemin.clone());
+        self.lancer_sauvegarde(crate::sauvegarde::Demande::Sauver {
+            chemin: Some(chemin),
+            contenus: crate::sauvegarde::cles_par_defaut(),
+        });
+    }
+
+    /// Fin d'une sauvegarde automatique : etat tenu a jour, rotation, et ce qu'on en dit.
+    fn fin_sauvegarde_auto(&mut self, issue: crate::sauvegarde::Issue) {
+        use crate::sauvegarde::Issue;
+        let attendu = self.auto_en_cours.take();
+        match issue {
+            Issue::Sauvegardee {
+                chemin,
+                octets,
+                contenus,
+            } => {
+                let nom = chemin
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                self.auto_etat = crate::sauvegarde_auto::Etat {
+                    derniere_ms: maintenant_ms(),
+                    fichier: nom.clone(),
+                    erreur: String::new(),
+                    effaces: 0,
+                };
+                // La rotation ne vient qu'APRES une ecriture reussie : un echec ne doit pas
+                // emporter les archives precedentes.
+                if let Some(dossier) = chemin.parent() {
+                    let (effacees, _) =
+                        crate::sauvegarde_auto::epurer(dossier, self.reglages.sauvegarde_garder_bornees());
+                    self.auto_etat.effaces = effacees;
+                    if effacees > 0 {
+                        info!("sauvegarde automatique : {effacees} ancienne(s) archive(s) effacee(s)");
+                    }
+                }
+                if let Err(e) = crate::sauvegarde_auto::ecrire(self.profil.racine(), &self.auto_etat) {
+                    alerte!("sauvegarde automatique : etat non ecrit ({e})");
+                }
+                info!(
+                    "sauvegarde automatique faite : {contenus} contenu(s), {octets} octets -> {}",
+                    chemin.display()
+                );
+                self.signaler(&format!(
+                    "Sauvegarde automatique — {:.0} Ko : {nom}",
+                    octets as f64 / 1024.0
+                ));
+            }
+            Issue::Echec(motif) => {
+                self.auto_etat.erreur = motif.clone();
+                let _ = crate::sauvegarde_auto::ecrire(self.profil.racine(), &self.auto_etat);
+                alerte!(
+                    "sauvegarde automatique : echec ({motif}) — cible {}, nouvel essai dans une heure",
+                    attendu.map(|c| c.display().to_string()).unwrap_or_default()
+                );
+                self.signaler(&format!("Sauvegarde automatique impossible : {motif}"));
+                self.auto_prochain_essai = maintenant_ms() + 3_600_000;
+            }
+            Issue::Annulee => {
+                info!("sauvegarde automatique annulee");
+                self.auto_prochain_essai = maintenant_ms() + 3_600_000;
+            }
+            autre => info!("sauvegarde automatique : issue inattendue {autre:?}"),
+        }
+        self.pousser_etat();
+    }
+
+    /// Vrai si ce fil est une navigation privee.
+    fn fil_est_prive(&self, fil: ThreadId) -> bool {
+        self.session
+            .fils
+            .iter()
+            .find(|f| f.id == fil)
+            .map(|f| f.prive)
+            .unwrap_or(false)
+    }
+
+    /// Vrai si cet onglet vit dans une navigation privee (donc : rien ne se garde).
+    fn onglet_prive(&self, onglet: TabId) -> bool {
+        self.trouver(onglet)
+            .map(|o| self.fil_est_prive(o.fil))
+            .unwrap_or(false)
+    }
+
+    /// Le fil prive de la session, s'il existe encore.
+    fn fil_prive(&self) -> Option<ThreadId> {
+        self.session.fils.iter().find(|f| f.prive).map(|f| f.id)
+    }
+
+    /// Ouvre un onglet en **navigation privee** : un fil a part, un profil WebView2 jetable
+    /// (cookies et connexions propres, effaces a la fermeture), des onglets jamais ecrits dans
+    /// la session, et rien dans l'historique ni dans la memoire de lecture.
+    fn ouvrir_prive(&mut self) {
+        let fil = match self.fil_prive() {
+            Some(f) => f,
+            None => {
+                let id = self.prochain_id_fil();
+                self.session.fils.push(Fil::prive(id, maintenant_ms()));
+                info!("navigation privee : fil {id} (profil WebView2 jetable)");
+                id
+            }
+        };
+        let onglet = self.ouvrir_onglet(urls::NOUVEL_ONGLET.to_string(), Declencheur::Saisie, None);
+        self.deplacer_vers_fil(onglet, fil);
+        self.activer(onglet);
+        self.signaler("Navigation privée : onglets, cookies et historique disparaissent à la fermeture.");
+        self.marquer_modifie();
+        self.pousser_etat();
+    }
+
+    /// Efface les profils prives une fois qu'aucune webview ne les tient.
+    fn purger_prives(&mut self) {
+        let dossier = self.profil.dossier_webview2();
+        // Les webviews d'un fil prive doivent etre detruites AVANT : un dossier ouvert par le
+        // moteur ne se laisse pas effacer.
+        purger_profils_prives(&dossier);
+    }
+
     fn lancer_sauvegarde(&mut self, demande: crate::sauvegarde::Demande) {
         // Une sauvegarde doit refleter le moment du clic. La session n'est ecrite qu'a l'arret,
         // ou toutes les 8 s par le battement (voir `tick`) : sans cette materialisation, une
@@ -5681,6 +6081,11 @@ impl App {
     /// Une sauvegarde, une restauration ou un import de favoris vient de se terminer.
     fn fin_sauvegarde(&mut self, issue: crate::sauvegarde::Issue) {
         use crate::sauvegarde::Issue;
+        // Une sauvegarde automatique se juge autrement : elle n'a pas de clic derriere elle, donc
+        // pas de message a confirmer — mais un etat a tenir a jour et une rotation a faire.
+        if self.auto_en_cours.is_some() {
+            return self.fin_sauvegarde_auto(issue);
+        }
         match issue {
             Issue::Sauvegardee {
                 chemin,
@@ -5874,11 +6279,16 @@ impl App {
     // ---------------------------------------------------------------- fils cloisonnes
 
     fn cloison_du_fil(&self, fil: ThreadId) -> Option<Cloison> {
-        self.session
-            .fils
-            .iter()
-            .find(|f| f.id == fil)
-            .and_then(|f| f.cloison.clone())
+        let trouve = self.session.fils.iter().find(|f| f.id == fil);
+        // Un fil prive a TOUJOURS son propre profil : c'est ce qui isole ses connexions de
+        // celles du navigateur, et ce qui permet de tout effacer a la fermeture.
+        if trouve.map(|f| f.prive).unwrap_or(false) {
+            return Some(Cloison {
+                profil: format!("prive-{fil}"),
+                extensions: Vec::new(),
+            });
+        }
+        trouve.and_then(|f| f.cloison.clone())
     }
 
     /// Dossier d'une extension Chrome installee, active ou non dans le profil principal : une

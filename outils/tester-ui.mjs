@@ -1474,6 +1474,7 @@ async function suite() {
       ["Control+t", "nouvelOnglet"],
       ["Control+w", "fermerOnglet"],
       ["Control+Shift+t", "reouverture"],
+      ["Control+Shift+n", "prive"],
       ["Control+k", "couture"],
       ["Control+l", "couture"],
       ["Control+r", "recharger"],
@@ -2403,6 +2404,69 @@ async function suite() {
     const envoi = recus.find((m) => m.m === "sauvegardeEnregistrer");
     verifier(!!envoi, `aucun envoi : ${JSON.stringify(recus)}`);
     egal(envoi.contenus, ["reglages"], "les contenus coches partent avec la commande");
+    await p.close();
+  });
+
+  await cas("reglages : sauvegarde automatique — listes de l'hote, et chaque reglage envoie son message", async () => {
+    const p = await page("reglages.html");
+    const etat = etatDeBase();
+    etat.sauvegardeAuto = {
+      actif: true,
+      dossier: "D:\\sauvegardes",
+      heures: 12,
+      garder: 10,
+      heuresPossibles: [1, 3, 12, 24, 72, 168],
+      garderPossibles: [3, 5, 10, 20],
+      enCours: false,
+      derniere: 1795000000000,
+      fichier: "Trame-2026-11-23-10h05m07.trame",
+      erreur: "",
+      effaces: 2,
+      pret: true,
+    };
+    await pousser(p, etat);
+    await rubrique(p, "donnees");
+    egal(await p.$eval("#bascule-auto", (n) => n.className), "bascule on", "la bascule suit l'hote");
+    egal(await p.$$eval("#auto-heures option", (n) => n.length), 6, "les intervalles viennent de l'hote");
+    egal(await p.$$eval("#auto-garder option", (n) => n.length), 4, "les nombres gardes viennent de l'hote");
+    egal(await p.$eval("#auto-heures", (n) => n.value), "12", "l'intervalle en cours est selectionne");
+    egal(await p.$eval("#auto-garder", (n) => n.value), "10", "le nombre garde en cours est selectionne");
+    const derniere = await p.$eval("#c-auto-derniere", (n) => n.textContent);
+    verifier(
+      derniere.includes("Trame-2026-11-23-10h05m07.trame") && derniere.includes("2 ancienne"),
+      `la derniere sauvegarde est annoncee avec sa rotation : ${derniere}`
+    );
+    verifier(
+      (await p.$eval("#c-auto-dossier", (n) => n.textContent)).includes("sauvegardes"),
+      "le dossier choisi est annonce"
+    );
+
+    // Allumee sans dossier : l'interface doit le dire, plutot que de laisser croire que c'est
+    // en place. C'est la regle tenue cote hote (`sauvegarde_auto_prete`).
+    etat.sauvegardeAuto = { ...etat.sauvegardeAuto, dossier: "", pret: false };
+    await pousser(p, etat);
+    const sansDossier = await p.$eval("#c-auto", (n) => n.textContent);
+    verifier(sansDossier.includes("Choisissez un dossier"), `l'absence de dossier est dite : ${sansDossier}`);
+    verifier(
+      await p.$eval("#btn-auto-maintenant", (n) => n.disabled),
+      "sans dossier, « Sauvegarder maintenant » est desactive"
+    );
+    etat.sauvegardeAuto = { ...etat.sauvegardeAuto, dossier: "D:\\sauvegardes", pret: true };
+    await pousser(p, etat);
+
+    await vider(p);
+    await p.click("#bascule-auto");
+    await p.selectOption("#auto-heures", "24");
+    await p.selectOption("#auto-garder", "5");
+    await p.click("#btn-auto-dossier");
+    await p.click("#btn-auto-maintenant");
+    const recus = await messages(p);
+    const par = (m) => recus.filter((x) => x.m === m);
+    egal(par("sauvegardeAuto")[0]?.actif, false, "la bascule envoie le nouvel etat (eteinte)");
+    egal(par("sauvegardeAutoHeures")[0]?.heures, 24, "l'intervalle choisi part en heures");
+    egal(par("sauvegardeAutoGarder")[0]?.garder, 5, "le nombre a garder part");
+    egal(par("sauvegardeAutoDossier").length, 1, "le bouton dossier demande le choix");
+    egal(par("sauvegardeMaintenant").length, 1, "« Sauvegarder maintenant » envoie sa commande");
     await p.close();
   });
 

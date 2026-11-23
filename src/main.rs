@@ -29,6 +29,7 @@ mod profile;
 mod protocol;
 mod ressources;
 mod sauvegarde;
+mod sauvegarde_auto;
 mod search;
 mod shell;
 mod systeme;

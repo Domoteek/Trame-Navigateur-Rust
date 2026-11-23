@@ -1060,13 +1060,31 @@ inconnues refusées), message `railStyle`, attributs `data-rail-acces` / `data-r
 son nom (seul endroit où il se lit en style `trait`). Preuves : `tester-ui` **86/86** (quatre
 combinaisons mesurées, déplié inchangé), `cargo test` **194/194**, vrai binaire caché (réglage
 appliqué au rail, enregistré, valeur inconnue refusée).
+**0.4.51 — la sauvegarde automatique et la navigation privée.** Deux limites écrites au § 11 ont
+cessé d'en être. **Sauvegarde automatique** (`sauvegarde_auto.rs`) : une archive `.trame` dans un
+dossier choisi toutes les N heures, rotation après écriture seulement, et **seulement** sur les
+noms que Trame écrit (`Trame-AAAA-MM-JJ-HHhMMmSS.trame`, valeurs de date vérifiées : un
+`Trame-a-moi.trame` est épargné) ; sans dossier choisi, rien ne part ; l'état (`derniere_ms`,
+fichier, erreur) vit dans `sauvegarde-auto.json` et un échec n'insiste pas avant une heure.
+**Navigation privée** (`Ctrl+Maj+N`) : un fil `prive` avec son propre profil WebView2
+(`prive-<id>`), retiré de la session écrite par une fonction **pure** testée
+(`model::session_sans_prives`), sans historique ni mémoire de lecture, et purge du profil au
+démarrage suivant. Deux mesures ont conduit le code : Chromium **recrée** le dossier d'un profil
+qu'il connaît (d'où le retrait des entrées de `Local State`, et l'aveu que le dossier peut
+réapparaître **vide** — insister ne converge pas), et la purge doit passer **avant**
+`preparer_contexte`, sinon le moteur tient déjà les fichiers. Preuves : `cargo test` **204/204**
+(dont 10 neufs), `tester-ui` **87/87** (nouveau cas de la section sauvegarde automatique, et
+`Ctrl+Maj+N` dans le tableau des touches), `outils/eprouver-prive.mjs` sur le vrai binaire
+(**cookie posé dans la session privée, absent après** ; session écrite sans le fil), et un profil
+d'essai pour la sauvegarde (archive écrite, une ancienne effacée, `notes.txt` intact).
 ## 11. L'état aujourd'hui
 
 ```
-cargo test --release            194/194
-node outils/tester-ui.mjs        79/79
+cargo test --release            204/204
+node outils/tester-ui.mjs        87/87
 node outils/verifier-app.mjs     sans reseau : 24/24 (dont les scenarios `z` et `z2`, sauvegarde)
 node outils/verifier-setup.mjs   refuse (code 3) tant qu'une vraie installation existe — par conception
+node outils/eprouver-prive.mjs   navigation privee : tout tient (cookie de session privee disparu)
 ```
 
 **Ce qui reste ouvert, dit franchement :**
@@ -1083,16 +1101,21 @@ node outils/verifier-setup.mjs   refuse (code 3) tant qu'une vraie installation 
 - Chaque extension Chrome active coûte de la mémoire (service worker) : 711 Mo avec un onglet
   réveillé sans extension Chrome, 825 Mo avec uBlock Origin Lite et Dark Reader (même session).
 - Les extensions Chrome s'appliquent **aussi** au rail et à la barre (ce sont des pages web).
-- Pas de `webRequest` complet, pas de `nativeMessaging`, pas de navigation privée, pas de
-  synchronisation.
+- Pas de `webRequest` complet, pas de `nativeMessaging`, pas de synchronisation (décisions du
+  2026-11-23 : une imitation partielle de `webRequest` serait un piège, cf. `FORMAT-EXTENSION.md`).
+  La **navigation privée** et la **sauvegarde automatique**, elles, existent depuis la 0.4.51 —
+  avec une réserve mesurée : Chromium peut recréer **vide** le dossier du profil privé qu'on vient
+  de purger (il le recrée à chaque effacement), donc on ne promet pas « aucune trace de dossier »,
+  mais « aucune donnée de la session privée » — c'est le cookie qui le prouve.
 - Le **clavier** est testé dans Chromium (17 combinaisons), mais pas dans la fenêtre : piloter le
   clavier depuis un autre processus perd des frappes.
 - Le dossier **est un dépôt git** (`main`), et **il est publié depuis le 2026-11-23** :
   `https://github.com/Domoteek/Trame-Navigateur-Rust` — `main` poussé avec ses 21 étiquettes
   `v0.4.x`, et une **release GitHub** pour la 0.4.50 portant les deux livrables signés.
   Avant cette date, l'histoire était locale : `origin/main` s'arrêtait à la 0.4.38.
-- La **sauvegarde du profil est manuelle** : rien ne la planifie (pas de copie à date fixe dans
-  un dossier choisi).
+- La **sauvegarde du profil** peut être planifiée depuis la 0.4.51 (dossier, intervalle, rotation) ;
+  elle n'a pas encore été mesurée sur une longue durée (un cycle de 24 h ne s'éprouve pas en une
+  session) : ce qui est prouvé, c'est l'écriture, la rotation et l'état relu.
 - L'**import** de favoris HTML aplatit les dossiers de Chrome : un favori n'a pas de groupe dans
   le modèle, seuls les accès rapides en ont.
 

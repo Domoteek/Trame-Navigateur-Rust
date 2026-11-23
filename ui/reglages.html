@@ -759,6 +759,53 @@
             </div>
           </div>
 
+          <div class="groupe" data-mots="sauvegarde automatique planifiée dossier heure fréquence rotation garder archive">
+            <h3>Sauvegarde automatique</h3>
+            <div class="carte">
+              <p class="note" style="margin: 14px 0 0">
+                Une archive <code>.trame</code> écrite toute seule, dans un dossier à vous. Au-delà du
+                nombre choisi, les plus anciennes sont effacées <b>après</b> l'écriture de la nouvelle —
+                et seulement celles que Trame a écrites : un fichier qui ne s'appelle pas
+                <code>Trame-….trame</code> n'est jamais touché.
+              </p>
+              <div class="ligne">
+                <div class="libelle">
+                  <b>Sauvegarder le profil automatiquement</b>
+                  <span id="c-auto">Réglage non chargé.</span>
+                </div>
+                <div class="bascule" id="bascule-auto"></div>
+              </div>
+              <div class="ligne">
+                <div class="libelle">
+                  <b>Dossier</b>
+                  <span id="c-auto-dossier">Aucun dossier choisi : rien ne sera écrit.</span>
+                </div>
+                <button id="btn-auto-dossier">Choisir…</button>
+              </div>
+              <div class="ligne">
+                <div class="libelle">
+                  <b>Toutes les</b>
+                  <span>Une archive fait quelques dizaines de Ko : un intervalle court ne coûte rien.</span>
+                </div>
+                <select id="auto-heures"></select>
+              </div>
+              <div class="ligne">
+                <div class="libelle">
+                  <b>En garder</b>
+                  <span>La plus ancienne part après l'écriture de la nouvelle, jamais avant.</span>
+                </div>
+                <select id="auto-garder"></select>
+              </div>
+              <div class="ligne">
+                <div class="libelle">
+                  <b>Dernière sauvegarde</b>
+                  <span id="c-auto-derniere">Jamais.</span>
+                </div>
+                <button id="btn-auto-maintenant">Sauvegarder maintenant</button>
+              </div>
+            </div>
+          </div>
+
           <div class="groupe" data-mots="favoris importer exporter chrome edge firefox html">
             <h3>Favoris des autres navigateurs</h3>
             <div class="carte">
@@ -1415,6 +1462,7 @@
           rendreCompteurs();
           rendreBudgetSelect(etat);
           rendreSauvegarde(etat);
+          rendreSauvegardeAuto(etat);
           const nbChrome = (etat.extensionsChrome || []).length;
           const nbTrame = (etat.extensions || []).length;
           $("nb-chrome").textContent = "· " + nbChrome;
@@ -1468,8 +1516,7 @@
            case cochée qui ne sauvegarde rien serait pire que pas de case du tout. Les cases
            sont construites une fois, puis laissées telles quelles — un redessin à chaque état
            décocherait ce que l'utilisateur vient de cocher. */
-        function rendreSauvegarde(etat) {
-          const s = etat.sauvegarde || {};
+        function rendreSauvegarde(etat) {          const s = etat.sauvegarde || {};
           const zone = $("sauvegarde-contenus");
           if (!zone.dataset.pret && (s.contenus || []).length) {
             zone.dataset.pret = "1";
@@ -1501,6 +1548,52 @@
             confirmer.hidden = true;
             $("c-restauration").textContent = "Rien en attente.";
           }
+        }
+
+        /* La sauvegarde automatique : tout vient de l'hote (`etat.sauvegardeAuto`), y compris les
+           listes d'intervalles et de nombre a garder — une liste ecrite ici finirait par diverger
+           de ce que l'hote accepte. */
+        const HEURES_EN_MOTS = {
+          1: "1 heure",
+          3: "3 heures",
+          12: "12 heures",
+          24: "24 heures (1 jour)",
+          72: "72 heures (3 jours)",
+          168: "168 heures (7 jours)",
+        };
+
+        function rendreSauvegardeAuto(etat) {
+          const a = etat.sauvegardeAuto || {};
+          $("bascule-auto").className = "bascule" + (a.actif ? " on" : "");
+          $("c-auto").textContent = a.pret
+            ? "Toutes les " + a.heures + " h, dans le dossier choisi."
+            : a.actif
+              ? "Choisissez un dossier : sans dossier, rien ne sera écrit."
+              : "Coupée : rien ne se fait tout seul.";
+          $("c-auto-dossier").textContent = a.dossier || "Aucun dossier choisi : rien ne sera écrit.";
+          const heures = $("auto-heures");
+          const garder = $("auto-garder");
+          if (!heures.dataset.pret) {
+            heures.dataset.pret = "1";
+            for (const h of a.heuresPossibles || []) {
+              heures.appendChild(new Option(HEURES_EN_MOTS[h] || h + " heures", h));
+            }
+            for (const n of a.garderPossibles || []) {
+              garder.appendChild(new Option(n + " archives", n));
+            }
+          }
+          if (document.activeElement !== heures) heures.value = String(a.heures || 24);
+          if (document.activeElement !== garder) garder.value = String(a.garder || 5);
+          if (a.erreur) {
+            $("c-auto-derniere").textContent = "Dernier essai en échec : " + a.erreur;
+          } else if (a.derniere) {
+            const quand = new Date(a.derniere).toLocaleString("fr-FR");
+            $("c-auto-derniere").textContent =
+              quand + " — " + (a.fichier || "") + (a.effaces ? " (" + a.effaces + " ancienne(s) effacée(s))" : "");
+          } else {
+            $("c-auto-derniere").textContent = "Jamais.";
+          }
+          $("btn-auto-maintenant").disabled = !a.dossier;
         }
 
         const confid = (champ, valeur) => ipc({ m: "confidentialite", [champ]: valeur });
@@ -1584,6 +1677,19 @@
         $("btn-restaurer").onclick = () => ipc({ m: "sauvegardeRestaurer" });
         $("btn-restaurer-confirmer").onclick = () => ipc({ m: "sauvegardeRestaurerConfirmer" });
         $("btn-restaurer-annuler").onclick = () => ipc({ m: "sauvegardeRestaurerAnnuler" });
+
+        // ---- sauvegarde automatique
+        $("bascule-auto").onclick = () =>
+          ipc({
+            m: "sauvegardeAuto",
+            actif: !((etat && etat.sauvegardeAuto && etat.sauvegardeAuto.actif) || false),
+          });
+        $("btn-auto-dossier").onclick = () => ipc({ m: "sauvegardeAutoDossier" });
+        $("auto-heures").onchange = (e) =>
+          ipc({ m: "sauvegardeAutoHeures", heures: Number(e.target.value) });
+        $("auto-garder").onchange = (e) =>
+          ipc({ m: "sauvegardeAutoGarder", garder: Number(e.target.value) });
+        $("btn-auto-maintenant").onclick = () => ipc({ m: "sauvegardeMaintenant" });
         $("btn-favoris-exporter").onclick = () => ipc({ m: "favorisExporterHtml" });
         $("btn-favoris-importer").onclick = () => ipc({ m: "favorisImporterHtml" });
 

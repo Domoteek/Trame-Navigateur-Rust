@@ -164,6 +164,10 @@ pub struct Fil {
     /// cookies et extensions a part. `None` : le profil principal, comme tous les autres fils.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cloison: Option<Cloison>,
+    /// Fil de navigation privee : profil WebView2 jetable, jamais ecrit dans la session.
+    /// Il ne survit donc pas au redemarrage, et c'est exactement ce qu'on lui demande.
+    #[serde(default)]
+    pub prive: bool,
 }
 
 /// Ce qu'un fil cloisonne a en propre.
@@ -200,8 +204,52 @@ impl Fil {
             actif_le: now,
             replie: false,
             cloison: None,
+            prive: false,
         }
     }
+
+    /// Un fil de **navigation privee** : profil WebView2 jetable, onglets jamais ecrits dans la
+    /// session, profil efface a la fermeture. Il ne survit pas au redemarrage, par definition.
+    pub fn prive(id: ThreadId, now: u64) -> Self {
+        Fil {
+            id,
+            nom: "Navigation privée".into(),
+            auto_nom: false,
+            cree_le: now,
+            actif_le: now,
+            replie: false,
+            cloison: None,
+            prive: true,
+        }
+    }
+}
+
+/// La session telle qu'elle doit etre **ecrite sur le disque** : sans les fils prives, sans
+/// leurs onglets, et sans l'onglet actif s'il appartenait a l'un d'eux.
+///
+/// C'est une fonction pure, et c'est voulu : la regle « une navigation privee ne laisse aucune
+/// trace » se verifie alors par un test unitaire, au lieu de dependre d'un chemin de code.
+pub fn session_sans_prives(session: &Session) -> Session {
+    let prives: Vec<ThreadId> = session.fils.iter().filter(|f| f.prive).map(|f| f.id).collect();
+    if prives.is_empty() {
+        return session.clone();
+    }
+    let mut propre = session.clone();
+    propre.fils.retain(|f| !f.prive);
+    propre.onglets.retain(|o| !prives.contains(&o.fil));
+    // L'onglet actif d'un fil prive ne doit pas rester « actif » dans un fichier qui ne le
+    // contient pas : au redemarrage, Trame chercherait un onglet inexistant.
+    if propre.actif.map(|a| !propre.onglets.iter().any(|o| o.id == a)).unwrap_or(false) {
+        propre.actif = propre.onglets.first().map(|o| o.id);
+    }
+    // Le cote a cote non plus.
+    if let Some((g, d)) = propre.cote {
+        let present = |id: TabId| propre.onglets.iter().any(|o| o.id == id);
+        if !present(g) || !present(d) {
+            propre.cote = None;
+        }
+    }
+    propre
 }
 
 /// Un onglet tel qu'il est scelle dans une capsule.
@@ -380,7 +428,37 @@ pub struct Reglages {
     /// « Telechargements » de Windows.
     #[serde(default)]
     pub dossier_telechargements: String,
+    /// Sauvegarde automatique du profil : une archive `.trame` deposee dans
+    /// `dossier_sauvegardes` toutes les `sauvegarde_heures` heures, sans rien demander.
+    #[serde(default)]
+    pub sauvegarde_auto: bool,
+    /// Dossier des sauvegardes automatiques, choisi par l'utilisateur. **Vide = pas encore
+    /// choisi**, et dans ce cas rien ne part : une sauvegarde qu'on ne sait pas ou mettre ne
+    /// doit pas atterrir au hasard (le dossier de l'application serait efface par une
+    /// desinstallation).
+    #[serde(default)]
+    pub dossier_sauvegardes: String,
+    /// Intervalle entre deux sauvegardes automatiques, en heures.
+    #[serde(default = "sauvegarde_heures_defaut")]
+    pub sauvegarde_heures: u32,
+    /// Nombre de sauvegardes automatiques gardees ; au-dela, les plus anciennes sont effacees
+    /// (seulement celles que Trame a ecrites : prefixe et extension verifies).
+    #[serde(default = "sauvegarde_garder_defaut")]
+    pub sauvegarde_garder: u32,
 }
+
+fn sauvegarde_heures_defaut() -> u32 {
+    24
+}
+
+fn sauvegarde_garder_defaut() -> u32 {
+    5
+}
+
+/// Frequences proposees pour la sauvegarde automatique, en heures.
+pub const SAUVEGARDE_HEURES: [u32; 6] = [1, 3, 12, 24, 72, 168];
+/// Nombres de sauvegardes a garder proposes.
+pub const SAUVEGARDE_GARDER: [u32; 4] = [3, 5, 10, 20];
 
 fn plein_ecran_defaut() -> String {
     "fenetre".into()
@@ -485,6 +563,24 @@ fn budget_defaut() -> u32 {
 }
 
 impl Reglages {
+    /// L'intervalle de sauvegarde, ramene a une valeur raisonnable : sous l'heure on
+    /// ecraserait le disque, au-dela d'une semaine ce n'est plus une sauvegarde.
+    pub fn sauvegarde_heures_bornees(&self) -> u32 {
+        self.sauvegarde_heures.clamp(1, 168)
+    }
+
+    /// Le nombre de sauvegardes gardees, borne : zero effacerait la sauvegarde qu'on vient
+    /// d'ecrire (le contraire du but), et au-dela de 50 le dossier devient un archiveur.
+    pub fn sauvegarde_garder_bornees(&self) -> u32 {
+        self.sauvegarde_garder.clamp(1, 50)
+    }
+
+    /// Vrai si la sauvegarde automatique peut reellement tourner : l'interrupteur **et** un
+    /// dossier choisi.
+    pub fn sauvegarde_auto_prete(&self) -> bool {
+        self.sauvegarde_auto && !self.dossier_sauvegardes.trim().is_empty()
+    }
+
     /// Borne le budget : en dessous de 2, la navigation devient penible ; au-dela de 16,
     /// la veille ne sert plus a rien sur une machine a 8 Go.
     pub fn budget_borne(&self) -> usize {
@@ -542,6 +638,10 @@ impl Default for Reglages {
             lecture_exclus: Vec::new(),
             paquets_zap: Vec::new(),
             dossier_telechargements: String::new(),
+            sauvegarde_auto: false,
+            dossier_sauvegardes: String::new(),
+            sauvegarde_heures: sauvegarde_heures_defaut(),
+            sauvegarde_garder: sauvegarde_garder_defaut(),
         }
     }
 }
@@ -971,6 +1071,91 @@ pub struct Motif {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Une session privee ne laisse rien sur le disque : c'est la regle, et elle se verifie ici
+    /// plutot qu'en esperant qu'aucun chemin de code ne l'oublie.
+    #[test]
+    fn la_session_ecrite_ne_contient_aucun_onglet_prive() {
+        let mut s = Session::default();
+        s.fils.push(Fil::neuf(1, "Travail".into(), 1_000));
+        s.fils.push(Fil::prive(2, 2_000));
+        let mut public = Onglet::neuf(10, "https://a.fr/".into(), 1, Declencheur::Saisie, 1_000);
+        public.fil = 1;
+        let mut secret = Onglet::neuf(11, "https://banque.fr/".into(), 1, Declencheur::Saisie, 2_000);
+        secret.fil = 2;
+        s.onglets.push(public);
+        s.onglets.push(secret);
+        s.actif = Some(11); // l'onglet prive est celui qui est actif
+
+        let propre = session_sans_prives(&s);
+        assert_eq!(propre.fils.len(), 1, "le fil prive ne s'ecrit pas");
+        assert!(propre.fils.iter().all(|f| !f.prive));
+        assert_eq!(propre.onglets.len(), 1, "l'onglet prive ne s'ecrit pas");
+        assert_eq!(propre.onglets[0].id, 10);
+        assert_eq!(
+            propre.actif,
+            Some(10),
+            "l'onglet actif retombe sur un onglet qui existe vraiment"
+        );
+        // La session en memoire n'est pas touchee : le privé reste utilisable jusqu'a la fermeture.
+        assert_eq!(s.fils.len(), 2);
+        assert_eq!(s.onglets.len(), 2);
+    }
+
+    #[test]
+    fn une_session_sans_prive_est_rendue_telle_quelle() {
+        let mut s = Session::default();
+        s.fils.push(Fil::neuf(1, "Travail".into(), 1_000));
+        let mut o = Onglet::neuf(10, "https://a.fr/".into(), 1, Declencheur::Saisie, 1_000);
+        o.fil = 1;
+        s.onglets.push(o);
+        s.actif = Some(10);
+        let propre = session_sans_prives(&s);
+        assert_eq!(propre.fils.len(), 1);
+        assert_eq!(propre.onglets.len(), 1);
+        assert_eq!(propre.actif, Some(10));
+    }
+
+    /// Un cote a cote dont un cote etait prive est abandonne : au redemarrage, Trame
+    /// chercherait un onglet absent et refuserait d'afficher.
+    #[test]
+    fn un_cote_a_cote_prive_ne_survit_pas() {
+        let mut s = Session::default();
+        s.fils.push(Fil::prive(2, 1_000));
+        let mut a = Onglet::neuf(10, "https://a.fr/".into(), 1, Declencheur::Saisie, 1_000);
+        a.fil = 0;
+        let mut b = Onglet::neuf(11, "https://b.fr/".into(), 2, Declencheur::Saisie, 1_000);
+        b.fil = 2;
+        s.onglets.push(a);
+        s.onglets.push(b);
+        s.cote = Some((10, 11));
+        let propre = session_sans_prives(&s);
+        assert_eq!(propre.cote, None);
+    }
+
+    #[test]
+    fn les_reglages_de_sauvegarde_sont_bornes_et_pret_seulement_avec_un_dossier() {
+        let mut r = Reglages::default();
+        assert_eq!(r.sauvegarde_heures_bornees(), 24, "defaut : une fois par jour");
+        assert_eq!(r.sauvegarde_garder_bornees(), 5);
+        assert!(!r.sauvegarde_auto_prete(), "coupee par defaut");
+
+        r.sauvegarde_auto = true;
+        assert!(!r.sauvegarde_auto_prete(), "allumee sans dossier : rien ne part");
+        r.dossier_sauvegardes = "   ".into();
+        assert!(!r.sauvegarde_auto_prete(), "un dossier blanc ne compte pas");
+        r.dossier_sauvegardes = "D:\\sauvegardes".into();
+        assert!(r.sauvegarde_auto_prete());
+
+        r.sauvegarde_heures = 0;
+        assert_eq!(r.sauvegarde_heures_bornees(), 1, "zero heure martelerait le disque");
+        r.sauvegarde_heures = 10_000;
+        assert_eq!(r.sauvegarde_heures_bornees(), 168);
+        r.sauvegarde_garder = 0;
+        assert_eq!(r.sauvegarde_garder_bornees(), 1, "garder zero effacerait tout");
+        r.sauvegarde_garder = 999;
+        assert_eq!(r.sauvegarde_garder_bornees(), 50);
+    }
 
     #[test]
     fn le_budget_s_adapte_a_la_memoire_libre_sans_depasser_le_plafond() {

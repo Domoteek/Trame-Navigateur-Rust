@@ -229,6 +229,8 @@
       else if (e.key === "F12") action = "devtools";
       else if (e.key === "Escape") action = "arret";
       else if (ctrl && e.shiftKey && k === "t") action = "reouverture";
+      // Navigation privee : Ctrl+Maj+N, comme les autres navigateurs.
+      else if (ctrl && e.shiftKey && k === "n") action = "prive";
       else if (ctrl && k === "t") action = "nouvelOnglet";
       else if (ctrl && k === "w") action = "fermerOnglet";
       else if (ctrl && k === "l") action = "couture";

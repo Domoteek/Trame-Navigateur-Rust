@@ -1185,6 +1185,11 @@ impl App {
             return;
         }
         let Some(o) = self.actif.and_then(|id| self.trouver(id)) else { return };
+        // Une navigation privee ne laisse rien dans la memoire de lecture.
+        if self.fil_est_prive(o.fil) {
+            self.lecture_vue = None;
+            return;
+        }
         let (id, url, chargement, domaine) = (o.id, o.url.clone(), o.chargement, o.domaine());
         match &self.lecture_vue {
             Some((t, u, _)) if *t == id && *u == url => {}
@@ -1216,6 +1221,10 @@ impl App {
         let Some(texte) = v["texte"].as_str() else { return };
         // L'onglet a pu changer de page entre la demande et la reponse.
         if self.trouver(onglet).map(|o| o.url != url).unwrap_or(true) {
+            return;
+        }
+        // Ni basculer dans une navigation privee pendant l'aller-retour.
+        if self.onglet_prive(onglet) {
             return;
         }
         let lecture = carnet::Lecture {
