@@ -139,23 +139,41 @@ function rendreFenetre(s) {
     styleFenetre = style;
     document.body.dataset.fenetre = style;
   }
-  // Teinte de la coquille (reglages > Apparence). On pose la variable CSS a la main : elle
-  // existe deja dans :root, donc rien d'autre a toucher. « defaut » la retire, et l'aspect
-  // d'origine revient tel quel.
+  // Teinte de la coquille (reglages > Apparence). On pose les variables CSS a la main : elles
+  // existent deja dans :root, donc rien a toucher d'autre. « defaut » les retire, et l'aspect
+  // d'origine revient exactement.
+  //
+  // `--surface` compte autant que `--accent` : c'est lui qui peint les cartes du rail, les
+  // onglets et les panneaux. Sans lui, la teinte ne changeait que trois icones — constate par
+  // Clement, 2026-11-23 : « les modifications sont minimes ».
   const TEINTES = {
-    menthe: "#34d399",
-    ciel: "#60a5fa",
-    violet: "#a78bfa",
-    ambre: "#fbbf24",
-    ardoise: "#94a3b8",
+    menthe: { accent: "#34d399", accent2: "#6ee7b7", surface: "#0d1a18" },
+    ciel: { accent: "#60a5fa", accent2: "#a78bfa", surface: "#101521" },
+    violet: { accent: "#a78bfa", accent2: "#f0abfc", surface: "#161027" },
+    ambre: { accent: "#fbbf24", accent2: "#fde68a", surface: "#1a1408" },
+    ardoise: { accent: "#94a3b8", accent2: "#cbd5e1", surface: "#14181f" },
+  };
+  const poser = (nom, valeur) => {
+    if (valeur) document.documentElement.style.setProperty(nom, valeur);
+    else document.documentElement.style.removeProperty(nom);
   };
   const teinte = (s && s.theme) || "defaut";
   if (teinte === "dynamique") {
-    // La couleur du site, quand il en annonce une ; sinon l'aspect d'origine.
-    if (s && s.teinteSite) document.documentElement.style.setProperty("--accent", s.teinteSite);
-    else document.documentElement.style.removeProperty("--accent");
-  } else if (TEINTES[teinte]) document.documentElement.style.setProperty("--accent", TEINTES[teinte]);
-  else document.documentElement.style.removeProperty("--accent");
+    // La couleur du site quand il en annonce une ; sinon l'aspect d'origine. On ne touche pas
+    // aux surfaces : une couleur de site en fond de navigateur casserait le contraste.
+    const site = s && s.teinteSite;
+    poser("--accent", site || null);
+    poser("--accent-2", site || null);
+    poser("--surface", null);
+  } else if (TEINTES[teinte]) {
+    poser("--accent", TEINTES[teinte].accent);
+    poser("--accent-2", TEINTES[teinte].accent2);
+    poser("--surface", TEINTES[teinte].surface);
+  } else {
+    poser("--accent", null);
+    poser("--accent-2", null);
+    poser("--surface", null);
+  }
   if (agrandie !== fenetreAgrandie) {
     fenetreAgrandie = agrandie;
     if (agrandie) document.body.dataset.agrandie = "1";
