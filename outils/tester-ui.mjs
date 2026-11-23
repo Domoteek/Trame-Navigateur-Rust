@@ -445,6 +445,35 @@ async function suite() {
     await p.close();
   });
 
+  await cas("rail : les infobulles sont dessinees par Trame, pas par Windows", async () => {
+    const p = await page("chrome.html", { query: "?surface=rail" });
+    await p.setViewportSize({ width: 340, height: 700 });
+    const etat = etatDeBase();
+    etat.fils = [{ id: 1, nom: "Occt Download", replie: false }];
+    etat.onglets = [onglet(1, 1, "Page", "https://a.fr/")];
+    await pousser(p, etat);
+    await p.hover(".fil-nom");
+    await p.waitForSelector(".bulle.visible", { timeout: 2000 });
+    egal(await p.$eval(".bulle-geste", (n) => n.textContent), "Double-clic", "le geste en pastille");
+    egal(await p.$eval(".bulle-titre", (n) => n.textContent), "Renommer", "l'action en clair");
+    egal(await p.$eval(".fil-nom", (n) => n.getAttribute("title")), null, "plus de bulle native");
+    const r = await p.$eval(".bulle", (n) => n.getBoundingClientRect().toJSON());
+    verifier(r.left >= 8 && r.right <= 332, `la bulle reste dans le rail (${r.left}..${r.right})`);
+    if (process.env.TRAME_CAPTURES) await p.screenshot({ path: `${process.env.TRAME_CAPTURES}/bulle-nom.png`, clip: { x: 0, y: 0, width: 340, height: 330 } });
+    // Titre a explication : l'action en gras, le detail en dessous.
+    await p.mouse.move(5, 690);
+    await p.waitForSelector(".bulle:not(.visible)");
+    await p.hover(".fil-outils button");
+    await p.waitForSelector(".bulle.visible .bulle-detail", { timeout: 2000 });
+    if (process.env.TRAME_CAPTURES) await p.screenshot({ path: `${process.env.TRAME_CAPTURES}/bulle-detail.png`, clip: { x: 0, y: 0, width: 340, height: 330 } });
+    // Rail replie : la bulle native revient, une bulle dessinee serait coupee.
+    await p.mouse.move(5, 690);
+    await p.setViewportSize({ width: 64, height: 700 });
+    await p.hover("#btn-rail");
+    egal(await p.$eval("#btn-rail", (n) => !!n.getAttribute("title")), true, "title rendu au rail replie");
+    await p.close();
+  });
+
   await cas("rail : tout clic dans le rail ferme le panneau de la barre", async () => {
     const p = await page("chrome.html", { query: "?surface=rail" });
     await pousser(p, etatDeBase());
