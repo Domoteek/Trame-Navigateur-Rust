@@ -4986,13 +4986,13 @@ impl App {
             return;
         };
         info!("mise a jour : {} disponible ({})", nouveaute.version, nouveaute.url);
-        // On PROPOSE, on ne telecharge pas : c'est a Clement de valider (reglages > Mises a jour).
-        self.signaler(&format!(
-            "Trame {} est disponible — Réglages (Ctrl+,) puis « Mises à jour ».",
-            nouveaute.version
-        ));
+        // On PROPOSE, on ne telecharge pas — et on ne compte pas sur un toast discret : la page
+        // des reglages s'ouvre sur la section des mises a jour, avec la version et le bouton.
+        // C'est ce que Clement a demande : le voir, decider, puis suivre le telechargement.
+        self.signaler(&format!("Trame {} est disponible.", nouveaute.version));
         self.maj = Some(nouveaute);
         self.pousser_etat();
+        self.ouvrir_reglages();
     }
 
     /// Relit la fiche produit (bouton « Verifier maintenant » des reglages).
