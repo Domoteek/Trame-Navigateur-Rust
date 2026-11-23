@@ -218,6 +218,9 @@ pub struct App {
     dossier_dl: std::rc::Rc<std::cell::RefCell<PathBuf>>,
     /// Couleur annoncee par la page visible (`<meta name="theme-color">`), en mode dynamique.
     teinte_site: Option<String>,
+    /// Un « Installer » a lance le telechargement : on enchaine sur l'installation des qu'il est
+    /// complet, sans redemander un second clic.
+    maj_a_installer: bool,
     /// Version plus recente annoncee par la fiche produit, si elle a ete lue.
     maj: Option<crate::maj::Nouveaute>,
     zap_ouvert: bool,
@@ -604,6 +607,7 @@ impl App {
             telechargements: Vec::new(),
             dossier_dl: std::rc::Rc::new(std::cell::RefCell::new(PathBuf::new())),
             teinte_site: None,
+            maj_a_installer: false,
             maj: None,
             zap_ouvert: false,
             panneau_extension: None,
@@ -4124,6 +4128,7 @@ impl App {
             | "ouvrirTelechargements" => self.commande_telechargement(m, &v),
             "majVerifier" => self.verifier_maj(),
             "majInstaller" => self.installer_maj(),
+            "majPlusTard" => info!("mise a jour : remise a plus tard (proposition gardee dans les reglages)"),
             "theme" => {
                 let voulu = v["valeur"].as_str().unwrap_or("defaut").to_string();
                 if voulu != self.reglages.theme {
@@ -4985,14 +4990,38 @@ impl App {
             info!("mise a jour : rien de plus recent que {}", crate::maj::ACTUELLE);
             return;
         };
-        info!("mise a jour : {} disponible ({})", nouveaute.version, nouveaute.url);
-        // On PROPOSE, on ne telecharge pas — et on ne compte pas sur un toast discret : la page
-        // des reglages s'ouvre sur la section des mises a jour, avec la version et le bouton.
-        // C'est ce que Clement a demande : le voir, decider, puis suivre le telechargement.
-        self.signaler(&format!("Trame {} est disponible.", nouveaute.version));
-        self.maj = Some(nouveaute);
+        // Deuxieme passage (voir plus bas) : la version est deja connue, on ne reannonce rien.
+        let deja = self.maj.as_ref().map(|m| m.version == nouveaute.version).unwrap_or(false);
+        self.maj = Some(nouveaute.clone());
         self.pousser_etat();
-        self.ouvrir_reglages();
+        if !deja {
+            info!("mise a jour : {} disponible ({})", nouveaute.version, nouveaute.url);
+            self.signaler(&format!("Trame {} est disponible.", nouveaute.version));
+        }
+        let js = popup_maj(&nouveaute.version, crate::maj::ACTUELLE);
+        match self.actif {
+            Some(id) => {
+                info!("mise a jour : popup pose dans l'onglet {id}");
+                self.eval_sur(Source::Onglet(id), &js);
+            }
+            None if !deja => {
+                // Au demarrage, la session restaure encore ses onglets : aucun n'est actif au
+                // moment ou la fiche repond (constate le 2026-11-23). On repasse dans 4 s, SANS
+                // reinterroger le reseau — la fiche nous a deja repondu.
+                info!("mise a jour : aucun onglet actif, nouvelle tentative dans 4 s");
+                let proxy = self.proxy.clone();
+                let rappel = nouveaute.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                    let _ = proxy.send_event(UserEvent::Maj(Some(rappel)));
+                });
+            }
+            None => {
+                // Toujours rien : la page des reglages reste le repli, et la proposition y vit.
+                info!("mise a jour : aucun onglet actif, ouverture des reglages");
+                self.ouvrir_reglages();
+            }
+        }
     }
 
     /// Relit la fiche produit (bouton « Verifier maintenant » des reglages).
@@ -5022,7 +5051,11 @@ impl App {
             .find(|t| t.url == maj.url && t.etat == "termine")
             .cloned();
         let Some(telechargement) = deja else {
-            self.signaler("La mise à jour n'est pas encore téléchargée : elle commence.");
+            // Un seul clic doit suffire : le telechargement part, et `suivre_telechargements`
+            // enchaine l'installation des qu'il est complet.
+            self.maj_a_installer = true;
+            self.signaler("Téléchargement de la mise à jour…");
+            info!("mise a jour : telechargement lance par « Installer »");
             self.ouvrir_onglet(maj.url.clone(), Declencheur::Lien, None);
             return;
         };
@@ -5073,6 +5106,25 @@ impl App {
         for (id, recu) in clos {
             info!("telechargement {id} : fin deduite du fichier (le moteur n'a rien signale)");
             self.telechargement_etat(id, true, false, false, 0, recu);
+        }
+        // Le setup d'une mise a jour vient d'arriver : on enchainee sur l'installation.
+        if self.maj_a_installer {
+            let pret = self.maj.as_ref().and_then(|m| {
+                self.telechargements
+                    .iter()
+                    .find(|t| t.url == m.url && t.etat == "termine")
+                    .map(|t| (t.chemin.clone(), m.version.clone()))
+            });
+            if let Some((chemin, version)) = pret {
+                self.maj_a_installer = false;
+                if Path::new(&chemin).exists() {
+                    info!("mise a jour : installation de {version} ({chemin})");
+                    let _ = std::process::Command::new(&chemin)
+                        .args(["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/CURRENTUSER"])
+                        .spawn();
+                    self.signaler(&format!("Installation de Trame {version}…"));
+                }
+            }
         }
     }
 
@@ -6187,8 +6239,53 @@ const ZAP_VIVANT_JS: &str = include_str!("../ui/zap-vivant.js");
 /// il est embarque a la compilation et teste par `outils/tester-ui.mjs` (vraies frappes).
 const RACCOURCIS: &str = include_str!("../ui/raccourcis.js");
 
-/// La couleur annoncee par une page est-elle une couleur CSS raisonnable ?
+/// Le popup d'annonce d'une mise a jour, injecte dans l'onglet actif.
 ///
+/// Pourquoi pas une fenetre a part : Trame n'en cree aucune (une seule `WindowBuilder`, celle de
+/// la fenetre principale, dans `main.rs`). Un onglet ou un panneau se manque ; un cadre pose
+/// au-dessus de la page, non. Les deux boutons passent par le pont des pages, deja eprouve par
+/// la pastille video.
+const POPUP_MAJ: &str = r#"(function () {
+  var id = 'trame-popup-maj';
+  var ancien = document.getElementById(id);
+  if (ancien) ancien.remove();
+  var boite = document.createElement('div');
+  boite.id = id;
+  boite.setAttribute('style', 'position:fixed;z-index:2147483647;right:22px;bottom:22px;width:340px;padding:18px 20px;border-radius:14px;background:#121722;color:#e9eefa;font:14px system-ui;box-shadow:0 18px 50px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.16)');
+  var titre = document.createElement('div');
+  titre.textContent = 'Une nouvelle version de Trame est disponible';
+  titre.setAttribute('style', 'font-weight:600;font-size:14.5px;margin-bottom:7px;line-height:1.3');
+  var detail = document.createElement('div');
+  detail.textContent = 'Trame __VERSION__  ·  installée : __ACTUELLE__';
+  detail.setAttribute('style', 'font-size:12.5px;color:#9fb0c9;margin-bottom:15px');
+  var rangee = document.createElement('div');
+  rangee.setAttribute('style', 'display:flex;gap:10px;justify-content:flex-end');
+  function bouton(texte, fond, message) {
+    var b = document.createElement('button');
+    b.textContent = texte;
+    b.setAttribute('style', 'padding:8px 15px;border-radius:9px;border:1px solid rgba(255,255,255,.18);background:' + fond + ';color:#fff;font-size:13px;cursor:pointer');
+    b.onclick = function () {
+      boite.remove();
+      try { window.ipc.postMessage(JSON.stringify({ m: message })); } catch (e) {}
+    };
+    rangee.appendChild(b);
+  }
+  bouton('Plus tard', '#1c2433', 'majPlusTard');
+  bouton('Installer', '#2563eb', 'majInstaller');
+  boite.appendChild(titre);
+  boite.appendChild(detail);
+  boite.appendChild(rangee);
+  (document.body || document.documentElement).appendChild(boite);
+})();"#;
+
+/// Le popup, avec les deux versions ecrites dedans.
+fn popup_maj(disponible: &str, actuelle: &str) -> String {
+    POPUP_MAJ
+        .replace("__VERSION__", disponible)
+        .replace("__ACTUELLE__", actuelle)
+}
+
+/// La couleur annoncee par une page est-elle une couleur CSS raisonnable ?
 /// On ne l'injecte pas telle quelle dans le style de la coquille : une page ne doit pas pouvoir
 /// y poser n'importe quoi.
 fn couleur_valide(valeur: &str) -> bool {
