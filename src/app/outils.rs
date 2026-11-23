@@ -600,6 +600,25 @@ impl App {
                 }
                 true
             }
+            "bulle" => {
+                // Infobulle du rail replie : 64 px de large, il ne peut pas la dessiner. La barre
+                // la pose en carte a droite de l'icone (`ui/bulles.js`, `carte`), dans la colonne
+                // de son panneau. `y` : meme repere que la barre. `h` : hauteur de la fenetre, pour
+                // que la carte d'une icone basse remonte au lieu de deborder. Sans `texte` : la cacher.
+                let echelle = self.window.scale_factor();
+                let h = (self.window.inner_size().height as f64 / echelle).round();
+                let b = serde_json::json!({
+                    "texte": v["texte"].as_str().unwrap_or(""),
+                    "y": v["y"].as_f64().unwrap_or(0.0),
+                    "h": h,
+                });
+                if let Some(barre) = &self.barre {
+                    let _ = barre.evaluate_script(&format!(
+                        "window.trame && window.trame.bulle && window.trame.bulle({b})"
+                    ));
+                }
+                true
+            }
             "menuCommandes" => {
                 // Clic droit sur le logo du rail : la liste des commandes. Rail deplie (`ici`) :
                 // le rail la dessine sous le logo. Rail replie (64 px) : la barre la dessine.

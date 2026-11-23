@@ -107,6 +107,47 @@ async function principale() {
     await cdp.attendre(`innerHeight === ${base}`, { delai: 5000, quoi: "la barre revient" }).catch(() => {});
     const apres = await cdp.evaluer("innerHeight");
     dire(apres === base, `la barre revient à ${apres} px`);
+
+    // Rail replie : 64 px, la bulle part a la barre (message `bulle` relaye par l'hote), qui la
+    // pose en carte juste a droite de l'icone.
+    const rail = await connecter((await attendreCible(PORT, "surface=rail")).webSocketDebuggerUrl);
+    try {
+      await rail.envoyer("Runtime.enable");
+      await rail.evaluer(`window.ipc.postMessage(JSON.stringify({ m: "rail" }))`);
+      await rail.attendre(`innerWidth < 130`, { delai: 5000, quoi: "le rail se replie" });
+      await pause(800);
+      const icone = await rail.evaluer(`(() => {
+        const e = [...document.querySelectorAll("[title], [data-bulle]")]
+          .filter((n) => n.offsetParent !== null)
+          .map((n) => ({ n, r: n.getBoundingClientRect() }))
+          .find((x) => x.r.top > 120 && x.r.width > 10);
+        return e && { x: Math.round(e.r.left + e.r.width / 2), y: Math.round(e.r.top + e.r.height / 2), top: Math.round(e.r.top), texte: e.n.title || e.n.dataset.bulle };
+      })()`);
+      dire(!!icone, `icône du rail replié à survoler ${JSON.stringify(icone)}`);
+      if (icone) {
+        await rail.envoyer("Input.dispatchMouseEvent", { type: "mouseMoved", x: icone.x, y: icone.y, buttons: 0 });
+        await cdp.attendre(`innerHeight >= 150 && document.querySelector(".trame-bulle.visible.carte")`, { delai: 5000, quoi: "carte du rail" }).catch(() => {});
+        const vue = await cdp.evaluer(`(() => {
+          const b = document.querySelector(".trame-bulle");
+          const r = b.getBoundingClientRect();
+          const contenu = [...b.children].reduce((m, c) => Math.max(m, c.getBoundingClientRect().bottom), 0);
+          return { h: innerHeight, classe: b.className, gauche: Math.round(r.left), haut: Math.round(r.top), bas: Math.round(contenu), titre: b.querySelector(".b-titre")?.textContent };
+        })()`);
+        dire(/visible/.test(vue.classe) && /carte/.test(vue.classe), `la barre dessine la carte ${JSON.stringify(vue)}`);
+        dire(vue.gauche <= 10 && vue.haut <= icone.top + 2 && vue.haut > base, "collée au rail, à la hauteur de l'icône ou remontée");
+        dire(vue.bas <= vue.h, `tout le texte tient dans la fenêtre (bas ${vue.bas} ≤ ${vue.h})`);
+        if (CAPTURE) {
+          const img = await cdp.envoyer("Page.captureScreenshot", { format: "png" });
+          fs.writeFileSync(CAPTURE.replace(/\.png$/, "-rail.png"), Buffer.from(img.data, "base64"));
+        }
+        // Hors du rail (au-dela de ses 64 px) : aucune autre icone ne prend le relais.
+        await rail.envoyer("Input.dispatchMouseEvent", { type: "mouseMoved", x: 300, y: icone.y, buttons: 0 });
+        await cdp.attendre(`innerHeight === ${base}`, { delai: 5000, quoi: "la barre revient" }).catch(() => {});
+        dire((await cdp.evaluer("innerHeight")) === base, "la souris partie, la barre revient");
+      }
+    } finally {
+      rail.fermer();
+    }
   } catch (e) {
     dire(false, e.message);
   } finally {

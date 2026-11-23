@@ -96,6 +96,12 @@ window.trame = {
     if (surface !== "barre") return;
     ouvrirMenuPage(ancre);
   },
+  /** Bulle du rail replie, relayee par l'hote (message `bulle`) : `texte` vide = la cacher. */
+  bulle(b) {
+    if (surface !== "barre" || !window.__trameBulles) return;
+    if (b && b.texte) window.__trameBulles.carte(b.texte, b.y || 0, b.h || 0);
+    else window.__trameBulles.cacher();
+  },
   menuCommandes(liste) {
     if (surface === "rail") ouvrirCommandesRail(liste || []);
     else ouvrirMenuCommandes(liste || []);
@@ -2243,8 +2249,15 @@ function brancherRail() {
 if (surface === "rail") {
   document.getElementById("rail").hidden = false;
   brancherRail();
-  // Rail replie (64 px) : une bulle dessinee serait coupee par le bord de la webview.
-  TrameBulles.brancher({ natif: () => window.innerWidth < 130 });
+  // Rail replie (64 px) : une bulle dessinee ici serait coupee par le bord de la webview. C'est
+  // la barre qui la dessine, en carte juste a droite de l'icone (l'hote relaie `bulle`).
+  TrameBulles.brancher({
+    deleguer: {
+      actif: () => window.innerWidth < 130,
+      montrer: (r, texte) => ipc({ m: "bulle", texte, y: Math.round(r.top) }),
+      cacher: () => ipc({ m: "bulle" }),
+    },
+  });
 } else {
   document.getElementById("barre").hidden = false;
   brancherBarre();

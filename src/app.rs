@@ -3554,7 +3554,9 @@ impl App {
         // Fermer le panneau des que l'utilisateur agit ailleurs que dans la barre.
         // Un clic dans la page ne retirait pas le focus de la barre (deux webviews voisines),
         // donc `window.blur` ne suffisait pas : le panneau restait ouvert par-dessus la page.
-        if self.panneau_ouvert && !matches!(source, Source::Barre) {
+        // Sauf une infobulle du rail replie : survoler une icone n'est pas agir, et c'est justement
+        // la barre qui va la dessiner dans son panneau.
+        if self.panneau_ouvert && !matches!(source, Source::Barre) && m != "bulle" {
             self.panneau_ouvert = false;
             self.appliquer_geometrie();
             self.pousser_etat();

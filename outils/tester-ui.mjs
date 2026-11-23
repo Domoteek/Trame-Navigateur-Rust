@@ -466,11 +466,12 @@ async function suite() {
     await p.hover(".fil-outils button");
     await p.waitForSelector(".trame-bulle.visible .b-detail", { timeout: 2000 });
     if (process.env.TRAME_CAPTURES) await p.screenshot({ path: `${process.env.TRAME_CAPTURES}/bulle-detail.png`, clip: { x: 0, y: 0, width: 340, height: 330 } });
-    // Rail replie : la bulle native revient, une bulle dessinee serait coupee.
+    // Rail replie : rien n'est dessine ici (ce serait coupe), la bulle part a la barre.
     await p.mouse.move(5, 690);
     await p.setViewportSize({ width: 64, height: 700 });
     await p.hover("#btn-rail");
-    egal(await p.$eval("#btn-rail", (n) => !!n.getAttribute("title")), true, "title rendu au rail replie");
+    await p.waitForTimeout(600);
+    egal(await p.$eval(".trame-bulle", (n) => n.classList.contains("visible")), false, "rien de dessine dans le rail replie");
     await p.close();
   });
 
@@ -505,6 +506,38 @@ async function suite() {
     await p.waitForSelector(".trame-bulle:not(.visible)");
     verifier((await messages(p)).some((m) => m.m === "panneau" && m.open === false), "la carte est rendue a l'hote");
     await p.close();
+  });
+
+  await cas("rail replie : la bulle part a la barre, qui la pose a cote de l'icone", async () => {
+    const r = await page("chrome.html", { query: "?surface=rail" });
+    await r.setViewportSize({ width: 64, height: 700 });
+    await pousser(r, etatDeBase());
+    await vider(r);
+    await r.hover("#btn-rail");
+    await r.waitForFunction(() => window.__ipc.some((m) => m.m === "bulle" && m.texte), null, { timeout: 2000 });
+    const envoi = (await messages(r)).find((m) => m.m === "bulle" && m.texte);
+    verifier(/Déplier/.test(envoi.texte) && typeof envoi.y === "number", `texte et hauteur envoyes ${JSON.stringify(envoi)}`);
+    egal(await r.$eval("#btn-rail", (n) => n.getAttribute("title")), null, "plus de bulle native");
+    await r.mouse.move(32, 690);
+    await r.waitForFunction(() => window.__ipc.some((m) => m.m === "bulle" && !m.texte), null, { timeout: 2000 });
+    await r.close();
+
+    const b = await page("chrome.html", { query: "?surface=barre" });
+    await pousser(b, etatDeBase());
+    await b.setViewportSize({ width: 1200, height: 45 });
+    await vider(b);
+    await b.evaluate(() => window.trame.bulle({ texte: "Youtube\nhttps://www.youtube.com/\nClic : nouvel onglet · clic droit : modifier · glisser : ranger", y: 160 }));
+    await b.waitForSelector(".trame-bulle.visible.carte", { timeout: 2000 });
+    const demande = (await messages(b)).find((m) => m.m === "panneau" && m.open);
+    verifier(demande && demande.zone.y === 160 && demande.zone.x === 6, `carte a cote de l'icone ${JSON.stringify(demande)}`);
+    egal(await b.$$eval(".trame-bulle .b-pied .b-geste", (l) => l.map((n) => n.textContent).join(",")), "Clic,Clic droit,Glisser", "trois gestes en pied");
+    await b.setViewportSize({ width: 1200, height: demande.hauteur });
+    if (process.env.TRAME_CAPTURES) await b.screenshot({ path: `${process.env.TRAME_CAPTURES}/bulle-rail-replie.png`, clip: { x: 0, y: 140, width: 420, height: demande.hauteur - 140 } });
+    await vider(b);
+    await b.evaluate(() => window.trame.bulle({}));
+    await b.waitForSelector(".trame-bulle:not(.visible)");
+    verifier((await messages(b)).some((m) => m.m === "panneau" && m.open === false), "la carte est rendue");
+    await b.close();
   });
 
   await cas("reglages : les infobulles des pages internes sont celles de Trame", async () => {
@@ -1934,9 +1967,9 @@ async function suite() {
       };
     });
     verifier(pied.droite <= 64 && pied.anneau && /%$/.test(pied.jauge) && !pied.texte, `replié : icône sans texte, jauge en anneau ${JSON.stringify(pied)}`);
-    // Le title revient a Windows a l'evenement `resize`, qui suit le changement de taille.
-    await r.waitForFunction(() => !!document.getElementById("btn-veille").getAttribute("title"), null, { timeout: 2000 }).catch(() => {});
-    verifier(((await r.getAttribute("#btn-veille", "title")) || "").includes("éveillé"), "l'anneau donne le détail au survol");
+    // Le detail vit dans le title, ou dans data-bulle une fois survole (bulles.js le deplace).
+    const detail = await r.$eval("#btn-veille", (n) => n.getAttribute("title") || n.dataset.bulle || "");
+    verifier(detail.includes("éveillé"), "l'anneau donne le détail au survol");
   });
 
   await cas("rail replié en dock : fils colorés, tuiles de 44 px, fil fermé en pile", async () => {

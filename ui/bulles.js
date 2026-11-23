@@ -17,7 +17,9 @@
  * accepte deux echappatoires :
  *   `natif()`  vrai : on rend le `title` a Windows (rail replie, 64 px de large) ;
  *   `hote`     { montrer(rect, hauteur) → bool, cacher() } : l'hote agrandit la webview le temps
- *              de la bulle (la barre, via la colonne de son panneau).
+ *              de la bulle (la barre, via la colonne de son panneau) ;
+ *   `deleguer` { actif() → bool, montrer(rect, texte), cacher() } : une autre webview dessine
+ *              (rail replie : la barre pose la carte a cote de l'icone, `carte(texte, y)`).
  */
 (function () {
   const GESTE = /^(Double-clic|Clic droit|Clic du milieu|Clic|Glisser|Cliquer)\s+pour\s+(.+)$/i;
@@ -170,6 +172,7 @@
     let minuterie = 0;
     let vueA = 0; // derniere fermeture : d'une bulle a la voisine, pas de nouveau delai
     let chezHote = false;
+    let delegue = false;
 
     const texteDe = (e) => {
       if (e.title) {
@@ -187,6 +190,15 @@
       if (bulle.classList.contains("visible")) vueA = performance.now();
       cible = null;
       bulle.classList.remove("visible");
+      if (delegue) {
+        delegue = false;
+        vueA = performance.now(); // d'une icone a la voisine, pas de nouveau delai
+        try {
+          options.deleguer.cacher();
+        } catch (e) {
+          /* l'hote est parti */
+        }
+      }
       if (chezHote) {
         chezHote = false;
         try {
@@ -225,22 +237,47 @@
         if (r.right + 10 + b.width <= L - MARGE) return poser(r.right + 10, y, "cote"), true;
       }
       // 3. L'hote agrandit la webview : une carte detachee sous la barre.
-      if (options.hote) {
-        const haut = Math.ceil(H) + 6;
-        const montre = options.hote.montrer({ x, l: Math.ceil(b.width), y: haut }, Math.ceil(b.height));
-        if (montre) {
-          chezHote = true;
-          poser(x, haut, "carte");
-          bulle.style.height = `${montre - haut}px`;
-          return true;
-        }
-      }
-      return false;
+      return enCarte(x, Math.ceil(H) + 6);
+    }
+
+    /** Carte sous la barre, a partir de `haut` (jamais plus haut que la barre elle-meme). */
+    function enCarte(x, haut) {
+      if (!options.hote) return false;
+      const H = window.innerHeight;
+      haut = Math.max(Math.ceil(H) + 6, Math.round(haut));
+      bulle.style.height = "";
+      const b = bulle.getBoundingClientRect();
+      const montre = options.hote.montrer({ x: Math.round(x), l: Math.ceil(b.width), y: haut }, Math.ceil(b.height));
+      if (!montre) return false;
+      chezHote = true;
+      poser(x, haut, "carte");
+      bulle.style.height = `${montre - haut}px`;
+      return true;
+    }
+
+    /** Carte demandee par une autre webview (le rail replie) : `y` dans le repere de la fenetre,
+     *  `fenetre` sa hauteur — une icone du bas fait remonter la carte au lieu de la couper. */
+    function carte(texte, y, fenetre) {
+      cacher();
+      if (!texte) return;
+      remplir(bulle, texte);
+      bulle.style.left = "0px";
+      bulle.style.top = "0px";
+      bulle.style.height = "";
+      if (fenetre > 0) y = Math.min(y, fenetre - bulle.getBoundingClientRect().height - MARGE);
+      if (!enCarte(6, y)) return;
+      void bulle.offsetWidth;
+      bulle.classList.add("visible");
     }
 
     function montrer(e) {
       const texte = texteDe(e);
       if (!texte || !e.isConnected) return;
+      if (options.deleguer && options.deleguer.actif()) {
+        delegue = true;
+        options.deleguer.montrer(e.getBoundingClientRect(), texte);
+        return;
+      }
       remplir(bulle, texte);
       bulle.classList.remove("visible");
       if (!placer(e)) {
@@ -281,7 +318,7 @@
       }
     });
 
-    window.__trameBulles = { cacher, remplir: (t) => remplir(bulle, t), element: bulle };
+    window.__trameBulles = { cacher, carte, remplir: (t) => remplir(bulle, t), element: bulle };
     return window.__trameBulles;
   }
 
