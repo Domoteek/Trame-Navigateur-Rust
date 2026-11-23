@@ -1201,6 +1201,49 @@ async function suite() {
     await p.close();
   });
 
+  await cas("rail replié : le clic droit sur un accès ouvre son menu, dessiné par la barre", async () => {
+    const r = await page("chrome.html", { query: "?surface=rail" });
+    await r.setViewportSize({ width: 64, height: 700 });
+    const etat = etatDeBase();
+    etat.carnet = Object.assign({}, etat.carnet, {
+      acces: [{ url: "https://www.youtube.com/", titre: "Youtube", domaine: "youtube.com", groupe: "Loisirs", rail: true, icone: null, ouvert: null }],
+      accesGroupes: [],
+    });
+    await pousser(r, etat);
+    await vider(r);
+    await r.click("#bande-acces .acces:not(.ajout):not(.libre)", { button: "right" });
+    const envoi = (await messages(r)).find((m) => m.m === "menuAcces");
+    verifier(envoi && envoi.acces.url === "https://www.youtube.com/" && envoi.acces.groupe === "Loisirs" && typeof envoi.y === "number", `menuAcces envoyé ${JSON.stringify(envoi)}`);
+    verifier(!(await messages(r)).some((m) => m.m === "nouvelOnglet"), "plus de Nouvel onglet à la place du menu");
+    await r.close();
+
+    const b = await page("chrome.html", { query: "?surface=barre" });
+    await pousser(b, etatDeBase());
+    await vider(b);
+    await b.evaluate(() => window.trame.menuAcces({ acces: { titre: "Youtube", url: "https://www.youtube.com/", groupe: "Loisirs" }, y: 300, h: 800 }));
+    await b.waitForSelector("#menu-commandes .menu-acces-rail.dans-barre", { timeout: 2000 });
+    await b.waitForFunction(() => window.__ipc.some((m) => m.m === "panneau" && m.open && m.zone && m.zone.y > 0), null, { timeout: 2000 });
+    const demande = (await messages(b)).filter((m) => m.m === "panneau" && m.open && m.zone).pop();
+    verifier(demande.zone.x <= 10 && Math.abs(demande.zone.y - 300) <= 2, `menu collé au rail, à la hauteur de l'icône ${JSON.stringify(demande)}`);
+    await b.setViewportSize({ width: 1200, height: demande.hauteur });
+    if (process.env.TRAME_CAPTURES) await b.screenshot({ path: `${process.env.TRAME_CAPTURES}/menu-acces-replie.png`, clip: { x: 0, y: 280, width: 360, height: demande.hauteur - 280 } });
+    await vider(b);
+    await b.click("#menu-commandes .menu-acces-rail button >> nth=0");
+    const recus = await messages(b);
+    verifier(recus.some((m) => m.m === "accesOuvrir" && m.url === "https://www.youtube.com/"), "« Ouvrir dans un nouvel onglet » part");
+    verifier(recus.some((m) => m.m === "panneau" && m.open === false), "le menu se referme");
+    // « Modifier… » : le formulaire, puis l'enregistrement avec l'ancienne adresse et le groupe.
+    await b.evaluate(() => window.trame.menuAcces({ acces: { titre: "Youtube", url: "https://www.youtube.com/", groupe: "Loisirs" }, y: 300, h: 800 }));
+    await b.waitForSelector("#menu-commandes .menu-acces-rail.dans-barre");
+    await b.click("#menu-commandes .menu-acces-rail button >> nth=1");
+    await b.fill("#menu-commandes .mar-form input >> nth=0", "YouTube");
+    await vider(b);
+    await b.click("#menu-commandes .mar-boutons .ok");
+    const env = (await messages(b)).find((m) => m.m === "accesEnregistrer");
+    verifier(env && env.titre === "YouTube" && env.ancienne === "https://www.youtube.com/" && env.groupe === "Loisirs", `enregistrement ${JSON.stringify(env)}`);
+    await b.close();
+  });
+
   await cas("rail : 10 places sous le logo, seulement les accès cochés « rail »", async () => {
     const p = await page("chrome.html", { query: "?surface=rail" });
     const etat = etatDeBase();

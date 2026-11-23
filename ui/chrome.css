@@ -497,6 +497,18 @@ input {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
   font-size: 12px;
 }
+/* Le meme menu dessine par la barre quand le rail est replie : dans le flux de la colonne du
+   panneau (l'hote ne decoupe que lui, coins a 12 px comme sa region). */
+.menu-acces-rail.dans-barre {
+  position: relative;
+  left: auto;
+  right: auto;
+  width: 290px;
+  margin-left: 6px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  box-shadow: none;
+}
 .menu-acces-rail .mar-tete { display: flex; flex-direction: column; gap: 2px; padding: 6px 9px 7px; border-bottom: 1px solid var(--bord); margin-bottom: 4px; min-width: 0; }
 .menu-acces-rail .mar-tete b { color: var(--texte); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-acces-rail .mar-tete span { color: var(--texte-3); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

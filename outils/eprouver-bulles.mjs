@@ -36,6 +36,12 @@ async function principale() {
     process.exit(2);
   }
   const profil = fs.mkdtempSync(path.join(os.tmpdir(), "trame-bulles-"));
+  // Un acces rapide dans la bande du rail, pour le clic droit du rail replie (rien n'est ouvert).
+  fs.writeFileSync(
+    path.join(profil, "acces.json"),
+    JSON.stringify([{ url: "https://www.youtube.com/", titre: "Youtube", ajoute_le: 1, groupe: "Loisirs", rail: true }]),
+    "utf8"
+  );
   const enfant = spawn(EXE, [], {
     cwd: path.dirname(EXE),
     env: {
@@ -134,7 +140,8 @@ async function principale() {
           return { h: innerHeight, classe: b.className, gauche: Math.round(r.left), haut: Math.round(r.top), bas: Math.round(contenu), titre: b.querySelector(".b-titre")?.textContent };
         })()`);
         dire(/visible/.test(vue.classe) && /carte/.test(vue.classe), `la barre dessine la carte ${JSON.stringify(vue)}`);
-        dire(vue.gauche <= 10 && vue.haut <= icone.top + 2 && vue.haut > base, "collée au rail, à la hauteur de l'icône ou remontée");
+        // L'element survole peut etre un enfant de celui vise (le nom dans la tete d'un groupe).
+        dire(vue.gauche <= 10 && vue.haut <= icone.y && vue.haut > base, "collée au rail, à la hauteur de l'icône ou remontée");
         dire(vue.bas <= vue.h, `tout le texte tient dans la fenêtre (bas ${vue.bas} ≤ ${vue.h})`);
         if (CAPTURE) {
           const img = await cdp.envoyer("Page.captureScreenshot", { format: "png" });
@@ -144,6 +151,35 @@ async function principale() {
         await rail.envoyer("Input.dispatchMouseEvent", { type: "mouseMoved", x: 300, y: icone.y, buttons: 0 });
         await cdp.attendre(`innerHeight === ${base}`, { delai: 5000, quoi: "la barre revient" }).catch(() => {});
         dire((await cdp.evaluer("innerHeight")) === base, "la souris partie, la barre revient");
+      }
+
+      // Clic droit sur un acces rapide du rail replie : son menu, dessine par la barre.
+      const acces = await rail.evaluer(`(() => {
+        const a = document.querySelector("#bande-acces .acces:not(.ajout):not(.libre)");
+        if (!a) return null;
+        const r = a.getBoundingClientRect();
+        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), top: Math.round(r.top) };
+      })()`);
+      if (!acces) {
+        console.log("(pas d'accès rapide dans ce profil d'essai : clic droit non éprouvé)");
+      } else {
+        for (const type of ["mousePressed", "mouseReleased"]) {
+          await rail.envoyer("Input.dispatchMouseEvent", { type, x: acces.x, y: acces.y, button: "right", buttons: type === "mousePressed" ? 2 : 0, clickCount: 1 });
+        }
+        await cdp.attendre(`innerHeight > ${base} && !!document.querySelector("#menu-commandes .menu-acces-rail.dans-barre")`, { delai: 5000, quoi: "menu de l'accès" }).catch(() => {});
+        const menu = await cdp.evaluer(`(() => {
+          const m = document.querySelector("#menu-commandes .menu-acces-rail.dans-barre");
+          if (!m) return null;
+          const r = m.getBoundingClientRect();
+          return { h: innerHeight, gauche: Math.round(r.left), haut: Math.round(r.top), bas: Math.round(r.bottom), titre: m.querySelector(".mar-tete b").textContent };
+        })()`);
+        dire(!!menu && menu.h > base, `clic droit sur un accès du rail replié : menu dans la barre ${JSON.stringify(menu)}`);
+        if (menu) dire(menu.gauche <= 10 && menu.haut <= acces.top + 2 && menu.bas <= menu.h, "collé au rail, à la hauteur de l'icône, entier");
+        if (CAPTURE) {
+          const img = await cdp.envoyer("Page.captureScreenshot", { format: "png" });
+          fs.writeFileSync(CAPTURE.replace(/\.png$/, "-acces.png"), Buffer.from(img.data, "base64"));
+        }
+        await cdp.evaluer(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
       }
     } finally {
       rail.fermer();

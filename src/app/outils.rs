@@ -600,6 +600,28 @@ impl App {
                 }
                 true
             }
+            "menuAcces" => {
+                // Clic droit sur un acces rapide du rail replie : 64 px, trop etroit pour son menu.
+                // La barre le dessine colle au rail, a la hauteur de l'icone (`h` : hauteur de la
+                // fenetre, pour qu'il remonte au lieu de deborder).
+                let echelle = self.window.scale_factor();
+                let h = (self.window.inner_size().height as f64 / echelle).round();
+                let x = serde_json::json!({
+                    "acces": {
+                        "titre": v["acces"]["titre"].as_str().unwrap_or(""),
+                        "url": v["acces"]["url"].as_str().unwrap_or(""),
+                        "groupe": v["acces"]["groupe"].as_str().unwrap_or(""),
+                    },
+                    "y": v["y"].as_f64().unwrap_or(0.0),
+                    "h": h,
+                });
+                if let Some(barre) = &self.barre {
+                    let _ = barre.evaluate_script(&format!(
+                        "window.trame && window.trame.menuAcces && window.trame.menuAcces({x})"
+                    ));
+                }
+                true
+            }
             "bulle" => {
                 // Infobulle du rail replie : 64 px de large, il ne peut pas la dessiner. La barre
                 // la pose en carte a droite de l'icone (`ui/bulles.js`, `carte`), dans la colonne

@@ -106,6 +106,11 @@ window.trame = {
     if (surface === "rail") ouvrirCommandesRail(liste || []);
     else ouvrirMenuCommandes(liste || []);
   },
+  /** Clic droit sur un acces du rail replie, relaye par l'hote : `{ acces, y, h }`. */
+  menuAcces(x) {
+    if (surface !== "barre" || !x || !x.acces) return;
+    ouvrirMenuAccesBarre(x);
+  },
   toast,
   focusCouture() {
     if (surface !== "barre") return;
@@ -485,8 +490,14 @@ function iconeRail(a, tous) {
   b.oncontextmenu = (e) => {
     e.preventDefault();
     if (window.innerWidth < 180) {
-      // Rail replie : trop etroit pour le menu, la page Nouvel onglet gere les acces.
-      ipc({ m: "nouvelOnglet" });
+      // Rail replie : trop etroit pour le menu. La barre le dessine, colle au rail a la hauteur
+      // de l'icone (l'hote relaie `menuAcces`). Avant, on ouvrait un Nouvel onglet a la place :
+      // « le clic droit ne fonctionne pas » (Clement, 2026-11-23).
+      ipc({
+        m: "menuAcces",
+        acces: { titre: a.titre || "", url: a.url, groupe: a.groupe || "" },
+        y: Math.round(b.getBoundingClientRect().top),
+      });
       return;
     }
     ouvrirMenuAccesRail(a, b);
@@ -542,10 +553,19 @@ function echapMenuAcces(e) {
 function ouvrirMenuAccesRail(a, ancre) {
   fermerMenuAccesRail();
   fermerCommandesRail();
-  const m = elem("div", "menu-acces-rail");
+  const m = menuAcces(a, fermerMenuAccesRail);
   m.id = "menu-acces-rail";
   const r = ancre.getBoundingClientRect();
   m.style.top = Math.round(r.bottom + 6) + "px";
+  document.getElementById("rail").appendChild(m);
+  document.addEventListener("pointerdown", clicHorsMenuAcces, true);
+  document.addEventListener("keydown", echapMenuAcces, true);
+  window.addEventListener("blur", fermerMenuAccesRail);
+}
+
+/** Le menu d'un acces, commun au rail deplie et a la barre (rail replie). */
+function menuAcces(a, fermer) {
+  const m = elem("div", "menu-acces-rail");
   const tete = elem("div", "mar-tete");
   tete.appendChild(elem("b", null, a.titre));
   tete.appendChild(elem("span", null, a.url));
@@ -559,25 +579,22 @@ function ouvrirMenuAccesRail(a, ancre) {
     m.appendChild(b);
   };
   ligne("Ouvrir dans un nouvel onglet", () => {
-    fermerMenuAccesRail();
+    fermer();
     ipc({ m: "accesOuvrir", url: a.url, nouveau: true });
   });
-  ligne("Modifier le nom ou l'adresse…", () => formulaireAccesRail(m, a));
+  ligne("Modifier le nom ou l'adresse…", () => formulaireAccesRail(m, a, fermer));
   ligne("Retirer du rail (reste sur le Nouvel onglet)", () => {
-    fermerMenuAccesRail();
+    fermer();
     ipc({ m: "accesRail", url: a.url, rail: false });
   });
   ligne("Supprimer l'accès rapide", () => {
-    fermerMenuAccesRail();
+    fermer();
     ipc({ m: "accesRetirer", url: a.url });
   }, "rouge");
-  document.getElementById("rail").appendChild(m);
-  document.addEventListener("pointerdown", clicHorsMenuAcces, true);
-  document.addEventListener("keydown", echapMenuAcces, true);
-  window.addEventListener("blur", fermerMenuAccesRail);
+  return m;
 }
 
-function formulaireAccesRail(m, a) {
+function formulaireAccesRail(m, a, fermer = fermerMenuAccesRail) {
   m.textContent = "";
   const f = document.createElement("form");
   f.className = "mar-form";
@@ -596,7 +613,7 @@ function formulaireAccesRail(m, a) {
   const boutons = elem("div", "mar-boutons");
   const annuler = elem("button", null, "Annuler");
   annuler.type = "button";
-  annuler.onclick = fermerMenuAccesRail;
+  annuler.onclick = fermer;
   const ok = elem("button", "ok", "Enregistrer");
   ok.type = "submit";
   boutons.appendChild(annuler);
@@ -607,11 +624,13 @@ function formulaireAccesRail(m, a) {
     const url = iUrl.value.trim();
     if (!url) return iUrl.focus();
     ipc({ m: "accesEnregistrer", url, titre: iNom.value.trim(), groupe: a.groupe || "", rail: true, ancienne: a.url });
-    fermerMenuAccesRail();
+    fermer();
   };
   m.appendChild(f);
   iNom.focus();
   iNom.select();
+  // Dans la barre, le formulaire n'a pas la hauteur du menu : la colonne de l'hote suit.
+  if (surface === "barre") ajusterHauteur();
 }
 
 const TEINTES_ACCES = ["#ef4444", "#f59e0b", "#18bcf2", "#0f766e", "#3b82f6", "#22c55e", "#8b5cf6", "#e11d48", "#c2410c", "#0ea5e9", "#a855f7", "#14b8a6"];
@@ -1051,12 +1070,13 @@ function ajusterHauteur() {
       : pageVisible
         ? document.querySelector("#menu-page .menu-colonne")
         : commandesVisibles
-          ? document.querySelector("#menu-commandes .menu-colonne")
+          ? document.querySelector("#menu-commandes .menu-colonne, #menu-commandes .menu-acces-rail")
           : null;
     const r = colonne ? colonne.getBoundingClientRect() : null;
     const zone = r ? { x: Math.floor(r.left), l: Math.ceil(r.width) } : null;
-    // Menu pose a la hauteur d'un onglet : la barre ne couvre que lui, pas la bande au-dessus.
-    if (zone && pageVisible && ancreMenu) zone.y = Math.floor(r.top);
+    // Menu pose a la hauteur d'un onglet (ou d'un acces du rail replie) : la barre ne couvre que
+    // lui, pas la bande au-dessus.
+    if (zone && ((pageVisible && ancreMenu) || (commandesVisibles && ancreAcces))) zone.y = Math.floor(r.top);
     const cle = `${total}|${zone ? zone.x + ":" + zone.l + ":" + (zone.y || 0) : "-"}`;
     if (Math.abs(total - derniereHauteur) < 4 && cle === derniereCle) return;
     derniereHauteur = total;
@@ -1663,7 +1683,28 @@ function ouvrirMenuPage(ancre) {
 
 /* ------------------------------------------------- menu des commandes (logo) */
 
+/* Menu d'un acces du rail replie : la barre le dessine dans sa colonne de panneau, colle au rail
+   (x = 6) et a la hauteur de l'icone — remonte s'il deborderait du bas de la fenetre. Il reprend
+   la zone des commandes : un seul menu ouvert a la fois. */
+let ancreAcces = null;
+function ouvrirMenuAccesBarre(x) {
+  ouvrirMenuCommandes(null);
+  ancreAcces = { y: Number(x.y) || 0, h: Number(x.h) || 0 };
+  const zone = document.getElementById("menu-commandes");
+  zone.textContent = "";
+  const m = menuAcces(x.acces, fermerPanneau);
+  m.classList.add("dans-barre");
+  zone.appendChild(m);
+  const haut = zone.getBoundingClientRect().top;
+  const hMenu = Math.ceil(m.getBoundingClientRect().height);
+  const voulu = ancreAcces.y - haut;
+  const maxi = ancreAcces.h ? ancreAcces.h - haut - 8 - hMenu : voulu;
+  m.style.marginTop = Math.max(0, Math.min(voulu, maxi)) + "px";
+  ajusterHauteur();
+}
+
 function ouvrirMenuCommandes(liste) {
+  ancreAcces = null;
   ouvrirPanneau();
   extensionsVisibles = false;
   pageVisible = false;
@@ -1676,7 +1717,7 @@ function ouvrirMenuCommandes(liste) {
   zone.textContent = "";
   // Pas de classe « page » : sa hauteur maximale suit la fenetre de la barre, encore basse a
   // l'ouverture — le menu sortait tronque a une ligne (retour de Clement, 2026-11-22).
-  zone.appendChild(colonneCommandes(liste, fermerPanneau));
+  if (liste) zone.appendChild(colonneCommandes(liste, fermerPanneau));
   ajusterHauteur();
 }
 
