@@ -1113,6 +1113,20 @@ réglages déjà écrits — personne ne regardait l'**effet**. D'où un banc ne
 privé créé, onglet ouvert, réglages écrits). Preuves : `cargo test` **204/204**, `tester-ui`
 **88/88** (+1 cas ; le cas du pied du rail dit maintenant « Veille, Privé et Capsules »), les deux
 bancs d'épreuve verts.
+**0.4.54 — le clic droit d'un onglet propose tout ce qu'on peut lui faire.** « Vérifier aussi à
+optimiser le clic droit sur un onglet pour proposer tout ce que l'on peut y faire » (Clément,
+23/11). Audit : le menu offrait veille/réveil, recharger (seulement si endormi), couper le son,
+copier l'adresse et déplacer vers un fil — **il n'avait même pas « Fermer l'onglet »**. Ajouts :
+fermer, **fermer les autres du fil** (le fil, pas tout le navigateur), **dupliquer** (même fil,
+juste à côté, par `ouvrir_onglet_dans` — donc le bon profil, cloison comprise), recharger pour
+tout onglet, **ancrer/détacher**, **à lire plus tard**, **ajouter le site aux accès rapides**,
+**copier le titre** (nouvelle ligne `ligneCopierTitre`). Deux commandes hôte n'existaient pas et
+sont écrites : `fermerAutres` et `dupliquer` (`src/app.rs`), routées dans `traiter_ipc` — pas dans
+la fonction piège de la 0.4.53. Un test dépendait de la hauteur du menu (« haut = 138 ») : rendu
+robuste (« au clic, ou remonté pour tenir dans la fenêtre »), parce qu'un menu plus riche est plus
+haut. Preuves : `cargo test` **204/204**, `tester-ui` **88/88** (le cas du menu d'onglet vérifie
+sept lignes de plus et clique « Dupliquer » et « Fermer les autres du fil »), `eprouver-entrees`
+**7/7** sur le vrai binaire (dupliquer ouvre un onglet de plus, fermer les autres en ferme).
 ## 11. L'état aujourd'hui
 
 ```

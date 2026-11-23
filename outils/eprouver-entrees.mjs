@@ -115,6 +115,43 @@ try {
   );
   ok(apresReg.sauvegarde_heures === 3, `l'intervalle choisi s'écrit (${apresReg.sauvegarde_heures} h)`);
 
+  // ---- 4. le menu d'un onglet : les commandes neuves, cliquees dans la vraie barre
+  const barre = await connecter((await attendreCible(PORT, "surface=barre")).webSocketDebuggerUrl);
+  await barre.envoyer("Runtime.enable");
+  const compterOnglets = async () => (await cibles(PORT)).filter((t) => t.type === "page" && !t.url.includes("surface=")).length;
+  const cliquerMenu = (texte) => `(() => {
+    const b = Array.from(document.querySelectorAll("#menu-page .menu-principal"))
+      .find((n) => (n.textContent || "").includes(${JSON.stringify(texte)}));
+    if (!b) return "absent";
+    b.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    return "clic";
+  })()`;
+
+  await barre.evaluer(`window.trame.menuPage({ y: 200, h: 900, cible: ${1} })`);
+  await pause(400);
+  const lignes = await barre.evaluer(`document.getElementById("menu-page").textContent`);
+  const attendues = ["Fermer l'onglet", "Dupliquer l'onglet", "Ancrer", "À lire plus tard", "Copier le titre"];
+  ok(
+    attendues.every((l) => lignes.includes(l)),
+    `le menu d'un onglet propose les actions attendues (${attendues.join(", ")})`
+  );
+
+  const avantDup = await compterOnglets();
+  const clicDup = await barre.evaluer(cliquerMenu("Dupliquer l'onglet"));
+  await pause(2000);
+  ok(clicDup === "clic" && (await compterOnglets()) > avantDup, "« Dupliquer l'onglet » ouvre un onglet de plus");
+
+  await barre.evaluer(`window.trame.menuPage({ y: 200, h: 900, cible: ${1} })`);
+  await pause(400);
+  const avantAutres = await compterOnglets();
+  const clicAutres = await barre.evaluer(cliquerMenu("Fermer les autres du fil"));
+  await pause(2000);
+  ok(
+    clicAutres === "clic" && (await compterOnglets()) < avantAutres,
+    `« Fermer les autres du fil » en ferme (${avantAutres} -> ${await compterOnglets()})`
+  );
+  barre.fermer();
+
   rail.fermer();
   page.fermer();
   rgl.fermer();

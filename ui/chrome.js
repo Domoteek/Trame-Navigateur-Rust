@@ -1857,8 +1857,43 @@ function ligneCopierAdresse(url) {
   return ligne;
 }
 
-function puces(liste) {
-  const zone = elem("div", "menu-puces");
+/** « Copier le titre » : meme presse-papiers que l'adresse, mais le texte de l'onglet. */
+function ligneCopierTitre(titre, url) {
+  const ligne = elem("div", "menu-ligne");
+  const b = elem("button", "menu-principal");
+  b.title = titre;
+  const boite = elem("span", "menu-icone page");
+  boite.appendChild(icone("livre", "petit"));
+  b.appendChild(boite);
+  const corps = elem("span", "corps");
+  corps.appendChild(elem("span", "n", "Copier le titre"));
+  corps.appendChild(elem("span", "d", titre.length > 60 ? titre.slice(0, 57) + "…" : titre));
+  b.appendChild(corps);
+  b.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const fini = () => {
+      fermerPanneau();
+      toast("Titre copié.");
+    };
+    const secours = () => {
+      const t = document.createElement("textarea");
+      t.value = titre;
+      document.body.appendChild(t);
+      t.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      t.remove();
+      fini();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(titre).then(fini, secours);
+    else secours();
+  });
+  ligne.appendChild(b);
+  return ligne;
+}
+
+function puces(liste) {  const zone = elem("div", "menu-puces");
   for (const p of liste) {
     const b = actionMenu("puce" + (p.classe ? " " + p.classe : ""), p.titre || p.t, p.message);
     b.textContent = p.t;
@@ -1877,7 +1912,7 @@ function rendreMenuPage(s) {
   const actif = (cibleMenu && onglets.find((o) => o.id === cibleMenu)) || affiche;
   const surPage = actif.id === affiche.id;
   const fils = (s.fils || []).map((f) => [f.id, f.nom]);
-  const signature = JSON.stringify([c, actif.id, actif.fermeture, actif.titre, actif.eveille, actif.muet, actif.fil, fils, s.url, surPage]);
+  const signature = JSON.stringify([c, actif.id, actif.fermeture, actif.titre, actif.eveille, actif.muet, actif.fil, fils, s.url, surPage, actif.ancre, actif.alire]);
   if (signature === signaturePage && zone.childElementCount) return;
   signaturePage = signature;
   zone.textContent = "";
@@ -1888,20 +1923,51 @@ function rendreMenuPage(s) {
   tete.appendChild(elem("span", "menu-titre", surPage ? "Cette page" : "Cet onglet — " + (actif.titre || actif.urlCourte || "")));
   colonne.appendChild(tete);
 
-  // L'onglet lui-meme : veille, rechargement, son, adresse, fil.
+  // L'onglet lui-meme : tout ce qu'on peut lui faire, pas seulement la veille et le son.
   if (actif.id) {
+    // Fermer : l'action la plus attendue d'un menu d'onglet, et elle manquait.
+    colonne.appendChild(lignePage("Fermer l'onglet", surPage ? "Ctrl+W" : "sans l'afficher", "x", { m: "fermer", id: actif.id }));
+    const dansLeFil = onglets.filter((o) => o.fil === actif.fil && o.id !== actif.id).length;
+    if (dansLeFil > 0) {
+      colonne.appendChild(
+        lignePage(
+          "Fermer les autres du fil",
+          `${dansLeFil} autre(s) · Ctrl+Maj+T les rouvre`,
+          "x",
+          { m: "fermerAutres", id: actif.id }
+        )
+      );
+    }
+    colonne.appendChild(lignePage("Dupliquer l'onglet", "même fil, juste à côté", "plus", { m: "dupliquer", id: actif.id }));
     colonne.appendChild(
       actif.eveille
         ? lignePage("Mettre en veille", surPage ? "libère sa mémoire ; on passe à l'onglet précédent" : "libère sa mémoire, rien n'est fermé", "sleep", { m: "endormir", id: actif.id })
         : lignePage("Réveiller", "recharge la page en arrière-plan, sans l'afficher", "reload", { m: "reveillerFond", id: actif.id })
     );
-    if (actif.eveille) colonne.appendChild(lignePage("Recharger", surPage ? "F5" : "", "reload", { m: "recharger", id: actif.id }));
+    colonne.appendChild(lignePage("Recharger", surPage ? "F5" : "", "reload", { m: "recharger", id: actif.id }));
     colonne.appendChild(
       actif.muet
         ? lignePage("Remettre le son", "", "son", { m: "muet", id: actif.id }, "on")
         : lignePage("Couper le son", "cet onglet seulement", "muet", { m: "muet", id: actif.id })
     );
+    colonne.appendChild(
+      actif.ancre
+        ? lignePage("Détacher", "l'onglet redevient sensible à la veille", "pin", { m: "ancrer", id: actif.id, actif: false }, "on")
+        : lignePage("Ancrer", "cet onglet ne refroidit jamais, il reste éveillé", "pin", { m: "ancrer", id: actif.id, actif: true })
+    );
+    colonne.appendChild(
+      actif.alire
+        ? lignePage("Retirer de « à lire »", "", "livre", { m: "alire", id: actif.id, actif: false }, "on")
+        : lignePage("À lire plus tard", "le garde hors de la veille, pour y revenir", "livre", { m: "alire", id: actif.id, actif: true })
+    );
+    if (actif.url && /^https?:/.test(actif.url)) {
+      // Un site, pas une page : c'est ce que la bande du rail et le Nouvel onglet attendent.
+      colonne.appendChild(
+        lignePage("Ajouter aux accès rapides", "le site, pas cette page", "points", { m: "accesDepuisOnglet", onglet: actif.id })
+      );
+    }
     if (actif.url && /^(https?|file):/.test(actif.url)) colonne.appendChild(ligneCopierAdresse(actif.url));
+    if (actif.titre) colonne.appendChild(ligneCopierTitre(actif.titre, actif.url));
     const autres = (s.fils || []).filter((f) => f.id !== actif.fil);
     colonne.appendChild(elem("div", "menu-sous", "Déplacer vers un fil"));
     colonne.appendChild(

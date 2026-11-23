@@ -1888,7 +1888,13 @@ async function suite() {
       return { x: r.left, haut: r.top, bas: r.bottom, ancre: n.classList.contains("ancre") };
     });
     verifier(pose.ancre && pose.x < 20, `menu collé au rail : ${JSON.stringify(pose)}`);
-    verifier(Math.abs(pose.haut - 138) < 4, `menu à la hauteur du clic : ${JSON.stringify(pose)}`);
+    // Le menu se pose a la hauteur du clic S'IL TIENT ; sinon il remonte pour tenir dans la
+    // fenetre. Le test ne fige donc pas une valeur : il exige les deux proprietes (mesure du
+    // 2026-11-23, quand le menu d'onglet s'est enrichi : un haut fixe à 138 cassait).
+    verifier(
+      pose.haut <= 142 && pose.haut >= 0 && pose.bas <= 1196,
+      `menu posé au clic, ou remonté pour tenir dans la fenêtre : ${JSON.stringify(pose)}`
+    );
     const zone = (await messages(p)).filter((m) => m.m === "panneau").pop();
     verifier(zone && zone.zone && Math.abs(zone.zone.y - pose.haut) < 2, `haut annoncé : ${JSON.stringify(zone)}`);
     await p.evaluate(() => window.trame.menuPage({ y: 880, h: 900 }));
@@ -1922,6 +1928,33 @@ async function suite() {
     verifier(texte.includes("Réveiller") && !texte.includes("Mettre en veille"), "onglet endormi : Réveiller");
     verifier(!texte.includes("Ajouter aux favoris") && !texte.includes("Côte à côte"), "pas les lignes de la page affichée");
     verifier(texte.includes("Copier l'adresse") && texte.includes("Couper le son"), "adresse et son");
+    // Tout ce qu'on peut faire d'un onglet doit etre la : fermer, fermer les autres du fil,
+    // dupliquer, ancrer, a lire, acces rapide, copier le titre.
+    for (const attendu of [
+      "Fermer l'onglet",
+      "Fermer les autres du fil",
+      "Dupliquer l'onglet",
+      "Ancrer",
+      "À lire plus tard",
+      "Ajouter aux accès rapides",
+      "Copier le titre",
+    ]) {
+      verifier(texte.includes(attendu), `« ${attendu} » manque au menu d'un onglet`);
+    }
+    await vider(p);
+    await p.click("#menu-page .menu-principal >> text=Dupliquer l'onglet");
+    verifier(
+      (await messages(p)).some((m) => m.m === "dupliquer" && m.id === 2),
+      "dupliquer envoie l'onglet visé"
+    );
+    await p.evaluate(() => window.trame.menuPage({ y: 150, h: 1200, cible: 2 }));
+    await vider(p);
+    await p.click("#menu-page .menu-principal >> text=Fermer les autres du fil");
+    verifier(
+      (await messages(p)).some((m) => m.m === "fermerAutres" && m.id === 2),
+      "fermer les autres du fil envoie l'onglet visé"
+    );
+    await p.evaluate(() => window.trame.menuPage({ y: 150, h: 1200, cible: 2 }));
     await vider(p);
     await p.click("#menu-page .menu-principal >> text=Réveiller");
     verifier((await messages(p)).some((m) => m.m === "reveillerFond" && m.id === 2), "réveil en arrière-plan");

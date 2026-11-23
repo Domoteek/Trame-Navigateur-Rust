@@ -3788,6 +3788,19 @@ impl App {
                     self.fermer_onglet(id as TabId);
                 }
             }
+            // Fermer les AUTRES onglets du meme fil : la version fil de « fermer les autres ».
+            // Fermer tout le navigateur serait une autre action, et plus dangereuse.
+            "fermerAutres" => {
+                if let Some(id) = v["id"].as_u64() {
+                    self.fermer_autres_onglets(id as TabId);
+                }
+            }
+            // Dupliquer : la meme adresse, dans le meme fil, juste apres l'original.
+            "dupliquer" => {
+                if let Some(id) = v["id"].as_u64() {
+                    self.dupliquer_onglet(id as TabId);
+                }
+            }
             "activer" => {
                 if let Some(id) = v["id"].as_u64() {
                     self.activer(id as TabId);
@@ -6035,9 +6048,48 @@ impl App {
         self.pousser_etat();
     }
 
+    /// Duplique un onglet : la meme adresse, dans le **meme fil**, juste apres l'original.
+    ///
+    /// L'onglet nait avec son fil impose (`ouvrir_onglet_dans`) : la webview est donc construite
+    /// avec le bon profil, y compris dans un fil cloisonne ou prive.
+    fn dupliquer_onglet(&mut self, id: TabId) {
+        let Some((url, fil)) = self.trouver(id).map(|o| (o.url.clone(), o.fil)) else {
+            return;
+        };
+        let nouveau = self.ouvrir_onglet_dans(url, Declencheur::Lien, Some(id), Some(fil));
+        info!("onglet {id} duplique en {nouveau} (fil {fil})");
+        self.signaler("Onglet dupliqué — même fil, juste à côté.");
+    }
+
+    /// Ferme tous les onglets du **meme fil**, sauf celui-ci.
+    ///
+    /// C'est la version utile de « fermer les autres » : fermer tout ce que le navigateur tient
+    /// serait une autre action, plus dangereuse. `Ctrl+Maj+T` rouvre ce qui vient d'etre ferme.
+    fn fermer_autres_onglets(&mut self, id: TabId) {
+        let Some(fil) = self.trouver(id).map(|o| o.fil) else {
+            return;
+        };
+        let autres: Vec<TabId> = self
+            .session
+            .onglets
+            .iter()
+            .filter(|o| o.fil == fil && o.id != id)
+            .map(|o| o.id)
+            .collect();
+        let n = autres.len();
+        for autre in autres {
+            self.fermer_onglet(autre);
+        }
+        if n > 0 {
+            info!("onglet {id} : {n} autre(s) onglet(s) du fil {fil} ferme(s)");
+            self.signaler(&format!("{n} onglet(s) fermé(s) — Ctrl+Maj+T les rouvre."));
+            self.marquer_modifie();
+            self.pousser_etat();
+        }
+    }
+
     /// Vrai si ce fil est une navigation privee.
-    fn fil_est_prive(&self, fil: ThreadId) -> bool {
-        self.session
+    fn fil_est_prive(&self, fil: ThreadId) -> bool {        self.session
             .fils
             .iter()
             .find(|f| f.id == fil)

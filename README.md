@@ -68,6 +68,7 @@ zéro mémoire tant qu'on n'en ouvre pas un. Un fil de même nom déjà présent
 | **La Couture** (Ctrl+K) | Une seule saisie : onglets, fils, historique, commandes (`>`), ou adresse. Le classement mêle pertinence textuelle, **vitalité** et fraîcheur. |
 | **Les fils cloisonnés** (bouclier dans l'en-tête d'un fil) | Un fil peut avoir **son propre profil** : connexions, cookies et **extensions** à part. Bitwarden seulement dans le fil « Comptes », uBlock partout ailleurs ; un compte ouvert dans la cloison ne l'est pas dans les autres fils. Le puzzle d'un fil cloisonné montre les extensions **de ce fil**. WebView2 n'active une extension que pour un profil entier, jamais pour un onglet : c'est donc la seule façon honnête d'avoir des extensions par fil. Prouvé par le scénario `t` (cookie invisible, extension présente ou absente selon le fil). |
 | **Les capsules** | Un fil entier scellé dans un fichier JSON : URL, titres, position de lecture, mise de côté. Déplaçable, partageable, réouvrable. |
+| **Le clic droit d'un onglet** | Tout ce qu'on peut faire de cet onglet, au même endroit : **fermer**, **fermer les autres du fil** (le fil, pas tout le navigateur — `Ctrl+Maj+T` rouvre), **dupliquer** (même fil, juste à côté), mettre en veille ou réveiller, recharger, couper ou remettre le son, **ancrer** (il ne refroidit jamais), **à lire plus tard**, **ajouter le site aux accès rapides**, **copier l'adresse** et **copier le titre**, déplacer vers un fil, un rendez-vous, une fermeture différée. Un onglet qui n'est pas affiché reçoit ces lignes-là seulement ; celles de la page (favori, impression, guet, côte à côte, navigation privée) restent à l'onglet affiché, et le menu le dit. |
 | **La navigation privée** (bouton `Privé` du pied du rail, entrée du Nouvel onglet, menu de la page, ou `Ctrl+Maj+N`) | Un fil à part, avec **son propre profil WebView2 jetable** : ses connexions et ses cookies ne sont pas ceux du navigateur, ses onglets ne sont **jamais** écrits dans `session.json`, rien n'entre dans l'historique ni dans la mémoire de lecture, et le profil est effacé au démarrage suivant (dossier **et** entrée dans le `Local State` de Chromium). Trois entrées visibles — une touche qu'on ne connaît pas n'existe pas. Éprouvé par `node outils/eprouver-prive.mjs` (cookie compris : posé dans la session privée, il n'existe plus après) et `node outils/eprouver-entrees.mjs` (les entrées cliquées dans le vrai binaire). |
 | **La sauvegarde automatique** | Une archive `.trame` écrite toute seule dans un dossier choisi, toutes les N heures (1 h à 7 jours), sans rien demander. Rotation : les plus anciennes partent **après** l'écriture de la nouvelle, et seulement celles dont le nom a exactement la forme que Trame écrit (`Trame-AAAA-MM-JJ-HHhMMmSS.trame`) — un fichier de l'utilisateur n'est jamais touché. Sans dossier choisi, rien ne part. |
 | **La barre d'extensions** | Sous la Couture : une pastille par extension (clic = activer/désactiver, **choix retenu au redémarrage**), un `＋` pour ouvrir le dossier, et le **moteur de recherche courant** à droite. Masquable depuis les réglages. |
@@ -245,6 +246,14 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.54, publiée et installée le 2026-11-23.** Le **clic droit d'un onglet** propose enfin tout
+> ce qu'on peut lui faire : fermer, fermer les autres du fil, dupliquer, veille/réveil, recharger,
+> son, ancrer, « à lire plus tard », ajouter aux accès rapides, copier l'adresse **et** le titre,
+> déplacer vers un fil, rendez-vous, fermeture différée. Deux commandes hôte manquaient
+> (`fermerAutres`, `dupliquer`) : elles sont écrites, routées et éprouvées. Preuves :
+> `cargo test` **204/204**, `tester-ui` **88/88**, `eprouver-entrees` **7/7** (dont « Dupliquer »
+> qui ouvre un onglet de plus et « Fermer les autres du fil » qui en ferme).
+>
 > **0.4.53, publiée et installée le 2026-11-23.** La navigation privée devient **trouvable** sans
 > connaître la touche : bouton `Privé` dans le pied du rail (visible aussi rail replié), entrée sur
 > la page Nouvel onglet, ligne « Ouvrir en navigation privée » dans le menu de la page. Et un
@@ -281,7 +290,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.52-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.54-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >
