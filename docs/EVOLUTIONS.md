@@ -1245,7 +1245,10 @@ comme `MOTEUR_DEFAUT`.
 - **Construction** : GeckoView 160 impose AGP 9.1 (Gradle 9.3.1, compileSdk 37) et Kotlin 2.4
   (plugin posé sur le classpath). `./gradlew assembleDebug` (toutes architectures, ~530 Mo, pour
   l'émulateur), `assembleRelease` (arm64, bibliothèques compressées, **96 Mo**, signé avec la clé
-  de débogage) → `dist/Trame-android-0.1.0.apk`. La version release n'a pas encore tourné.
+  de débogage) → `dist/Trame-android-0.1.0.apk`. **Installée le 23/11 à 18 h 52 sur le
+  téléphone de Clément** (Xiaomi 22101316G, Android 14, accord de Clément) : démarrage sans
+  erreur, saute-pub prêt, Bitwarden installé tout seul (page d'accueil en 2e onglet). Vraie pub
+  YouTube et connexion à Bitwarden : à essayer par Clément.
 - Pas encore là : barre qui se replie au défilement, glisser sur l'adresse, fils, teintes,
   téléchargements, vidéo en incrustation.
 
