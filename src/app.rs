@@ -3424,12 +3424,21 @@ impl App {
         // Un onglet distant n'a le droit qu'a trois messages. Les commandes ne sont
         // acceptees que depuis les surfaces d'interface, ou depuis nos pages internes.
         let interne = self.source_interne(source);
+        // Deux exceptions, toutes les deux venues d'un script que Trame injecte lui-meme dans la
+        // page, et jamais d'un contenu de page :
+        //  - `couleur` : la teinte annoncee par le site (validee avant usage, cf. `couleur_valide`) ;
+        //  - les deux reponses du popup de mise a jour, et seulement tant qu'une mise a jour est
+        //    proposee — l'installation ne peut viser que le setup publie dans la fiche.
+        // Sans cette exception, ces trois messages etaient rejetes EN SILENCE : le popup se
+        // fermait sans rien faire (constate par Clement le 2026-11-23), et le mode dynamique ne
+        // recevait jamais aucune couleur.
+        let popup_mise_a_jour = self.maj.is_some() && matches!(m, "majInstaller" | "majPlusTard");
         let autorise = match m {
             "extCall" | "defilement" | "raccourci" | "pret" | "hello" | "clicPage" | "zapChoisi"
-            | "zapCompte" | "coupDoeil" | "flottant" => !matches!(source, Source::Apercu),
+            | "zapCompte" | "coupDoeil" | "flottant" | "couleur" => !matches!(source, Source::Apercu),
             // L'apercu n'a droit qu'a ses deux boutons.
             "apercuOuvrir" | "apercuFermer" => true,
-            _ => !matches!(source, Source::Onglet(_) | Source::Apercu) || interne,
+            _ => (!matches!(source, Source::Onglet(_) | Source::Apercu) || interne) || popup_mise_a_jour,
         };
         if !autorise {
             return;
