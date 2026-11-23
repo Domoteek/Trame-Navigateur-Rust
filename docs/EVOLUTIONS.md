@@ -1026,6 +1026,12 @@ glisser-ranger ; Chromium lui renvoie alors `click` et `dblclick`, et le nom ne 
 double-clic (signalé par Clément le 23/11). Le double-clic s'écoute sur la tête ; le champ de
 saisie survit aux poussées de l'hôte et ne se referme qu'une fois (retirer le champ déclenche
 `blur`). Preuve : `tester-ui` **80/80**, dont un vrai double-clic souris qui échouait avant.
+**0.4.46 — des infobulles à la teinte.** Le rail dessine ses bulles (`brancherBulles` dans
+`chrome.js`) au lieu de celle de Windows : surface et liseré de la teinte, pointe vers l'élément,
+geste (« Double-clic ») et touches (« Ctrl+B ») en pastilles, explication après « : » en
+seconde ligne. Les `title` restent la source : au survol ils passent dans `data-bulle`. Rail
+replié et barre gardent la bulle native (une webview de 64 px ou 40 px couperait la nôtre).
+Preuve : `tester-ui` **81/81**.
 ## 11. L'état aujourd'hui
 
 ```
