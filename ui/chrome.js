@@ -1919,6 +1919,15 @@ function rendreMenuPage(s) {
     );
     colonne.appendChild(lignePage("Imprimer ou enregistrer en PDF", "Ctrl+P", "imprimer", { m: "imprimer" }));
     colonne.appendChild(lignePage("Chercher dans la page", "Ctrl+F", "search", { m: "chercherPage" }));
+    // La navigation privee se trouve la ou l'on cherche une action sur la page en cours.
+    colonne.appendChild(
+      lignePage(
+        "Ouvrir en navigation privée",
+        "Ctrl+Maj+N · rien n'est gardé, ni onglets, ni historique, ni cookies",
+        "masque",
+        { m: "prive" }
+      )
+    );
   }
 
   // Rendez-vous
@@ -2249,6 +2258,9 @@ function brancherRail() {
   if (btnRail) btnRail.onclick = () => ipc({ m: "rail" });
   document.getElementById("btn-trame-vue").onclick = () => ipc({ m: "trame" });
   document.getElementById("btn-veille").onclick = () => ipc({ m: "endormirFroids" });
+  // Navigation privee, depuis le pied du rail : meme message que Ctrl+Maj+N, qui reste le
+  // raccourci pour qui le connait. L'entree existe pour qui ne le connait pas.
+  document.getElementById("btn-prive").onclick = () => ipc({ m: "prive" });
   document.getElementById("btn-capsules").onclick = () => basculerVolet("capsules");
   document.getElementById("volet-fermer").onclick = () => {
     document.getElementById("volet").hidden = true;

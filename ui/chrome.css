@@ -1425,6 +1425,15 @@ body[data-fenetre="rail"] .pastilles { display: flex; }
   .rail-pied { border-top: 0; background: none; padding: 6px 0 12px; }
   .budget { display: none; }
   .pied-actions { justify-content: center; }
+  /* Navigation privee : dans 64 px, la jauge en anneau et une icone ne tiennent pas cote a
+     cote — elles s'empilent. Le bouton reste donc accessible rail replie (choix de Clement,
+     2026-11-23 : l'entree doit se voir sans connaitre la touche). */
+  .pied-actions { flex-direction: column; align-items: center; gap: 6px; }
+  .pied-actions #btn-prive {
+    width: 32px; height: 30px; border-radius: 9px;
+    background: var(--surface-2); border: 1px solid var(--bord-fort); color: var(--texte-2);
+  }
+  .pied-actions #btn-prive:hover { background: var(--surface-3); color: var(--texte); }
   .pied-actions #btn-veille {
     position: relative; width: 38px; height: 38px; border-radius: 50%; border: 0;
     background: conic-gradient(var(--accent) 0 var(--jauge, 0%), var(--surface-3) var(--jauge, 0%) 100%);

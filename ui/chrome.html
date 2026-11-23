@@ -30,6 +30,13 @@
         <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6" />
         <path d="M17.25 13.8v6.9M13.8 17.25h6.9" />
       </symbol>
+      <!-- Navigation privee : un oeil barre. Ni cadenas (il dirait « securise », ce qui n'est
+           pas la promesse) ni bouclier (il dit deja « cloison » dans Trame). -->
+      <symbol id="i-masque" viewBox="0 0 24 24">
+        <path d="M3 12s3.4-6 9-6 9 6 9 6-3.4 6-9 6-9-6-9-6z" />
+        <circle cx="12" cy="12" r="2.4" />
+        <path d="M4.5 19.5 19.5 4.5" />
+      </symbol>
       <symbol id="i-puzzle" viewBox="0 0 24 24">
         <path d="M9.5 3.5a2 2 0 0 1 4 0V6H17a1 1 0 0 1 1 1v3.5h1.5a2 2 0 0 1 0 4H18V18a1 1 0 0 1-1 1h-3.5v-1.5a2 2 0 0 0-4 0V19H6a1 1 0 0 1-1-1v-3.5h1.5a2 2 0 0 0 0-4H5V7a1 1 0 0 1 1-1h3.5z" />
       </symbol>
@@ -152,6 +159,9 @@
         <div class="pied-actions">
           <button id="btn-veille" title="Endormir maintenant les onglets froids (leur page se ferme, l'onglet reste)">
             <svg class="ic petit"><use href="#i-sleep" /></svg><span>Veille</span>
+          </button>
+          <button id="btn-prive" title="Navigation privée : un fil à part, profil jetable (Ctrl+Maj+N)">
+            <svg class="ic petit"><use href="#i-masque" /></svg><span>Privé</span>
           </button>
           <button id="btn-capsules" title="Capsules : les fils mis de côté dans un fichier">
             <svg class="ic petit"><use href="#i-capsule" /></svg><span>Capsules</span>

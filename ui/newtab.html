@@ -100,6 +100,11 @@
       }
       .lien:hover { color: var(--texte); }
       .lien.on { color: var(--texte); border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.04); }
+      /* Entree « navigation privee » sous la barre de recherche : discrete, mais la — sans avoir
+         a connaitre Ctrl+Maj+N (choix de Clement, 2026-11-23). */
+      .prive-ligne { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -8px 0 20px; }
+      .prive-ligne .lien { display: inline-flex; align-items: center; gap: 6px; }
+      .prive-ligne > span { color: var(--texte-3); font-size: 11.5px; }
       .tuiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; margin-bottom: 34px; }
       .tuile {
         position: relative; border: 1px solid var(--bord); border-radius: 14px; padding: 14px 6px 10px;
@@ -208,6 +213,21 @@
         </svg>
         <input id="q" type="text" spellcheck="false" placeholder="Saisir une adresse ou une recherche" />
         <span class="touche">Entrée</span>
+      </div>
+
+      <!-- La navigation privee se propose la ou l'on commence a naviguer : sans cela, il faut
+           connaitre Ctrl+Maj+N (choix de Clement, 2026-11-23). -->
+      <div class="prive-ligne">
+        <button class="lien prive" id="btn-prive-newtab" title="Un fil a part, avec un profil WebView2 jetable : ni onglets, ni historique, ni cookies ne sont gardes">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 12s3.4-6 9-6 9 6 9 6-3.4 6-9 6-9-6-9-6z" />
+            <circle cx="12" cy="12" r="2.4" />
+            <path d="M4.5 19.5 19.5 4.5" />
+          </svg>
+          Navigation privée
+        </button>
+        <span>un onglet à part, qui ne laisse rien derrière lui</span>
       </div>
 
       <div id="bloc-acces">
@@ -706,6 +726,10 @@
           signatureAcces = "";
           rendreAcces();
         };
+
+        // Navigation privee : meme message que Ctrl+Maj+N. L'entree est la pour qui ne connait
+        // pas la touche — un navigateur ne s'apprend pas par ouï-dire.
+        document.getElementById("btn-prive-newtab").onclick = () => ipc({ m: "prive" });
 
         const champ = document.getElementById("q");
         champ.addEventListener("keydown", (e) => {

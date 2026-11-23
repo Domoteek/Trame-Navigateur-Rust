@@ -1862,9 +1862,17 @@ async function suite() {
     await p.click("#btn-page");
     verifier(await p.$eval("#menu-page", (n) => !n.hidden), "le menu de la page s'ouvre");
     const texte = await p.$eval("#menu-page", (n) => n.textContent);
-    for (const attendu of ["Imprimer", "Rendez-vous", "Amazon", "Guetter", "39,90 € → 34,90 €"]) {
+    for (const attendu of ["Imprimer", "Rendez-vous", "Amazon", "Guetter", "39,90 € → 34,90 €", "navigation privée"]) {
       verifier(texte.includes(attendu), `« ${attendu} » absent du menu`);
     }
+    // La ligne « Ouvrir en navigation privee » envoie la meme commande que la touche.
+    await vider(p);
+    await p.click("#menu-page >> text=Ouvrir en navigation privée");
+    egal(
+      (await messages(p)).filter((m) => m.m === "prive"),
+      [{ m: "prive" }],
+      "le menu de la page demande la navigation privée"
+    );
     await vider(p);
     await p.dispatchEvent(".puce >> text=Demain matin", "pointerdown", { button: 0 });
     const rdv = (await messages(p)).find((m) => m.m === "rendezVous");
@@ -2069,19 +2077,29 @@ async function suite() {
     verifier(p.visible && p.droite <= 64, `pastilles dans le rail replié : ${JSON.stringify(p)}`);
   });
 
-  await cas("pied du rail : Veille et Capsules ; replié, la jauge et Veille seulement", async () => {
+  await cas("pied du rail : Veille, Privé et Capsules ; replié, la jauge, Veille et Privé", async () => {
     const r = await page("chrome.html", { query: "?surface=rail" });
     await r.setViewportSize({ width: 292, height: 700 });
     await pousser(r, etatDeBase());
     verifier(!(await r.$("#btn-reveiller")), "plus de bouton Réveiller");
     const visibles = () =>
       r.$$eval(".pied-actions button", (l) => l.filter((n) => n.offsetParent !== null).map((n) => n.id));
-    egal(await visibles(), ["btn-veille", "btn-capsules"], "déplié : Veille et Capsules");
+    egal(await visibles(), ["btn-veille", "btn-prive", "btn-capsules"], "déplié : Veille, Privé et Capsules");
     await vider(r);
     await r.click("#btn-veille");
     verifier((await messages(r)).some((m) => m.m === "endormirFroids"), "Veille endort les onglets froids");
+    // La navigation privee se demande par un bouton, pas seulement par la touche.
+    await vider(r);
+    await r.click("#btn-prive");
+    egal(
+      (await messages(r)).filter((m) => m.m === "prive"),
+      [{ m: "prive" }],
+      "le bouton Privé demande la navigation privée"
+    );
     await r.setViewportSize({ width: 64, height: 700 });
-    egal(await visibles(), ["btn-veille"], "replié : Veille seule");
+    // Le bouton prive reste visible rail replié : c'est tout l'objet de cette entrée (choix de
+    // Clement, 2026-11-23) — l'écran de 64 px l'empile sous la jauge.
+    egal(await visibles(), ["btn-veille", "btn-prive"], "replié : la jauge, Veille et Privé");
     // Replie, la jauge est l'anneau (conic-gradient) autour du bouton Veille.
     const pied = await r.$eval(".rail-pied", (n) => {
       const b = document.getElementById("btn-veille");
@@ -2338,6 +2356,22 @@ async function suite() {
     );
     verifier(await b.$eval("#menu-commandes", (n) => n.hidden), "le menu se referme");
     await b.close();
+  });
+
+  await cas("accueil : l'entrée Navigation privée demande la navigation privée", async () => {
+    // Une touche qu'on ne connait pas n'existe pas : l'entree est sur la page ou l'on commence.
+    const p = await page("newtab.html");
+    await pousser(p, etatDeBase());
+    const texte = await p.$eval("#btn-prive-newtab", (n) => n.textContent.trim());
+    verifier(texte.includes("Navigation privée"), `le bouton annonce la navigation privée : ${texte}`);
+    await vider(p);
+    await p.click("#btn-prive-newtab");
+    egal(
+      (await messages(p)).filter((m) => m.m === "prive"),
+      [{ m: "prive" }],
+      "un clic sur l'entrée envoie la commande"
+    );
+    await p.close();
   });
 
   await cas("accueil : sans accès rapide, la section invite à en ajouter", async () => {

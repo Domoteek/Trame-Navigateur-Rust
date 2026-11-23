@@ -1093,6 +1093,26 @@ lecture de l'onglet actif, et un Alt+clic sur un accès ouvrirait un aperçu). P
 visible dans le rail, profil séparé, cookie dans le profil privé et **pas** dans le principal,
 session écrite sans rien de privé, purge au démarrage, cookie disparu), `cargo test` **204/204**,
 `tester-ui` **87/87**.
+**0.4.53 — trois entrées visibles pour la navigation privée, et un défaut de routage.**
+« Comment faire pour transférer en navigation privée, plus intuitif que les touches ? » (Clément,
+23/11). Une touche qu'on ne connaît pas n'existe pas : trois entrées, chacune placée là où l'on
+regarde déjà — le **pied du rail** (bouton `Privé`, icône « œil barré » dessinée pour l'occasion :
+ni cadenas, qui dirait « sécurisé », ni bouclier, qui dit déjà « cloison » ; il reste visible rail
+replié, empilé sous la jauge), la **page Nouvel onglet** (sous la barre de recherche : « un onglet
+à part, qui ne laisse rien derrière lui »), et le **menu de la page** (« Ouvrir en navigation
+privée », une ligne parmi les actions de la page). Toutes envoient le même message que
+`Ctrl+Maj+N`. **Et c'est là que le défaut est apparu** : ces messages n'étaient **pas routés** —
+ils étaient écrits dans une fonction que seules les commandes de téléchargement atteignent, donc
+l'hôte les ignorait **en silence**. Les réglages de la **sauvegarde automatique** de la 0.4.51
+avaient le même défaut : l'interrupteur, le dossier, l'intervalle, la rotation et « Sauvegarder
+maintenant » ne faisaient rien depuis l'interface (la fonction marchait seulement si
+`reglages.json` était écrit à la main). **Pourquoi les tests ne l'ont pas vu** : le banc d'interface
+vérifie que la page *envoie* le message, et l'épreuve de la sauvegarde utilisait un profil aux
+réglages déjà écrits — personne ne regardait l'**effet**. D'où un banc neuf,
+`outils/eprouver-entrees.mjs`, qui clique dans le vrai binaire et regarde ce que l'hôte fait (fil
+privé créé, onglet ouvert, réglages écrits). Preuves : `cargo test` **204/204**, `tester-ui`
+**88/88** (+1 cas ; le cas du pied du rail dit maintenant « Veille, Privé et Capsules »), les deux
+bancs d'épreuve verts.
 ## 11. L'état aujourd'hui
 
 ```
@@ -1101,6 +1121,7 @@ node outils/tester-ui.mjs        87/87
 node outils/verifier-app.mjs     sans reseau : 24/24 (dont les scenarios `z` et `z2`, sauvegarde)
 node outils/verifier-setup.mjs   refuse (code 3) tant qu'une vraie installation existe — par conception
 node outils/eprouver-prive.mjs   navigation privee : tout tient (cookie de session privee disparu)
+node outils/eprouver-entrees.mjs entrees d'interface : tout repond (les clics, dans le vrai binaire)
 ```
 
 **Ce qui reste ouvert, dit franchement :**

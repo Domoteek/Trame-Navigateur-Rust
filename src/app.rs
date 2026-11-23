@@ -4436,6 +4436,55 @@ impl App {
             | "telechargementRetirer" | "telechargementsEffacer" | "telechargementsDossier"
             | "telechargementsChoisirDossier" | "telechargementsDossierWindows"
             | "ouvrirTelechargements" => self.commande_telechargement(m, &v),
+            // ---- navigation privee : bouton du pied du rail, entree du Nouvel onglet, menu de
+            // la page. Ces messages doivent etre routes ICI, dans le repartiteur : ecrits dans
+            // une fonction que seules les commandes de telechargement atteignent, ils partaient
+            // et l'hote les ignorait EN SILENCE (constate le 2026-11-23) — les entrees ne
+            // faisaient rien, et les tests d'interface, qui ne regardent que l'envoi, passaient.
+            "prive" => self.ouvrir_prive(),
+            // ---- sauvegarde automatique (meme piege, meme correction)
+            "sauvegardeAuto" => {
+                self.reglages.sauvegarde_auto = v["actif"]
+                    .as_bool()
+                    .unwrap_or(!self.reglages.sauvegarde_auto);
+                self.profil.sauver_reglages(&self.reglages);
+                if self.reglages.sauvegarde_auto && self.reglages.dossier_sauvegardes.trim().is_empty() {
+                    self.signaler("Sauvegarde automatique : choisissez un dossier, sinon rien ne sera écrit.");
+                } else {
+                    info!(
+                        "sauvegarde automatique : {}",
+                        if self.reglages.sauvegarde_auto { "allumee" } else { "coupee" }
+                    );
+                }
+                self.pousser_etat();
+            }
+            "sauvegardeAutoDossier" => match crate::systeme::choisir_dossier("Dossier des sauvegardes Trame") {
+                Ok(Some(d)) => {
+                    self.reglages.dossier_sauvegardes = d.clone();
+                    self.profil.sauver_reglages(&self.reglages);
+                    info!("sauvegarde automatique : dossier {d}");
+                    self.signaler(&format!("Sauvegardes dans : {d}"));
+                    self.pousser_etat();
+                }
+                Ok(None) => {}
+                Err(e) => self.signaler(&e),
+            },
+            "sauvegardeAutoHeures" => {
+                if let Some(h) = v["heures"].as_u64() {
+                    self.reglages.sauvegarde_heures = (h as u32).clamp(1, 168);
+                    self.profil.sauver_reglages(&self.reglages);
+                    info!("sauvegarde automatique : toutes les {} h", self.reglages.sauvegarde_heures);
+                    self.pousser_etat();
+                }
+            }
+            "sauvegardeAutoGarder" => {
+                if let Some(n) = v["garder"].as_u64() {
+                    self.reglages.sauvegarde_garder = (n as u32).clamp(1, 50);
+                    self.profil.sauver_reglages(&self.reglages);
+                    self.pousser_etat();
+                }
+            }
+            "sauvegardeMaintenant" => self.sauvegarder_maintenant(),
             "majVerifier" => self.verifier_maj(),
             "majInstaller" => self.installer_maj(),
             "majPlusTard" => info!("mise a jour : remise a plus tard (proposition gardee dans les reglages)"),
@@ -5642,55 +5691,6 @@ impl App {
                 self.pousser_etat();
             }
             "ouvrirTelechargements" => self.ouvrir_page_interne(PAGE_TELECHARGEMENTS),
-            // ---- sauvegarde automatique
-            "sauvegardeAuto" => {
-                self.reglages.sauvegarde_auto = v["actif"]
-                    .as_bool()
-                    .unwrap_or(!self.reglages.sauvegarde_auto);
-                self.profil.sauver_reglages(&self.reglages);
-                // Un interrupteur allume sans dossier ne sauvegarde rien : le dire tout de suite
-                // plutot que de laisser croire que c'est en place.
-                if self.reglages.sauvegarde_auto && self.reglages.dossier_sauvegardes.trim().is_empty() {
-                    self.signaler("Sauvegarde automatique : choisissez un dossier, sinon rien ne sera écrit.");
-                } else {
-                    info!(
-                        "sauvegarde automatique : {}",
-                        if self.reglages.sauvegarde_auto { "allumee" } else { "coupee" }
-                    );
-                }
-                self.pousser_etat();
-            }
-            "sauvegardeAutoDossier" => {
-                match crate::systeme::choisir_dossier("Dossier des sauvegardes Trame") {
-                    Ok(Some(d)) => {
-                        self.reglages.dossier_sauvegardes = d.clone();
-                        self.profil.sauver_reglages(&self.reglages);
-                        info!("sauvegarde automatique : dossier {d}");
-                        self.signaler(&format!("Sauvegardes dans : {d}"));
-                        self.pousser_etat();
-                    }
-                    Ok(None) => {}
-                    Err(e) => self.signaler(&e),
-                }
-            }
-            "sauvegardeAutoHeures" => {
-                if let Some(h) = v["heures"].as_u64() {
-                    self.reglages.sauvegarde_heures = (h as u32).clamp(1, 168);
-                    self.profil.sauver_reglages(&self.reglages);
-                    info!("sauvegarde automatique : toutes les {} h", self.reglages.sauvegarde_heures);
-                    self.pousser_etat();
-                }
-            }
-            "sauvegardeAutoGarder" => {
-                if let Some(n) = v["garder"].as_u64() {
-                    self.reglages.sauvegarde_garder = (n as u32).clamp(1, 50);
-                    self.profil.sauver_reglages(&self.reglages);
-                    self.pousser_etat();
-                }
-            }
-            "sauvegardeMaintenant" => self.sauvegarder_maintenant(),
-            // ---- navigation privee
-            "prive" => self.ouvrir_prive(),
             _ => {}
         }
     }
