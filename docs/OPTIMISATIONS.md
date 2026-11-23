@@ -11,6 +11,40 @@ machine à 16 cœurs, et distinguent deux choses :
 
 La distinction est le point central : sans elle, on optimise du bruit de moteur.
 
+## 0 bis. 2026-11-23 — changer d'onglet, et l'état poussé (0.4.47)
+
+Banc : vrai binaire, profil neuf, **fenêtre cachée**, une séance type (8 onglets ouverts, 16
+changements d'onglet, 4 navigations), mesurée par CDP ; la même séance sur la 0.4.46 et la 0.4.47.
+Après chaque séance, contrôle de justesse : **une seule page visible** (`document.visibilityState`)
+et toutes les pages à leur vraie taille — vrai sur les deux versions.
+
+| | 0.4.46 | 0.4.47 |
+|---|---|---|
+| Changement d'onglet → rail à jour | 192 ms médiane | **21 ms** médiane |
+| États poussés pendant la séance | 117, dont 44 % moins de 16 ms après le précédent | **82**, dont 10 % |
+| Durée de la séance | 17,4 s | 15,3 s |
+| Au repos (profil neuf) | 535 Mo, 9 processus | 536 Mo, 9 processus |
+
+**Où partait le temps** (mesuré étape par étape dans `activer`, onglet éveillé) : 30 à 55 ms pour
+régler la visibilité de **chaque** page, ~15 ms de focus, 1,5 ms d'envoi d'état. Appel par appel :
+lire `IsVisible` coûte ~1 µs, montrer une page 0,2 ms, mais **cacher la page quittée 26 à 35 ms**
+(`put_IsVisible(false)` est synchrone dans le moteur).
+
+**Ce qui a été fait** :
+
+1. `moteur_ext::regler_visible` ne demande rien au moteur si la page est déjà dans l'état voulu.
+2. `App::montrer_seul` : la page quittée est d'abord **déplacée hors de l'écran à sa taille**
+   (instantané), puis cachée pour de bon à l'événement suivant (`UserEvent::CacherDiffere`),
+   une fois la nouvelle page affichée et l'état parti. Piège mesuré : la **réduire à 0 × 0**
+   empêchait Chromium de recevoir le changement de visibilité (la page restait `visible`) —
+   d'où le déplacement hors écran. Côte à côte : méthode d'origine (deux pages visibles).
+3. `pousser_etat` ne fait plus que **demander** l'envoi : `vider_etat` envoie l'état le plus
+   récent en fin de tour de boucle, au plus une fois par image (16 ms ; la boucle se réveille
+   seule à l'échéance, `ControlFlow::WaitUntil`). Un onglet en veille qu'on réveille envoie
+   l'état **avant** le réveil (~100 ms de recréation par le moteur) : le rail réagit tout de suite.
+
+**Ce qui reste** : réveiller un onglet en veille coûte ~100 ms au moteur (recréer la page) ;
+c'est le prix de la veille, qui rend la mémoire.
 ## 0. 2026-11-23 — les teintes (0.4.41 → 0.4.44), mesurées sur le vrai binaire
 
 Profil neuf, **fenêtre cachée** (`TRAME_CACHEE=1`, rien ne vole le focus), lecture par CDP.

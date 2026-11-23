@@ -201,10 +201,15 @@ fn main() {
     let debut = std::time::Instant::now();
     let mut sonde_faite = false;
 
+    // Etat en attente d'envoi : la boucle se reveille a l'image suivante (App::vider_etat).
+    let mut echeance_etat: Option<std::time::Instant> = None;
     event_loop.run(move |event, _cible, controle| {
         // Garde le verrou du profil vivant jusqu'a la fermeture de la boucle.
         let _ = &_verrou;
-        *controle = ControlFlow::Wait;
+        *controle = match echeance_etat {
+            Some(t) => ControlFlow::WaitUntil(t),
+            None => ControlFlow::Wait,
+        };
         chien_de_garde::battement();
         match event {
             Event::UserEvent(evenement) => {
@@ -259,6 +264,13 @@ fn main() {
                 }
                 _ => {}
             },
+            // Fin du tour : l'etat demande pendant ce tour part, une seule fois.
+            Event::MainEventsCleared => {
+                echeance_etat = application.vider_etat();
+                if let Some(t) = echeance_etat {
+                    *controle = ControlFlow::WaitUntil(t);
+                }
+            }
             Event::LoopDestroyed => {
                 application.sauver();
             }

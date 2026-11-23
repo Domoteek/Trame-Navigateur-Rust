@@ -52,6 +52,8 @@ pub enum UserEvent {
         source: Source,
         corps: String,
     },
+    /// Les pages quittees, a cacher pour de bon une fois la nouvelle affichee (voir montrer_seul).
+    CacherDiffere(Vec<TabId>),
     Tick,
     /// Mesure reelle de l'arbre de processus (fil de mesure, toutes les 4 s).
     Memoire(probe::Mesure),
@@ -218,6 +220,10 @@ pub struct App {
     dossier_dl: std::rc::Rc<std::cell::RefCell<PathBuf>>,
     /// Couleur annoncee par la page visible (`<meta name="theme-color">`), en mode dynamique.
     teinte_site: Option<String>,
+    /// Un etat attend d'etre envoye aux surfaces (voir pousser_etat / ider_etat).
+    etat_a_envoyer: bool,
+    /// Dernier envoi reel de l'etat : au plus un par image (16 ms).
+    dernier_envoi_etat: std::time::Instant,
     /// Un « Installer » a lance le telechargement : on enchaine sur l'installation des qu'il est
     /// complet, sans redemander un second clic.
     maj_a_installer: bool,
@@ -606,6 +612,8 @@ impl App {
             telechargements: Vec::new(),
             dossier_dl: std::rc::Rc::new(std::cell::RefCell::new(PathBuf::new())),
             teinte_site: None,
+            etat_a_envoyer: false,
+            dernier_envoi_etat: std::time::Instant::now(),
             maj_a_installer: false,
             maj: None,
             zap_ouvert: false,
@@ -1512,11 +1520,11 @@ impl App {
             match cote {
                 Some((g, d, gauche, droite, _)) if *id == g || *id == d => {
                     let _ = w.set_bounds(if *id == g { gauche } else { droite });
-                    let _ = w.set_visible(true);
+                    crate::moteur_ext::regler_visible(w, true);
                 }
                 _ => {
                     let _ = w.set_bounds(geo.contenu);
-                    let _ = w.set_visible(Some(*id) == actif && !vue);
+                    crate::moteur_ext::regler_visible(w, Some(*id) == actif && !vue);
                 }
             }
         }
@@ -1752,9 +1760,8 @@ impl App {
         self.reveiller(id);
         // Un onglet ouvert depuis la Couture doit MASQUER les autres : sans cela, l'ancienne
         // page reste visible sous la nouvelle, et l'onglet actif semble ne pas s'ouvrir.
-        for (tid, w) in self.webviews.iter() {
-            let _ = w.set_visible(*tid == id && !self.vue_trame);
-        }
+        let montrer = !self.vue_trame;
+        self.montrer_seul(id, montrer);
         if let Some(w) = self.webviews.get(&id) {
             let _ = w.focus();
         }
@@ -1807,6 +1814,64 @@ impl App {
         self.pousser_etat();
     }
 
+    /// Montre l'onglet `id` (si `montrer`) et escamote les autres, au plus vite.
+    ///
+    /// Mesure du 2026-11-23 (vrai binaire) : CACHER la page quittee coute 26 a 35 ms dans le
+    /// moteur (`put_IsVisible(false)`), et changer d'onglet attendait ce delai avant que rien ne
+    /// change a l'ecran. Desormais la page quittee est d'abord reduite a une taille nulle — ce
+    /// qui la fait disparaitre sans attendre — et cachee pour de bon a l'evenement suivant, une
+    /// fois la nouvelle page affichee et l'etat pousse.
+    fn montrer_seul(&mut self, id: TabId, montrer: bool) {
+        // Cote a cote : deux pages restent visibles, appliquer_geometrie les place ensuite ;
+        // l'escamotage differe cacherait la seconde.
+        if self.session.cote.is_some() {
+            for (tid, w) in self.webviews.iter() {
+                crate::moteur_ext::regler_visible(w, *tid == id && montrer);
+            }
+            return;
+        }
+        // Hors de l'ecran, a sa taille : une page reduite a 0 x 0 ne recoit plus le changement de
+        // visibilite (elle restait « visible » pour Chromium une fois cachee — constate le
+        // 2026-11-23 par document.visibilityState).
+        let geo = self.geometrie_courante();
+        let ailleurs = wry::Rect {
+            position: tao::dpi::PhysicalPosition::new(-32_000, -32_000).into(),
+            size: geo.contenu.size,
+        };
+        let mut a_cacher = Vec::new();
+        for (tid, w) in self.webviews.iter() {
+            if *tid == id {
+                crate::moteur_ext::regler_visible(w, montrer);
+            } else if crate::moteur_ext::est_visible(w) {
+                let _ = w.set_bounds(ailleurs);
+                a_cacher.push(*tid);
+            }
+        }
+        if !a_cacher.is_empty() {
+            let _ = self.proxy.send_event(UserEvent::CacherDiffere(a_cacher));
+        }
+    }
+
+    /// Seconde moitie de `montrer_seul` : cache pour de bon les pages escamotees et leur rend
+    /// leur place (cachee), sauf celles qui sont redevenues l'onglet affiche entre-temps.
+    fn cacher_differe(&mut self, ids: Vec<TabId>) {
+        let geo = self.geometrie_courante();
+        for id in ids {
+            if Some(id) == self.actif && !self.vue_trame {
+                if let Some(w) = self.webviews.get(&id) {
+                    let _ = w.set_bounds(geo.contenu);
+                }
+                continue;
+            }
+            if let Some(w) = self.webviews.get(&id) {
+                crate::moteur_ext::regler_visible(w, false);
+                let _ = w.set_bounds(geo.contenu);
+            }
+        }
+        if self.session.cote.is_some() {
+            self.appliquer_geometrie();
+        }
+    }
     fn activer(&mut self, id: TabId) {
         if self.trouver(id).is_none() {
             return;
@@ -1855,11 +1920,12 @@ impl App {
             o.revenu = false;
         }
         if !self.webviews.contains_key(&id) {
+            // Le reveil bloque la boucle ~100 ms (le moteur recree la page) : le rail montre
+            // d'abord l'onglet choisi, la page suit.
+            self.envoyer_etat();
             self.reveiller(id);
         }
-        for (tid, w) in self.webviews.iter() {
-            let _ = w.set_visible(*tid == id);
-        }
+        self.montrer_seul(id, true);
         if self.session.cote.is_some() {
             self.preparer_cote();
             self.appliquer_geometrie();
@@ -2876,8 +2942,36 @@ impl App {
         })
     }
 
+    /// Demande l'envoi de l'etat aux surfaces. L'envoi lui-meme est regroupe : au plus un par
+    /// image (16 ms), toujours le plus recent, fait par `vider_etat` en fin de tour de boucle.
+    ///
+    /// Mesure du 2026-11-23 (vrai binaire, seance de 17 s) : 118 etats de 13 Ko pousses, dont
+    /// 40 % moins de 16 ms apres le precedent — chacun reconstruit en Rust et redessine par le
+    /// rail, la barre et les pages internes, alors qu'un ecran n'en montre qu'un par image.
     fn pousser_etat(&mut self) {
-        let etat = self.instantane();
+        self.etat_a_envoyer = true;
+    }
+
+    /// Fin de tour de la boucle : envoie l'etat en attente si la derniere image est passee ;
+    /// sinon rend l'instant ou revenir (la boucle s'y reveille d'elle-meme).
+    pub fn vider_etat(&mut self) -> Option<std::time::Instant> {
+        if !self.etat_a_envoyer {
+            return None;
+        }
+        let image = std::time::Duration::from_millis(16);
+        let echeance = self.dernier_envoi_etat + image;
+        if std::time::Instant::now() < echeance {
+            return Some(echeance);
+        }
+        self.envoyer_etat();
+        None
+    }
+
+    /// Envoi immediat, pour ce qui ne peut pas attendre la fin du tour (un reveil d'onglet qui
+    /// va bloquer la boucle 100 ms : le rail montre d'abord l'onglet choisi).
+    fn envoyer_etat(&mut self) {
+        self.etat_a_envoyer = false;
+        self.dernier_envoi_etat = std::time::Instant::now();        let etat = self.instantane();
         let js = format!("window.trame && window.trame.etat({etat})");
         if let Some(w) = &self.rail {
             let _ = w.evaluate_script(&js);
@@ -3167,6 +3261,7 @@ impl App {
                 self.ouvrir_onglet(url, Declencheur::Lien, parent);
             }
             UserEvent::Log(ligne) => info!("{ligne}"),
+            UserEvent::CacherDiffere(ids) => self.cacher_differe(ids),
             UserEvent::Installation { libelle, issue } => self.fin_installation(libelle, issue),
             UserEvent::Sauvegarde(issue) => self.fin_sauvegarde(issue),
             UserEvent::TaillePopup { largeur, hauteur } => {
@@ -6154,14 +6249,14 @@ impl App {
                 let _ = vue.set_visible(true);
                 let _ = vue.focus();
                 for w in self.webviews.values() {
-                    let _ = w.set_visible(false);
+                    crate::moteur_ext::regler_visible(w, false);
                 }
             }
             (false, Some(vue)) => {
                 let _ = vue.set_visible(false);
                 let actif = self.actif;
                 for (id, w) in self.webviews.iter() {
-                    let _ = w.set_visible(Some(*id) == actif);
+                    crate::moteur_ext::regler_visible(w, Some(*id) == actif);
                 }
             }
             _ => {

@@ -341,6 +341,25 @@ pub fn regler_muet(webview: &WebView, muet: bool) {
     }
 }
 
+/// Montre ou cache une webview, sans rien demander au moteur si elle est deja dans cet etat.
+///
+/// Mesure du 2026-11-23 (vrai binaire, 9 onglets) : changer d'onglet appelait `set_visible` sur
+/// CHAQUE webview, et chaque appel coute 4 a 9 ms meme quand rien ne change — 30 a 55 ms par
+/// changement d'onglet. Lire `IsVisible` sur le controleur, lui, ne coute rien : seules la page
+/// quittee et la page ouverte sont reellement touchees.
+pub fn est_visible(webview: &WebView) -> bool {
+    let mut actuel = BOOL(0);
+    unsafe { webview.controller().IsVisible(&mut actuel) }.is_ok() && actuel.as_bool()
+}
+
+pub fn regler_visible(webview: &WebView, visible: bool) {
+    let mut actuel = BOOL(0);
+    let lu = unsafe { webview.controller().IsVisible(&mut actuel) }.is_ok();
+    if lu && actuel.as_bool() == visible {
+        return;
+    }
+    let _ = webview.set_visible(visible);
+}
 /// La page joue-t-elle du son en ce moment ? Contrairement a `joue_du_son`, le doute vaut
 /// « non » : c'est pour l'affichage du haut-parleur, pas pour une decision de mise en pause.
 pub fn son_en_cours(webview: &WebView) -> bool {
