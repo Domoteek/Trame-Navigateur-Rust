@@ -1194,6 +1194,14 @@ les règles `::-webkit-scrollbar` et donnaient un fil de 2-3 px gris sur gris. D
 traction), 40 px de haut au moins, pour toutes les colonnes de menu. Preuves : capture du vrai
 moteur (Trame caché, menu bridé à 420 px), `eprouver-menu-onglet.mjs` 15/15, `tester-ui` 88/88,
 `cargo test` 212/212.
+
+**0.4.60 — la bulle du Compteur de visites reste lisible.** Clément : « le compteur de visite
+disparaît tout seul ? » — c'était voulu (5,2 s), trop court. Choix de Clément : 15 s **et** un clic
+la ferme (curseur main, bord plus franc au survol, plus de `pointer-events: none` sauf pendant
+qu'elle s'efface). Extension en **1.1.0** : sans cette montée de version, le profil de Clément
+aurait gardé la 1.0.0 (une extension livrée ne remplace celle du profil que si elle est plus
+récente). Preuves : Chromium à horloge simulée (visible à 14 s, partie à 16 s, effacée moins d'1 s
+après un clic), `cargo test` 212/212, `tester-ui` 88/88.
 ## 11. L'état aujourd'hui
 
 ```

@@ -12,11 +12,18 @@
   font: 600 11.5px/1.2 "Segoe UI", system-ui, sans-serif;
   opacity: 1;
   transition: opacity 0.7s ease, transform 0.7s ease;
-  pointer-events: none;
+  /* Cliquable : un clic la ferme (sinon elle part seule au bout de 15 s). */
+  cursor: pointer;
   user-select: none;
+}
+
+#trame-compteur-visites:hover {
+  border-color: rgba(96, 165, 250, 0.6);
+  color: #c7d9f5;
 }
 
 #trame-compteur-visites.parti {
   opacity: 0;
+  pointer-events: none;
   transform: translateY(6px);
 }

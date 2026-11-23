@@ -27,11 +27,20 @@ async function principal() {
   const bulle = document.createElement("div");
   bulle.id = "trame-compteur-visites";
   bulle.textContent = `${compte}ᵉ visite ici`;
-  bulle.title = `Compteur tenu par l'extension « Compteur de visites » pour ${site}.`;
+  bulle.title = `Compteur tenu par l'extension « Compteur de visites » pour ${site}.\nCliquer pour fermer`;
   document.body.appendChild(bulle);
 
-  setTimeout(() => bulle.classList.add("parti"), 5200);
-  setTimeout(() => bulle.remove(), 6000);
+  // 15 s à l'écran, ou jusqu'au clic (choix de Clement, 2026-11-23 : à 5 s, elle partait
+  // avant d'être lue).
+  let partie = false;
+  const partir = () => {
+    if (partie) return;
+    partie = true;
+    bulle.classList.add("parti");
+    setTimeout(() => bulle.remove(), 800);
+  };
+  bulle.addEventListener("click", partir);
+  setTimeout(partir, 15000);
 }
 
 principal();

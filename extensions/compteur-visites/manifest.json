@@ -1,6 +1,6 @@
 {
   "name": "Compteur de visites",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Compte combien de fois tu es venu sur ce site, et l'affiche discrètement. Démonstration du stockage persistant par extension.",
   "author": "Trame",
   "matches": ["*://*/*"],
