@@ -1249,6 +1249,14 @@ comme `MOTEUR_DEFAUT`.
   téléphone de Clément** (Xiaomi 22101316G, Android 14, accord de Clément) : démarrage sans
   erreur, saute-pub prêt, Bitwarden installé tout seul (page d'accueil en 2e onglet). Vraie pub
   YouTube et connexion à Bitwarden : à essayer par Clément.
+- **0.1.1 (b6dd046), installée le 23/11 à 19 h 20.** Clément : « l'application est
+  inutilisable, tu peux rien faire ». Cause : un onglet restauré au lancement n'était jamais
+  ouvert (`GeckoView.setSession` n'ouvre PAS la session, contrairement à ce que supposait le
+  code) → page noire, et l'adresse tapée ne chargeait rien. L'émulateur ne le montrait pas
+  (toujours relancé sur un onglet neuf). Aussi : toucher l'adresse ne la sélectionnait pas
+  (`setText` annulait `selectAll`). Vérifié sur le téléphone : onglet restauré affiché, adresse
+  remplacée en tapant, m.youtube.com chargé avec 🛡 actif. Le Xiaomi refuse une installation par
+  câble tant que la demande à l'écran n'est pas acceptée (`INSTALL_FAILED_USER_RESTRICTED`).
 - Pas encore là : barre qui se replie au défilement, glisser sur l'adresse, fils, teintes,
   téléchargements, vidéo en incrustation.
 
