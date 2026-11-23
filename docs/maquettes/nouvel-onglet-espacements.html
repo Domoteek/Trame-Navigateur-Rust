@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nouvel onglet — espacements</title>
+<style>
+  :root {
+    --fond: #0b1220; --surface: #111a2b; --bord: rgba(255,255,255,.09);
+    --texte: #e8eef8; --texte-2: #aab6ca; --texte-3: #7c889c;
+    --accent-rgb: 96,165,250; --accent-2-rgb: 167,139,250;
+    --vif: #a78bfa; --tiede: #60a5fa; --froid: #8b5cf6; --dormant: #475569;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: #070b14; color: var(--texte);
+    font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+  }
+
+  /* ---------- barre de choix ---------- */
+  .choix {
+    position: sticky; top: 0; z-index: 10; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    padding: 12px 18px; background: rgba(7,11,20,.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--bord);
+  }
+  .choix strong { font-size: 13px; margin-right: 6px; }
+  .choix button {
+    font: inherit; font-size: 12.5px; color: var(--texte-2); background: rgba(255,255,255,.04);
+    border: 1px solid var(--bord); border-radius: 9px; padding: 7px 12px; cursor: pointer;
+  }
+  .choix button.actif { color: #fff; border-color: rgba(var(--accent-rgb),.6); background: rgba(var(--accent-rgb),.16); }
+  .choix label { margin-left: auto; font-size: 12.5px; color: var(--texte-2); display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .note { padding: 10px 18px 0; font-size: 12.5px; color: var(--texte-2); line-height: 1.55; max-width: 1100px; }
+  .note b { color: var(--texte); }
+
+  /* ---------- écran simulé : 1610 px de contenu (rail ôté), comme sur la capture ---------- */
+  .scene { padding: 16px 18px 40px; overflow-x: auto; }
+  .ecran {
+    width: 1610px; height: 950px; overflow: hidden; position: relative; border-radius: 12px;
+    border: 1px solid var(--bord); transform-origin: top left;
+  }
+  .ecran .page {
+    height: 100%; overflow: hidden;
+    background:
+      radial-gradient(60% 45% at 18% 0%, rgba(var(--accent-rgb), 0.13), transparent 60%),
+      radial-gradient(50% 40% at 90% 10%, rgba(var(--accent-2-rgb), 0.11), transparent 60%),
+      var(--fond);
+    padding: var(--p-haut) var(--p-cote) 40px;
+  }
+  .pli { position: absolute; left: 0; right: 0; bottom: 0; height: 26px; display: grid; place-items: center;
+    font-size: 11px; color: var(--texte-3); background: linear-gradient(transparent, rgba(7,11,20,.95)); }
+
+  /* ---------- page (valeurs pilotées par variables) ---------- */
+  .enveloppe { max-width: var(--largeur); margin: 0 auto; }
+  .marque { font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--texte-3); }
+  .salut { font-size: var(--salut); font-weight: 600; letter-spacing: -.015em; margin-top: 2px; }
+  .date { color: var(--texte-3); font-size: 13px; margin-top: 4px; }
+  .entete { margin-bottom: var(--entete-bas); }
+  .entete.ligne { display: flex; align-items: baseline; gap: 14px; }
+  .entete.ligne .salut { margin: 0; }
+  .recherche {
+    display: flex; align-items: center; gap: 10px; height: var(--rech-h); padding: 0 18px;
+    margin: var(--rech-haut) 0 var(--rech-bas); border-radius: 23px; border: 1px solid var(--bord);
+    background: rgba(255,255,255,.04); color: var(--texte-3); font-size: 14px;
+  }
+  .recherche span { flex: 1; }
+  .touche, kbd { font-size: 10.5px; color: var(--texte-3); border: 1px solid var(--bord); border-radius: 6px; padding: 2px 7px; }
+  .prive { display: flex; gap: 10px; align-items: center; margin: var(--prive-m); font-size: 11.5px; color: var(--texte-3); }
+  .prive b { font-weight: 400; color: var(--texte-2); padding: 4px 10px; }
+  h2 { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--texte-3); margin: 0 0 var(--h2-bas); font-weight: 600; }
+  .ar-tete { display: flex; align-items: center; gap: 14px; margin-bottom: var(--h2-bas); }
+  .ar-tete h2 { margin: 0; }
+  .pilule { font-size: 11.5px; color: var(--texte-2); padding: 4px 11px; border-radius: 20px; border: 1px solid var(--bord); }
+  .ar-tete .r { margin-left: auto; font-size: 11.5px; color: var(--texte-3); }
+  section { margin-bottom: var(--section); }
+
+  .tuiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--tuile-l), 1fr)); gap: 10px; }
+  .tuile { position: relative; border: 1px solid var(--bord); border-radius: 14px; padding: var(--tuile-p);
+    background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.015));
+    display: flex; flex-direction: column; align-items: center; gap: var(--tuile-gap); }
+  .tuile .ico { width: var(--ico); height: var(--ico); border-radius: 11px; display: grid; place-items: center; font-weight: 700; color: #fff; font-size: 15px; }
+  .tuile .n { font-size: 12px; color: #dbe4f5; }
+  .tuile .vu { position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: #34d399; }
+  .tuile .rl { position: absolute; top: 7px; left: 8px; width: 2px; height: 9px; background: var(--texte-3); border-radius: 1px; }
+  .tuile.ajout { border-style: dashed; background: transparent; color: var(--texte-3); justify-content: center; font-size: 12px; }
+
+  .favoris { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--fav-l), 1fr)); gap: 8px; }
+  .fav { display: flex; align-items: center; gap: 10px; min-width: 0; padding: var(--fav-p); border: 1px solid var(--bord);
+    border-radius: 11px; background: rgba(255,255,255,.03); }
+  .fav .ico { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; }
+  .fav .txt { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .fav .t { font-size: 12.5px; color: #dbe4f5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fav .d { font-size: 11px; color: var(--texte-3); }
+  .aide-h { font-weight: 400; letter-spacing: 0; text-transform: none; margin-left: 12px; }
+
+  .grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--carte-l), 1fr)); gap: var(--carte-gap); align-items: var(--carte-align); }
+  .carte { border: 1px solid var(--bord); border-radius: 14px; padding: var(--carte-p);
+    background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.012));
+    display: flex; flex-direction: column; gap: var(--carte-int); }
+  .carte-tete { display: flex; align-items: center; gap: 9px; }
+  .carte-nom { font-size: 13.5px; font-weight: 600; flex: 1; }
+  .carte-compte { font-size: 10.5px; color: var(--texte-3); background: rgba(255,255,255,.06); padding: 2px 7px; border-radius: 20px; }
+  .chips { display: flex; flex-direction: column; gap: 3px; }
+  .chip { display: flex; align-items: center; gap: 8px; padding: var(--chip-p); font-size: 12px; color: #7e8ba1; font-style: italic; }
+  .chip i { width: 6px; height: 6px; border-radius: 50%; background: var(--froid); flex: 0 0 auto; }
+  .chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .plus { font-size: 11.5px; color: var(--texte-3); padding-left: 7px; }
+
+  /* repères d'espacement */
+  .reperes .enveloppe > * { outline: 1px dashed rgba(244,114,182,.55); }
+  .reperes section, .reperes .recherche, .reperes .entete, .reperes .prive { box-shadow: 0 0 0 9999px transparent; }
+  .reperes .enveloppe { outline: 1px solid rgba(52,211,153,.6); }
+
+  /* ---------- les variantes ---------- */
+  .v1 { --p-haut: 54px; --p-cote: 46px; --largeur: 1020px; --salut: 30px; --entete-bas: 26px;
+        --rech-h: 46px; --rech-haut: 22px; --rech-bas: 34px; --prive-m: -8px 0 20px; --h2-bas: 14px; --section: 34px;
+        --tuile-l: 104px; --tuile-p: 14px 6px 10px; --tuile-gap: 8px; --ico: 38px; --fav-l: 280px; --fav-p: 9px 11px;
+        --carte-l: 300px; --carte-gap: 14px; --carte-p: 14px 15px; --carte-int: 10px; --chip-p: 5px 7px; --carte-align: stretch; }
+  .v2 { --p-haut: 34px; --p-cote: 40px; --largeur: 1020px; --salut: 28px; --entete-bas: 16px;
+        --rech-h: 42px; --rech-haut: 14px; --rech-bas: 24px; --prive-m: -10px 0 14px; --h2-bas: 10px; --section: 24px;
+        --tuile-l: 100px; --tuile-p: 11px 6px 9px; --tuile-gap: 7px; --ico: 36px; --fav-l: 280px; --fav-p: 8px 11px;
+        --carte-l: 300px; --carte-gap: 12px; --carte-p: 12px 14px; --carte-int: 8px; --chip-p: 4px 7px; --carte-align: start; }
+  .v3 { --p-haut: 30px; --p-cote: 40px; --largeur: 1240px; --salut: 26px; --entete-bas: 14px;
+        --rech-h: 42px; --rech-haut: 0px; --rech-bas: 22px; --prive-m: -10px 0 14px; --h2-bas: 10px; --section: 22px;
+        --tuile-l: 100px; --tuile-p: 11px 6px 9px; --tuile-gap: 7px; --ico: 36px; --fav-l: 280px; --fav-p: 8px 11px;
+        --carte-l: 280px; --carte-gap: 12px; --carte-p: 12px 14px; --carte-int: 8px; --chip-p: 4px 7px; --carte-align: start; }
+
+  .cachee { display: none; }
+  table { border-collapse: collapse; font-size: 12px; margin: 6px 18px 0; }
+  td, th { padding: 5px 12px; border-bottom: 1px solid var(--bord); text-align: left; color: var(--texte-2); }
+  th { color: var(--texte); font-weight: 600; }
+  td.change { color: #fbbf24; }
+</style>
+</head>
+<body>
+
+<div class="choix">
+  <strong>Nouvel onglet</strong>
+  <button data-v="1">1 · Actuel</button>
+  <button data-v="2" class="actif">2 · Resserré</button>
+  <button data-v="3">3 · Resserré + plus large</button>
+  <label><input type="checkbox" id="rep"> Repères</label>
+</div>
+<div class="note" id="note"></div>
+
+<div class="scene">
+  <div class="ecran" id="ecran">
+    <div class="page v2" id="page">
+      <div class="enveloppe">
+        <div class="entete" id="entete">
+          <div class="marque">Trame</div>
+          <div class="salut">Bonsoir.</div>
+          <div class="date">lundi 23 novembre</div>
+        </div>
+
+        <div class="recherche"><span>⌕&nbsp;&nbsp;Saisir une adresse ou une recherche</span><span class="touche" style="flex:0">Entrée</span></div>
+        <div class="prive"><b>◌ Navigation privée</b> un onglet à part, qui ne laisse rien derrière lui</div>
+
+        <section>
+          <div class="ar-tete"><h2>Accès rapides</h2><span class="pilule">+ groupe</span><span class="r">Réorganiser</span></div>
+          <div class="tuiles">
+            <div class="tuile"><span class="rl"></span><div class="ico" style="background:#ef233c">▶</div><div class="n">Youtube</div></div>
+            <div class="tuile"><span class="rl"></span><span class="vu"></span><div class="ico" style="background:#f97316">a</div><div class="n">Amazon</div></div>
+            <div class="tuile"><span class="rl"></span><span class="vu"></span><div class="ico" style="background:#334155">G</div><div class="n">Github</div></div>
+            <div class="tuile ajout">+<br>Ajouter</div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Favoris <span class="aide-h">des pages précises · Ctrl+D sur une page pour l'ajouter ou la retirer</span></h2>
+          <div class="favoris">
+            <div class="fav"><div class="ico" style="background:#ef233c">▶</div><div class="txt"><span class="t">I Automated EVERY Minute of My Day -…</span><span class="d">youtube.com</span></div></div>
+            <div class="fav"><div class="ico" style="background:#ef233c">▶</div><div class="txt"><span class="t">Comment réagir au krach ? - YouTube</span><span class="d">youtube.com</span></div></div>
+            <div class="fav"><div class="ico" style="background:#ef233c">▶</div><div class="txt"><span class="t">J'ai construit la Première Centrale Nuclé…</span><span class="d">youtube.com</span></div></div>
+            <div class="fav"><div class="ico" style="background:#e5e7eb;color:#111">W</div><div class="txt"><span class="t">Wikipédia:Accueil de la communauté —…</span><span class="d">wikipedia.org</span></div></div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Tes fils</h2>
+          <div class="grille" id="grille"></div>
+        </section>
+      </div>
+    </div>
+    <div class="pli">— bas de la fenêtre (1 026 px de haut, comme la capture) —</div>
+  </div>
+
+  <table id="tableau"></table>
+</div>
+
+<script>
+  const fils = [
+    ["Login Trame", 12, ["proxmox - Proxmox Virtual Environment", "Se connecter | OPNsense", "Accueil — home lab", "Clément – Home Assistant", "Login – Nginx Proxy Manager", "Login"], 6],
+    ["Amazon Dvd", 1, ["Black Friday Week 2026 : c'est parti sur Amazon.fr!"]],
+    ["Boutique Clem", 1, ["Clem-Informatique — Boutique & licences logiciels"]],
+    ["Amazon Dvd", 2, ["Amazon.fr : livres, DVD, jeux vidéo…", "Amazon.fr : livres, DVD, jeux vidéo…"]],
+    ["Nouvel onglet", 1, ["Nouvel onglet"]],
+  ];
+  const g = document.getElementById("grille");
+  for (const [nom, n, chips, autres] of fils) {
+    const c = document.createElement("div"); c.className = "carte";
+    c.innerHTML = `<div class="carte-tete"><span class="carte-nom">${nom}</span><span class="carte-compte">${n}</span></div>
+      <div class="chips">${chips.map(t => `<div class="chip"><i></i><span>${t}</span></div>`).join("")}
+      ${autres ? `<div class="plus">+ ${autres} autre(s)</div>` : ""}</div>`;
+    g.appendChild(c);
+  }
+
+  const notes = {
+    1: "<b>1 · Actuel</b> — les valeurs de <code>ui/newtab.html</code> aujourd'hui. Les cartes d'une même rangée prennent la hauteur de la plus remplie (Login Trame), d'où les grands vides sous Amazon Dvd et Boutique Clem.",
+    2: "<b>2 · Resserré</b> — même largeur, rien ne change de place : marges du haut et entre sections réduites d'environ un tiers, tuiles et cartes un peu moins hautes, et <b>chaque carte garde sa propre hauteur</b> (plus de vide sous les fils courts). La 2e rangée de fils remonte dans l'écran.",
+    3: "<b>3 · Resserré + plus large</b> — comme la 2, avec une page de 1 240 px au lieu de 1 020 (l'écran fait 1 610 px) : 4 fils par rangée au lieu de 3, et le titre sur une seule ligne (« Trame Bonsoir. lundi 23 novembre »). Tout tient sans défiler.",
+  };
+  const lignes = [
+    ["Marge du haut de la page", "54", "34", "30"],
+    ["Largeur de la page", "1 020", "1 020", "1 240"],
+    ["Titre « Bonsoir. »", "30 px, 3 lignes", "28 px, 3 lignes", "26 px, 1 ligne"],
+    ["Sous le titre", "26", "16", "14"],
+    ["Recherche : hauteur / dessus / dessous", "46 / 22 / 34", "42 / 14 / 24", "42 / 0 / 22"],
+    ["Entre deux sections", "34", "24", "22"],
+    ["Sous un titre de section", "14", "10", "10"],
+    ["Tuile d'accès rapide : largeur min / haut", "104 / 14", "100 / 11", "100 / 11"],
+    ["Carte de fil : marge intérieure", "14 × 15", "12 × 14", "12 × 14"],
+    ["Ligne d'onglet dans un fil", "5 px", "4 px", "4 px"],
+    ["Hauteur des cartes d'une rangée", "égale (la plus haute)", "chacune la sienne", "chacune la sienne"],
+    ["Fils par rangée", "3", "3", "4"],
+  ];
+
+  const page = document.getElementById("page"), entete = document.getElementById("entete");
+  function choisir(v) {
+    page.className = "page v" + v + (document.getElementById("rep").checked ? " reperes" : "");
+    entete.className = "entete" + (v === "3" ? " ligne" : "");
+    document.querySelectorAll(".choix button").forEach(b => b.classList.toggle("actif", b.dataset.v === v));
+    document.getElementById("note").innerHTML = notes[v];
+    document.getElementById("tableau").innerHTML =
+      `<tr><th>Espacement (px)</th><th>1 · Actuel</th><th>2 · Resserré</th><th>3 · + large</th></tr>` +
+      lignes.map(l => `<tr><td>${l[0]}</td><td>${l[1]}</td><td class="${l[2]!==l[1]?"change":""}">${l[2]}</td><td class="${l[3]!==l[1]?"change":""}">${l[3]}</td></tr>`).join("");
+    ajuster();
+  }
+  function ajuster() {
+    const e = document.getElementById("ecran"), dispo = window.innerWidth - 36;
+    const k = Math.min(1, dispo / 1610);
+    e.style.transform = `scale(${k})`; e.style.marginBottom = `${-(950 * (1 - k))}px`;
+  }
+  document.querySelectorAll(".choix button").forEach(b => b.onclick = () => choisir(b.dataset.v));
+  document.getElementById("rep").onchange = () => choisir(document.querySelector(".choix button.actif").dataset.v);
+  window.addEventListener("resize", ajuster);
+  choisir("2");
+</script>
+</body>
+</html>
