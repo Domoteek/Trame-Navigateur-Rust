@@ -5060,12 +5060,43 @@ impl App {
             .find(|t| t.url == maj.url && t.etat == "termine")
             .cloned();
         let Some(telechargement) = deja else {
-            // Un seul clic doit suffire : le telechargement part, et `suivre_telechargements`
-            // enchaine l'installation des qu'il est complet.
-            self.maj_a_installer = true;
+            // Un seul clic doit suffire — et SANS onglet : Clement ne veut ni basculer sur un
+            // onglet de telechargement, ni voir une page s'ouvrir sur le lien du setup
+            // (2026-11-23). Le fichier descend donc en tache de fond, directement dans le
+            // dossier de telechargements, puis l'installation prend le relais : l'installeur
+            // ferme Trame, et le .bat le rallume.
+            let url = maj.url.clone();
+            let dossier = self.dossier_telechargements();
+            let nom = format!("Trame-{}-setup.exe", maj.version);
+            let version = maj.version.clone();
             self.signaler("Téléchargement de la mise à jour…");
-            info!("mise a jour : telechargement lance par « Installer »");
-            self.ouvrir_onglet(maj.url.clone(), Declencheur::Lien, None);
+            info!("mise a jour : telechargement de {nom} en tache de fond (sans onglet)");
+            std::thread::spawn(move || {
+                use std::os::windows::process::CommandExt;
+                let _ = std::fs::create_dir_all(&dossier);
+                let cible = dossier.join(&nom);
+                let ok = std::process::Command::new("curl")
+                    .args([
+                        "-s",
+                        "-L",
+                        "--max-time",
+                        "900",
+                        "-o",
+                        &cible.to_string_lossy().to_string(),
+                        &url,
+                    ])
+                    .creation_flags(crate::systeme::SANS_CONSOLE)
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false)
+                    && cible.exists();
+                if ok {
+                    info!("mise a jour : {nom} telecharge, installation de {version}");
+                    lancer_installation(&cible.to_string_lossy().to_string());
+                } else {
+                    alerte!("mise a jour : telechargement de {nom} impossible");
+                }
+            });
             return;
         };
         if !Path::new(&telechargement.chemin).exists() {
