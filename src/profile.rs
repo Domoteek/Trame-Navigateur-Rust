@@ -560,26 +560,9 @@ impl Profil {
                 if comparer_versions(&neuve, &ancienne) != std::cmp::Ordering::Greater {
                     continue;
                 }
-                let garde = self
-                    .racine
-                    .join("extensions-anciennes")
-                    .join(format!("{nom}-{ancienne}-{}", crate::log::maintenant_ms()));
-                let deplacee = garde
-                    .parent()
-                    .map(|p| fs::create_dir_all(p).is_ok())
-                    .unwrap_or(false)
-                    && fs::rename(&destination, &garde).is_ok();
-                if deplacee && copier_dossier(&chemin, &destination).is_ok() {
-                    info!(
-                        "extension livree {nom} mise a jour : {ancienne} -> {neuve} (ancienne gardee dans {})",
-                        garde.display()
-                    );
+                if self.remplacer_par_livree(&nom, &chemin, &destination, &ancienne) {
+                    info!("extension livree {nom} mise a jour : {ancienne} -> {neuve}");
                     copies.push(format!("{nom} {neuve}"));
-                } else if deplacee {
-                    // La copie a echoue : on remet l'ancienne plutot que de laisser un trou.
-                    let _ = fs::remove_dir_all(&destination);
-                    let _ = fs::rename(&garde, &destination);
-                    alerte!("extension livree {nom} : mise a jour impossible, ancienne remise");
                 }
                 continue;
             }
@@ -595,6 +578,63 @@ impl Profil {
         if !copies.is_empty() {
             info!("extensions livrees copiees dans le profil : {}", copies.join(", "));
         }
+    }
+
+    /// Remplace la copie du profil d'une extension livree par la livree, l'ancienne gardee dans
+    /// `extensions-anciennes\` (l'utilisateur a pu la retoucher). En cas d'echec, l'ancienne est
+    /// remise : jamais de trou.
+    fn remplacer_par_livree(&self, nom: &str, livree: &Path, destination: &Path, etiquette: &str) -> bool {
+        let garde = self
+            .racine
+            .join("extensions-anciennes")
+            .join(format!("{nom}-{etiquette}-{}", crate::log::maintenant_ms()));
+        let deplacee = garde
+            .parent()
+            .map(|p| fs::create_dir_all(p).is_ok())
+            .unwrap_or(false)
+            && fs::rename(destination, &garde).is_ok();
+        if deplacee && copier_dossier(livree, destination).is_ok() {
+            info!("extension livree {nom} remise a neuf (ancienne gardee dans {})", garde.display());
+            return true;
+        }
+        if deplacee {
+            let _ = fs::remove_dir_all(destination);
+            let _ = fs::rename(&garde, destination);
+            alerte!("extension livree {nom} : remplacement impossible, ancienne remise");
+        }
+        false
+    }
+
+    /// Verification d'apres mise a jour (et bouton « Réparer Trame ») : chaque extension livree
+    /// encore presente dans le profil est comparee **par son contenu** a la livree, pas seulement
+    /// par son numero de version — une copie retouchee ou laissee par une tres vieille version
+    /// survivait sinon a toutes les mises a jour. Une extension que l'utilisateur a supprimee ne
+    /// revient pas. `toutes` : remplace aussi les identiques. Rend les noms remis a neuf.
+    pub fn verifier_extensions_livrees(&self, source: &Path, toutes: bool) -> Vec<String> {
+        let cible = self.dossier_extensions();
+        let mut reparees = Vec::new();
+        let Ok(lecture) = fs::read_dir(source) else {
+            return reparees;
+        };
+        for entree in lecture.flatten() {
+            let livree = entree.path();
+            if !livree.is_dir() {
+                continue;
+            }
+            let nom = livree.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            let destination = cible.join(&nom);
+            if nom.is_empty() || !destination.is_dir() {
+                continue;
+            }
+            if !toutes && dossiers_identiques(&livree, &destination) {
+                continue;
+            }
+            let etiquette = version_manifeste(&destination).unwrap_or_else(|| "?".into());
+            if self.remplacer_par_livree(&nom, &livree, &destination, &etiquette) {
+                reparees.push(nom);
+            }
+        }
+        reparees
     }
 
     pub fn charger_ext_storage(&self) -> Value {
@@ -748,7 +788,7 @@ fn ecarter(chemin: &Path) -> Option<PathBuf> {
 
 /// Copie recursive (extensions livrees -> profil).
 /// Version lue dans le `manifest.json` d'un dossier d'extension.
-fn version_manifeste(dossier: &Path) -> Option<String> {
+pub(crate) fn version_manifeste(dossier: &Path) -> Option<String> {
     let texte = fs::read_to_string(dossier.join("manifest.json")).ok()?;
     let v: Value = serde_json::from_str(&texte).ok()?;
     v.get("version")?.as_str().map(str::to_string)
@@ -767,6 +807,29 @@ fn comparer_versions(a: &str, b: &str) -> std::cmp::Ordering {
         }
     }
     std::cmp::Ordering::Equal
+}
+
+/// Les fichiers d'un dossier, chemins relatifs tries (pour comparer deux arbres).
+fn fichiers_relatifs(racine: &Path, ici: &Path, sortie: &mut Vec<PathBuf>) {
+    let Ok(lecture) = fs::read_dir(ici) else { return };
+    for entree in lecture.flatten() {
+        let chemin = entree.path();
+        if chemin.is_dir() {
+            fichiers_relatifs(racine, &chemin, sortie);
+        } else if let Ok(relatif) = chemin.strip_prefix(racine) {
+            sortie.push(relatif.to_path_buf());
+        }
+    }
+}
+
+/// Deux dossiers ont-ils exactement les memes fichiers, octet pour octet ?
+pub(crate) fn dossiers_identiques(a: &Path, b: &Path) -> bool {
+    let (mut fa, mut fb) = (Vec::new(), Vec::new());
+    fichiers_relatifs(a, a, &mut fa);
+    fichiers_relatifs(b, b, &mut fb);
+    fa.sort();
+    fb.sort();
+    fa == fb && fa.iter().all(|r| matches!((fs::read(a.join(r)), fs::read(b.join(r))), (Ok(x), Ok(y)) if x == y))
 }
 
 fn copier_dossier(source: &Path, destination: &Path) -> std::io::Result<()> {
@@ -1170,6 +1233,32 @@ mod tests {
         fs::remove_dir_all(p.dossier_extensions().join("nouvelle")).unwrap();
         p.amorcer_extensions(&source);
         assert!(!p.dossier_extensions().join("nouvelle").exists());
+        let _ = fs::remove_dir_all(p.racine());
+    }
+
+    #[test]
+    fn la_verification_d_apres_mise_a_jour_compare_le_contenu() {
+        let p = profil("verif-livrees");
+        let source = p.racine().join("source");
+        fs::create_dir_all(source.join("demo")).unwrap();
+        fs::write(source.join("demo").join("manifest.json"), r#"{"version":"1.0.0"}"#).unwrap();
+        fs::write(source.join("demo").join("contenu.js"), "// neuf").unwrap();
+        fs::create_dir_all(source.join("supprimee")).unwrap();
+        fs::write(source.join("supprimee").join("manifest.json"), "{}").unwrap();
+        p.amorcer_extensions(&source);
+        fs::remove_dir_all(p.dossier_extensions().join("supprimee")).unwrap();
+        // Identique : rien a faire.
+        assert!(p.verifier_extensions_livrees(&source, false).is_empty());
+        // Meme numero, contenu perime (une copie d'une tres vieille version) : remise a neuf.
+        fs::write(p.dossier_extensions().join("demo").join("contenu.js"), "// vieux").unwrap();
+        fs::write(p.dossier_extensions().join("demo").join("reste.js"), "x").unwrap();
+        assert_eq!(p.verifier_extensions_livrees(&source, false), vec!["demo".to_string()]);
+        assert_eq!(fs::read_to_string(p.dossier_extensions().join("demo").join("contenu.js")).unwrap(), "// neuf");
+        assert!(!p.dossier_extensions().join("demo").join("reste.js").exists());
+        assert!(dossiers_identiques(&source.join("demo"), &p.dossier_extensions().join("demo")));
+        // Supprimee par l'utilisateur : elle ne revient pas, meme forcee.
+        assert_eq!(p.verifier_extensions_livrees(&source, true), vec!["demo".to_string()]);
+        assert!(!p.dossier_extensions().join("supprimee").exists());
         let _ = fs::remove_dir_all(p.racine());
     }
 

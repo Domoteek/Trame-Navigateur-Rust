@@ -101,11 +101,11 @@ pub fn plat(texte: &str) -> String {
         .collect()
 }
 
-/// Mots qui ne disent rien du sujet : « comment je fais pour… ».
-const VIDES: [&str; 28] = [
+/// Mots qui ne disent rien du sujet : « comment je fais pour… », et le nom du logiciel.
+const VIDES: [&str; 30] = [
     "comment", "faire", "fait", "fais", "pour", "les", "des", "une", "un", "le", "la", "de", "du",
     "je", "on", "en", "et", "ou", "mon", "ma", "mes", "est", "que", "qui", "avec", "dans", "sur",
-    "peut",
+    "peut", "trame", "navigateur",
 ];
 
 /// La requete ressemble-t-elle a une question ? Alors l'aide passe en tete de la Couture.
@@ -146,15 +146,19 @@ fn pertinence(requete: &str, c: &Chapitre) -> f32 {
         return score;
     }
     let titre = plat(&c.titre);
-    let mut trouves = 0usize;
+    // Un mot trouve tel quel vaut 1 ; un mot qui ne fait que commencer un mot de la fiche
+    // (« compar » → « comparer ») vaut 0,75 : « bloqué » doit aller au Dépannage (« bloqué »)
+    // plutot qu'au Zappeur (« bloquer »).
+    let mut trouves = 0.0f32;
     for w in &utiles {
-        let dans_mots = mots.iter().any(|m| m.split(' ').any(|piece| piece == *w || (w.len() >= 4 && piece.starts_with(w))));
-        let dans_titre = titre.split(|ch: char| !ch.is_alphanumeric()).any(|piece| piece == *w);
-        if dans_mots || dans_titre {
-            trouves += 1;
+        let pieces = || mots.iter().flat_map(|m| m.split(' ')).chain(titre.split(|ch: char| !ch.is_alphanumeric()));
+        if pieces().any(|piece| piece == *w) {
+            trouves += 1.0;
+        } else if w.len() >= 4 && mots.iter().flat_map(|m| m.split(' ')).any(|piece| piece.starts_with(w)) {
+            trouves += 0.75;
         }
     }
-    score.max(0.85 * trouves as f32 / utiles.len() as f32)
+    score.max(0.85 * trouves / utiles.len() as f32)
 }
 
 /// Les fiches qui repondent a une saisie de la Couture, la meilleure d'abord (deux au plus).
@@ -216,6 +220,9 @@ mod tests {
             assert_eq!(r.first().map(|x| x.id.as_str()), Some("aide:video"), "{q}");
         }
         assert_eq!(resultats_couture("raccourcis clavier")[0].id, "aide:raccourcis");
+        for q in ["trame ne marche pas", "réparer trame", "trame est bloqué"] {
+            assert_eq!(resultats_couture(q).first().map(|x| x.id.as_str()), Some("aide:depannage"), "{q}");
+        }
     }
 
     #[test]

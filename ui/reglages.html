@@ -412,6 +412,26 @@
               </div>
             </div>
           </div>
+
+          <div class="groupe" data-mots="dépannage réparer bug problème panne rapport claude youtube cache réinstaller">
+            <h3>Dépannage</h3>
+            <div class="carte">
+              <div class="ligne">
+                <div class="libelle">
+                  <b>Réparer Trame</b>
+                  <span>Vide les caches du moteur, remet à neuf les extensions livrées avec Trame et les réglages de mémoire et de veille. Tes fils, favoris, accès rapides et connexions restent. Redémarre Trame ensuite.</span>
+                </div>
+                <button id="btn-reparer">Réparer</button>
+              </div>
+              <div class="ligne">
+                <div class="libelle">
+                  <b>Rapport pour Claude</b>
+                  <span>Un fichier texte dans tes téléchargements : versions, extensions, réglages et fin du journal, sans les pages visitées. À envoyer à Claude quand quelque chose ne va pas.</span>
+                </div>
+                <button id="btn-rapport">Écrire le rapport</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- =============================== APPARENCE =============================== -->
@@ -1637,6 +1657,14 @@
 
         $("bascule-astuces").onclick = () => ipc({ m: "astuces", actif: !reglage("astuces") });
         $("btn-notice").onclick = () => ipc({ m: "aideOuvrir", chapitre: "premiers-pas" });
+        $("btn-reparer").onclick = () => {
+          const question =
+            "Réparer Trame ?\n\nLes caches du moteur sont vidés, les extensions livrées avec Trame remises à neuf, " +
+            "et les réglages de mémoire et de veille remis par défaut.\nTes fils, favoris, accès rapides et connexions restent.";
+          if (!confirm(question)) return;
+          ipc({ m: "trameReparer" });
+        };
+        $("btn-rapport").onclick = () => ipc({ m: "trameRapport" });
         $("bascule-veille").onclick = () =>
           ipc({ m: "veilleAuto", actif: !((etat && etat.reglages && etat.reglages.veilleAuto) || false) });
         $("btn-par-defaut").onclick = () => ipc({ m: "navigateurParDefaut" });

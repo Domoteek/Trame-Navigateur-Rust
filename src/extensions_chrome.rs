@@ -535,6 +535,13 @@ pub fn noter_rechargee(dossiers: &Dossiers, identifiant: &str) {
     let _ = std::fs::write(chemin, MARQUE_ADAPTATEUR);
 }
 
+/// Oublie que les extensions Chrome ont ete adaptees et rechargees (« Réparer Trame ») : au
+/// demarrage suivant, chacune est re-verifiee et rechargee une fois. Rend vrai si oublie.
+pub fn oublier_rechargements(dossiers: &Dossiers) -> bool {
+    let dossier = dossiers.parent().join("extensions-chrome-adaptees");
+    dossier.is_dir() && std::fs::remove_dir_all(&dossier).is_ok()
+}
+
 fn temoin_rechargement(dossiers: &Dossiers, identifiant: &str) -> PathBuf {
     dossiers.parent().join("extensions-chrome-adaptees").join(identifiant)
 }

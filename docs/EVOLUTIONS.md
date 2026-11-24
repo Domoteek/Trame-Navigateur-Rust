@@ -1307,6 +1307,27 @@ La fiche « Côte à côte » dit aussi comment revenir à une seule page (Quitt
 **Éprouvé** : `eprouver-menus.mjs` (8 menus × 4 tailles + 6 redimensionnements, tout tient),
 `tester-ui.mjs` 96/96, `cargo test --release` 218. **Pas éprouvé** sur le PC du fils lui-même.
 
+## 10 vicies. 2026-11-24 — vérifier après mise à jour, réparer, rapporter (0.4.64)
+
+Clément : chez un de ses fils, le compteur du lecteur YouTube ne se rafraîchissait plus jusqu'à une
+désinstallation complète ; il proposait de vérifier les fichiers à chaque mise à jour. Constat avant
+de coder : l'interface est déjà comparée octet par octet à chaque démarrage (`ressources.rs`) ; les
+extensions livrées ne l'étaient que par leur NUMÉRO ; le profil du moteur (caches, service workers)
+ne l'était pas du tout — c'est lui que la désinstallation remettait à zéro. Trois propositions,
+« les trois » :
+
+| Ce qui change | Où |
+|---|---|
+| **Vérification d'après mise à jour** : `version_vue` dans les réglages ; quand elle change, chaque extension livrée encore présente est comparée par son CONTENU (`dossiers_identiques`) et remise à neuf si besoin, l'ancienne gardée dans `extensions-anciennes\` ; un message dit ce qui a été réparé. Une extension supprimée par l'utilisateur ne revient pas | `src/profile.rs`, `src/app/depannage.rs` |
+| **Réparer Trame** (Réglages → Général → Dépannage, ou `> réparer`) : `ClearBrowsingData` cache disque + Cache Storage + service workers pour chaque profil en service (ni cookies ni stockage : les connexions restent), extensions livrées remises à neuf, témoins des extensions Chrome oubliés (réadaptées au démarrage suivant), veille / budget / mémoire basse / pause par défaut | `src/moteur_ext.rs` (`vider_caches`), `src/extensions_chrome.rs`, `src/app/depannage.rs` |
+| **Rapport pour Claude** (même endroit, ou `> rapport`) : un `.txt` dans les téléchargements — versions (Trame, Windows, WebView2), fenêtre et échelle, extensions (identiques ou non à la livrée), réglages sans dossiers ni sites exclus, 250 lignes de journal **adresses réduites à leur site** (le PC d'un enfant) | `src/app/depannage.rs` |
+| Fiche de la Notice « Quand quelque chose ne va pas » ; la Couture ignore le nom du logiciel (« réparer trame ») et préfère un mot exact à un début de mot (« bloqué » → Dépannage, pas Zappeur) | `ui/notice.js`, `src/aide.rs` |
+
+**Éprouvé** : `outils/eprouver-depannage.mjs` dans le vrai binaire caché (profil « d'une vieille
+version » remis à neuf au démarrage, rapport sans adresse ni recherche, réparation complète,
+autres réglages intacts — 22/22), `cargo test --release` 220, `tester-ui.mjs` 97/97.
+**Pas éprouvé** : sur le PC du fils, où le lecteur YouTube était figé.
+
 ## 11. L'état aujourd'hui
 
 ```

@@ -281,6 +281,8 @@ pub struct App {
     pub(super) incrustes: std::collections::HashSet<TabId>,
     /// La Notice et les astuces (`app/aide.rs`).
     aide: aide::EtatAide,
+    /// Ce que la verification d'apres mise a jour a repare, dit une fois l'interface prete.
+    message_demarrage: Option<String>,
     /// Page a charger dans un onglet des qu'il est entierement mis en place.
     navigation_differee: std::collections::HashMap<TabId, String>,
     /// Les extensions du dossier ont-elles ete comparees a celles du moteur (au demarrage) ?
@@ -405,6 +407,7 @@ pub struct App {
 }
 
 mod aide;
+mod depannage;
 mod fenetre;
 mod flottant;
 mod outils;
@@ -771,6 +774,7 @@ impl App {
             en_memoire_basse: std::collections::HashSet::new(),
             incrustes: std::collections::HashSet::new(),
             aide: aide::EtatAide::default(),
+            message_demarrage: None,
             zap_profil: None,
             derniere_mesure: probe::Mesure::default(),
             nettoyage: std::sync::Arc::new((
@@ -1050,6 +1054,7 @@ impl App {
             self.reglages.barre_extensions
         );
         self.profil.amorcer_extensions(&self.racine_extensions_livrees());
+        self.verifier_apres_mise_a_jour();
         self.extensions = extensions::charger(&self.profil.dossier_extensions());
         self.appliquer_etat_extensions();
         self.rail_replie = self.session.rail_replie;
@@ -2741,6 +2746,7 @@ impl App {
         self.relever_liens_externes();
         self.outils_tick(now);
         self.aide_tick();
+        self.depannage_tick(now);
         self.sauvegarde_auto_tick(now);
         // Une seule tentative de plus sur les profils prives, quelques secondes apres le
         // demarrage : Chromium peut avoir recree le dossier de celui qu'il connaissait. Insister
@@ -3808,7 +3814,7 @@ impl App {
             self.fermer_apercu();
         }
 
-        if self.traiter_ipc_outils(source, m, &v) || self.traiter_ipc_fenetre(source, m, &v) || self.traiter_ipc_aide(m, &v) {
+        if self.traiter_ipc_outils(source, m, &v) || self.traiter_ipc_fenetre(source, m, &v) || self.traiter_ipc_aide(m, &v) || self.traiter_ipc_depannage(m) {
             return;
         }
 
@@ -5013,6 +5019,8 @@ impl App {
             }
             "raccourcis" => self.afficher_calque_raccourcis(),
             "couture" => self.raccourci("couture"),
+            "reparer" => self.reparer_trame(),
+            "rapport" => self.rapport_pour_claude(),
             // Cote a cote avec l'onglet regarde juste avant (« Essayer » de la Notice, astuce).
             "cote" => {
                 if let Some(actif) = self.actif {

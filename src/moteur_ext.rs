@@ -241,6 +241,41 @@ pub fn suspendre(webview: &WebView, proxy: EventLoopProxy<UserEvent>, onglet: u3
     }
 }
 
+/// « Réparer Trame » : vide les caches du profil de cette webview — cache disque, caches des
+/// sites (Cache Storage) et service workers. Ni cookies, ni stockage des sites, ni mots de
+/// passe : les connexions restent. C'est ce que remettait a zero une desinstallation complete
+/// (lecteur YouTube fige chez un fils de Clement, 2026-11-24). Le resultat va au journal.
+pub fn vider_caches(webview: &WebView, proxy: EventLoopProxy<UserEvent>, quoi: String) {
+    use webview2_com::ClearBrowsingDataCompletedHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2Profile2, COREWEBVIEW2_BROWSING_DATA_KINDS_CACHE_STORAGE,
+        COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE, COREWEBVIEW2_BROWSING_DATA_KINDS_SERVICE_WORKERS,
+    };
+    let retour = proxy.clone();
+    let nom = quoi.clone();
+    let fin = ClearBrowsingDataCompletedHandler::create(Box::new(move |resultat| {
+        let _ = retour.send_event(UserEvent::Log(format!(
+            "reparation : caches de {nom} {}",
+            if resultat.is_ok() { "vides" } else { "NON vides" }
+        )));
+        Ok(())
+    }));
+    let sortes = COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE
+        | COREWEBVIEW2_BROWSING_DATA_KINDS_CACHE_STORAGE
+        | COREWEBVIEW2_BROWSING_DATA_KINDS_SERVICE_WORKERS;
+    let appel = unsafe {
+        webview
+            .webview()
+            .cast::<ICoreWebView2_13>()
+            .and_then(|w| w.Profile())
+            .and_then(|p| p.cast::<ICoreWebView2Profile2>())
+            .and_then(|p| p.ClearBrowsingData(sortes, &fin))
+    };
+    if let Err(e) = appel {
+        let _ = proxy.send_event(UserEvent::Log(format!("reparation : caches de {quoi} refuses ({})", e.message())));
+    }
+}
+
 /// Lit l'image de l'icone de la page (PNG), telle que WebView2 l'a deja chargee pour l'onglet :
 /// aucune requete de plus, et rien que l'anti-pistage puisse bloquer (l'adresse de l'icone,
 /// rechargee depuis l'interface de Trame, est un tiers : celle d'Amazon y etait refusee).

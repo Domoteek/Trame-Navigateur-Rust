@@ -258,6 +258,27 @@ window.NOTICE = {
       "voir": ["rail-acces", "extensions"]
     },
     {
+      "id": "depannage",
+      "titre": "Quand quelque chose ne va pas",
+      "resume": "Réglages → Général → Dépannage : « Réparer Trame », puis redémarrer. Si ça ne suffit pas : « Rapport pour Claude ».",
+      "chapeau": "Une page qui ne bouge plus, un lecteur vidéo figé, un menu bizarre : Trame se répare sans rien perdre, et sait écrire un rapport pour trouver la cause.",
+      "etapes": [
+        { "titre": "Réparer Trame", "texte": "Réglages → Général → Dépannage → Réparer. Vide les caches du moteur, remet à neuf les extensions livrées et les réglages de mémoire et de veille. Fils, favoris, accès rapides et connexions restent. Redémarre Trame ensuite." },
+        { "titre": "Rapport pour Claude", "texte": "Même endroit, « Écrire le rapport » : un fichier dans tes téléchargements (versions, extensions, réglages, fin du journal), sans les pages visitées. Envoie-le à Claude." },
+        { "titre": "Après chaque mise à jour", "texte": "Trame vérifie tout seul ses fichiers et ses extensions au premier démarrage, et dit ce qu'il a remis à neuf." }
+      ],
+      "conseils": [
+        "Plus besoin de désinstaller et de tout effacer : « Réparer Trame » fait le même ménage sans perdre tes fils ni tes connexions.",
+        "Aussi depuis la barre : tape « > réparer » ou « > rapport »."
+      ],
+      "actions": [
+        { "libelle": "Écrire le rapport", "commande": "rapport" },
+        { "libelle": "Ouvrir les réglages", "commande": "reglages" }
+      ],
+      "mots": ["dépannage", "réparer", "réparation", "bug", "problème", "panne", "marche pas", "fonctionne pas", "bloqué", "figé", "rapport", "réinstaller", "désinstaller", "cache", "lent"],
+      "voir": ["sauvegarde", "extensions"]
+    },
+    {
       "id": "raccourcis",
       "titre": "Tous les raccourcis",
       "resume": "Ctrl+/ les affiche tous, par-dessus la page.",
@@ -329,6 +350,14 @@ window.NOTICE = {
   ],
 
   "nouveautes": [
+    {
+      "version": "0.4.64",
+      "lignes": [
+        "Après chaque mise à jour, Trame vérifie le contenu de ses extensions et remet à neuf ce qui a changé.",
+        "Réglages → Général → Dépannage : « Réparer Trame » (sans rien perdre) et « Rapport pour Claude ».",
+        "Nouvelle fiche de la Notice : « Quand quelque chose ne va pas »."
+      ]
+    },
     {
       "version": "0.4.63",
       "lignes": [

@@ -455,6 +455,10 @@ pub struct Reglages {
     /// Instant (ms) de la derniere astuce montree, pour en espacer deux d'au moins un jour.
     #[serde(default)]
     pub astuce_derniere: u64,
+    /// Derniere version de Trame qui a demarre sur ce profil : quand elle change, la
+    /// verification d'apres mise a jour tourne (`App::verifier_apres_mise_a_jour`).
+    #[serde(default)]
+    pub version_vue: String,
 }
 
 fn sauvegarde_heures_defaut() -> u32 {
@@ -655,6 +659,7 @@ impl Default for Reglages {
             astuces: true,
             astuces_vues: Vec::new(),
             astuce_derniere: 0,
+            version_vue: String::new(),
         }
     }
 }

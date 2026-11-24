@@ -2740,7 +2740,7 @@ async function suite() {
     }
     // Le coeur, ses outils (favoris, rendez-vous, cote a cote, guets : `src/app/outils.rs`) et
     // la barre de la fenetre (`src/app/fenetre.rs`).
-    const app = ["app.rs", path.join("app", "outils.rs"), path.join("app", "fenetre.rs"), path.join("app", "aide.rs")]
+    const app = ["app.rs", path.join("app", "outils.rs"), path.join("app", "fenetre.rs"), path.join("app", "aide.rs"), path.join("app", "depannage.rs")]
       .map((f) => fs.readFileSync(path.join(RACINE, "src", f), "utf8"))
       .join("\n");
     const traites = new Set();
@@ -2897,6 +2897,24 @@ async function suite() {
     await p.click("#btn-page");
     await pousser(p, { ...etat, hauteurFenetre: 600, largeurFenetre: 1000 });
     verifier(await p.$eval("#menu-page", (n) => !n.hidden), "un état sans changement de taille laisse le menu ouvert");
+    await p.close();
+  });
+
+  await cas("reglages : dépannage — réparer demande confirmation, le rapport part tout de suite", async () => {
+    const p = await page("reglages.html");
+    await pousser(p, { ...etatDeBase(), reglages: { astuces: true } });
+    await rubrique(p, "general");
+    await vider(p);
+    // Refus : rien ne part.
+    p.once("dialog", (d) => d.dismiss());
+    await p.click("#btn-reparer");
+    await p.waitForTimeout(100);
+    egal((await messages(p)).filter((m) => m.m === "trameReparer").length, 0, "réparation refusée");
+    p.once("dialog", (d) => d.accept());
+    await p.click("#btn-reparer");
+    await p.click("#btn-rapport");
+    await p.waitForTimeout(100);
+    egal((await messages(p)).map((m) => m.m).filter((m) => m.startsWith("trame")), ["trameReparer", "trameRapport"], "réparation puis rapport");
     await p.close();
   });
 

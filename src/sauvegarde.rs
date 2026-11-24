@@ -233,7 +233,7 @@ fn empreinte(donnees: &Map<String, Value>) -> String {
 /// `log::horodatage` est en UTC et rend `HH:MM:SSZ` : s'en servir pour nommer une sauvegarde
 /// donnerait « 20 h 05 » pour un fichier écrit à 21 h 05, et ses deux-points sont interdits
 /// dans un nom de fichier Windows. Rend (lisible, nom de fichier).
-fn date_locale() -> (String, String) {
+pub(crate) fn date_locale() -> (String, String) {
     use windows::Win32::System::SystemInformation::GetLocalTime;
     let t = unsafe { GetLocalTime() };
     let lisible = format!(

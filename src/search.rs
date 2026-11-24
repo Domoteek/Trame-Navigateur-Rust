@@ -150,7 +150,7 @@ pub fn classer(
 
 /// Actions proposees quand la requete commence par `>` (et au clic droit sur le logo du rail).
 pub fn commandes(requete: &str) -> Vec<Resultat> {
-    const TABLE: [(&str, &str, &str); 16] = [
+    const TABLE: [(&str, &str, &str); 18] = [
         ("nouvel-onglet", "Nouvel onglet", "Ctrl+T"),
         ("prive", "Navigation privée : rien n'est gardé", "Ctrl+Maj+N"),
         ("fermer-onglet", "Fermer l'onglet", "Ctrl+W"),
@@ -167,6 +167,8 @@ pub fn commandes(requete: &str) -> Vec<Resultat> {
         ("anchrer", "Ancrer / detacher l'onglet actif", ""),
         ("alire", "Marquer l'onglet actif a lire plus tard", ""),
         ("vider-historique", "Vider l'historique", ""),
+        ("reparer", "Réparer Trame : caches du moteur, extensions à neuf", ""),
+        ("rapport", "Écrire un rapport pour Claude (dépannage)", ""),
     ];
     let nu = requete.trim_start_matches('>').trim();
     let mut out = Vec::new();
