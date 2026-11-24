@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Notice de Trame</title>
+    <!--
+      La Notice (F1, bouton ? de la barre, menu ⋯ → Aide). Contenu : ui/notice.js, source unique
+      de toute l'aide. `aide.html#cote-a-cote` ouvre une fiche ; `aide.html?impression` donne la
+      notice complète mise en page pour l'impression — c'est elle qui devient le PDF livré
+      (`outils/faire-notice.mjs`). Maquette choisie par Clément : docs/maquettes/aide.html (2026-11-24).
+    -->
+    <style>
+      :root {
+        --fond: #080b11;
+        --fond-2: #0b0f17;
+        --surface-2: #151c2a;
+        --surface-3: #1b2434;
+        --accent-rgb: 96, 165, 250;
+        --accent-2-rgb: 167, 139, 250;
+        --bord: rgba(255, 255, 255, 0.08);
+        --bord-fort: rgba(255, 255, 255, 0.16);
+        --texte: #e9eefa;
+        --texte-2: #97a4bb;
+        --texte-3: #616e85;
+        --accent: #60a5fa;
+        --accent-2: #a78bfa;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        background:
+          radial-gradient(55% 40% at 12% 0%, rgba(var(--accent-rgb), 0.10), transparent 62%),
+          radial-gradient(50% 35% at 92% 4%, rgba(var(--accent-2-rgb), 0.09), transparent 60%),
+          var(--fond);
+        color: var(--texte);
+        font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+        font-size: 13.5px;
+        font-variant-numeric: tabular-nums;
+      }
+      button {
+        font: inherit; font-size: 12.5px; color: var(--texte); background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--bord); border-radius: 9px; padding: 8px 14px; cursor: pointer; transition: all 0.15s;
+      }
+      button:hover { background: rgba(255, 255, 255, 0.10); border-color: var(--bord-fort); }
+      button.prim { background: rgba(var(--accent-rgb), 0.92); color: #07101f; border-color: transparent; font-weight: 600; }
+      button.prim:hover { background: rgb(var(--accent-rgb)); }
+      kbd {
+        font: inherit; font-size: 11.5px; color: var(--texte); border: 1px solid var(--bord-fort); border-bottom-width: 2px;
+        border-radius: 6px; padding: 1px 7px; background: rgba(255, 255, 255, 0.05); white-space: nowrap;
+      }
+
+      /* ------------------------------------------------------------ écran */
+      .cadre { display: grid; grid-template-columns: 270px minmax(0, 1fr); height: 100%; }
+      .sommaire { border-right: 1px solid var(--bord); display: flex; flex-direction: column; min-height: 0; background: rgba(0, 0, 0, 0.12); }
+      .sommaire .tete { padding: 26px 18px 12px; }
+      .sommaire .marque { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--texte-3); }
+      .sommaire h1 { font-size: 22px; margin: 2px 0 0; font-weight: 600; letter-spacing: -0.015em; }
+      .sommaire .version { color: var(--texte-3); font-size: 12px; margin-top: 2px; }
+      .recherche { position: relative; margin: 14px 0 4px; }
+      .recherche input {
+        width: 100%; font: inherit; color: var(--texte); background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--bord); border-radius: 10px; padding: 9px 11px 9px 32px; outline: none;
+      }
+      .recherche input:focus { border-color: rgba(var(--accent-rgb), 0.5); }
+      .recherche svg { position: absolute; left: 10px; top: 10px; width: 15px; height: 15px; color: var(--texte-3); }
+      nav { flex: 1; overflow-y: auto; padding: 4px 10px 12px; }
+      nav::-webkit-scrollbar { width: 8px; }
+      nav::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.10); border-radius: 4px; }
+      nav a {
+        display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 9px;
+        color: var(--texte-2); text-decoration: none; cursor: pointer; line-height: 1.35;
+      }
+      nav a:hover { background: rgba(255, 255, 255, 0.05); color: var(--texte); }
+      nav a.on { background: rgba(var(--accent-rgb), 0.15); color: #fff; }
+      nav a .n { width: 18px; flex: none; color: var(--texte-3); font-size: 11.5px; text-align: right; }
+      nav a .extrait { display: block; color: var(--texte-3); font-size: 11.5px; margin-top: 2px; }
+      nav .rien { color: var(--texte-3); padding: 14px 10px; line-height: 1.6; }
+      .pied-sommaire { border-top: 1px solid var(--bord); padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+      .pied-sommaire button { text-align: left; }
+      .bascule-astuces { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--texte-2); cursor: pointer; padding: 4px 2px; }
+      .interrupteur { width: 32px; height: 18px; border-radius: 9px; background: rgba(255, 255, 255, 0.14); position: relative; flex: none; transition: background 0.15s; }
+      .interrupteur::after { content: ""; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+      .bascule-astuces.on .interrupteur { background: rgb(var(--accent-rgb)); }
+      .bascule-astuces.on .interrupteur::after { transform: translateX(14px); }
+
+      main { overflow-y: auto; min-height: 0; }
+      main::-webkit-scrollbar { width: 10px; }
+      main::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.10); border-radius: 5px; }
+      .fiche { max-width: 920px; padding: 40px 48px 70px; }
+      .fil-ariane { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--texte-3); }
+      .fiche h2 { font-size: 28px; margin: 6px 0 8px; font-weight: 600; letter-spacing: -0.015em; }
+      .chapeau { color: var(--texte-2); font-size: 15px; line-height: 1.6; max-width: 720px; margin-bottom: 24px; }
+      .etapes { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 22px; }
+      .etape {
+        border: 1px solid var(--bord); border-radius: 14px; padding: 16px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+      }
+      .etape b { display: block; font-size: 14px; margin-bottom: 7px; }
+      .etape span { color: var(--texte-2); line-height: 1.55; }
+      .conseils { margin: 0 0 24px; padding: 0; list-style: none; }
+      .conseils li { position: relative; padding: 7px 0 7px 22px; color: var(--texte-2); line-height: 1.55; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+      .conseils li::before { content: ""; position: absolute; left: 4px; top: 15px; width: 7px; height: 7px; border-radius: 50%; background: rgba(var(--accent-rgb), 0.8); }
+      .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 26px; }
+      .voir { color: var(--texte-3); font-size: 12.5px; }
+      .voir a { color: var(--accent); text-decoration: none; margin-left: 10px; cursor: pointer; }
+      .voir a:hover { text-decoration: underline; }
+      .nouveautes {
+        margin: 0 0 26px; padding: 14px 18px; border-radius: 12px;
+        border: 1px solid rgba(var(--accent-rgb), 0.35); background: rgba(var(--accent-rgb), 0.07);
+      }
+      .nouveautes b { display: block; margin-bottom: 6px; }
+      .nouveautes ul { margin: 0; padding-left: 18px; color: var(--texte-2); line-height: 1.6; }
+
+      .raccourcis { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 26px; }
+      .raccourcis h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--texte-3); font-weight: 600; }
+      .raccourcis .l { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: var(--texte-2); }
+
+      /* ------------------------------------------------------------ impression */
+      body.impression {
+        --texte: #1d2433; --texte-2: #3b4458; --texte-3: #6b7487; --bord: #d9dee7; --bord-fort: #c3cad6;
+        background: #fff; color: var(--texte); font-size: 11pt; height: auto;
+      }
+      body.impression .cadre { display: none; }
+      .document { display: none; }
+      body.impression .document { display: block; }
+      .document { max-width: 760px; margin: 0 auto; padding: 30px 36px; }
+      .document .couverture { min-height: 92vh; display: flex; flex-direction: column; justify-content: center; page-break-after: always; }
+      .document .couverture .marque { font-size: 10pt; letter-spacing: 0.24em; text-transform: uppercase; color: var(--texte-3); }
+      .document .couverture h1 { font-size: 44pt; margin: 6px 0 4px; letter-spacing: -0.02em; }
+      .document .couverture .version { color: var(--texte-3); margin-bottom: 36px; }
+      .document .table { columns: 2; column-gap: 34px; padding-left: 20px; line-height: 1.9; }
+      .document .nouveautes { background: #f1f5fd; border-color: #bcd2f7; margin-top: 30px; }
+      .document .fiche { max-width: none; padding: 0; page-break-before: always; }
+      .document .fiche h2 { font-size: 20pt; }
+      .document .chapeau { font-size: 11.5pt; }
+      .document .etapes { grid-template-columns: 1fr; gap: 8px; }
+      .document .etape { background: #f7f8fb; break-inside: avoid; }
+      .document .conseils li { border-color: #eceff4; }
+      .document .actions, .document .voir { display: none; }
+      .document kbd { background: #f3f5f9; color: #1d2433; }
+      .document .raccourcis .l { border-color: #eceff4; }
+      .document .raccourcis { break-inside: avoid; }
+      .retour-ecran { position: fixed; right: 18px; top: 14px; }
+      @media print {
+        .retour-ecran { display: none; }
+        .document { padding: 0; }
+        @page { margin: 18mm 16mm; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="cadre">
+      <aside class="sommaire">
+        <div class="tete">
+          <div class="marque">Trame</div>
+          <h1>Notice</h1>
+          <div class="version" id="version"></div>
+          <label class="recherche">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            <input id="filtre" type="search" placeholder="Chercher dans la notice" autocomplete="off" />
+          </label>
+        </div>
+        <nav id="nav"></nav>
+        <div class="pied-sommaire">
+          <button id="btn-pdf" title="Notice complète en PDF : enregistrée dans tes téléchargements, puis ouverte.">Télécharger la notice (PDF)</button>
+          <button id="btn-imprimer" title="La notice complète, mise en page pour l'impression.">Imprimer la notice</button>
+          <div class="bascule-astuces" id="bascule-astuces" title="Une astuce de temps en temps, quand un raccourci te ferait gagner du temps. Une par jour au plus, jamais deux fois la même.">
+            <span class="interrupteur"></span><span>Astuces au bon moment</span>
+          </div>
+        </div>
+      </aside>
+      <main id="main"><article class="fiche" id="fiche"></article></main>
+    </div>
+
+    <div class="document" id="document"></div>
+
+    <script src="teintes.js"></script>
+    <script src="bulles.js"></script>
+    <script src="notice.js"></script>
+    <script>
+      (() => {
+        const N = window.NOTICE || { chapitres: [], raccourcis: [], nouveautes: [] };
+        const $ = (id) => document.getElementById(id);
+        const ipc = (o) => { try { window.ipc.postMessage(JSON.stringify(o)); } catch (e) {} };
+        const params = new URLSearchParams(location.search);
+        const impression = params.has("impression");
+        let etat = null;
+        let courant = "";
+
+        const elem = (tag, classe, texte) => {
+          const e = document.createElement(tag);
+          if (classe) e.className = classe;
+          if (texte != null) e.textContent = texte;
+          return e;
+        };
+        // « Maj + clic », « Ctrl+K » : les touches deviennent des <kbd>, le reste du texte reste du texte.
+        // F1, F12 passent avant la lettre seule : « Alt+F4 » ne doit pas devenir « Alt+F » et « 4 ».
+        const TOUCHES = /((?:Ctrl|Maj|Alt|F\d{1,2}|Échap|Entrée|Espace|Tab)(?:\s?\+\s?(?:Ctrl|Maj|Alt|F\d{1,2}|Entrée|Espace|Tab|clic|\d…\d|[A-Z0-9,\/](?![a-zà-ÿ])))*)/g;
+        const riche = (parent, texte) => {
+          let dernier = 0;
+          for (const m of texte.matchAll(TOUCHES)) {
+            if (m.index > dernier) parent.appendChild(document.createTextNode(texte.slice(dernier, m.index)));
+            parent.appendChild(elem("kbd", "", m[0]));
+            dernier = m.index + m[0].length;
+          }
+          if (dernier < texte.length) parent.appendChild(document.createTextNode(texte.slice(dernier)));
+          return parent;
+        };
+        const plat = (t) => (t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        const version = () => (etat && etat.version) || params.get("version") || "";
+        const chapitre = (id) => N.chapitres.find((c) => c.id === id) || N.chapitres[0];
+
+        const groupesRaccourcis = () => {
+          const groupes = new Map();
+          for (const r of N.raccourcis || []) {
+            if (!groupes.has(r.groupe)) groupes.set(r.groupe, []);
+            groupes.get(r.groupe).push(r);
+          }
+          const bloc = elem("div", "raccourcis");
+          for (const [nom, lignes] of groupes) {
+            const col = elem("div");
+            col.appendChild(elem("h3", "", nom));
+            for (const r of lignes) {
+              const l = elem("div", "l");
+              l.appendChild(elem("span", "", r.effet));
+              l.appendChild(elem("kbd", "", r.touche));
+              col.appendChild(l);
+            }
+            bloc.appendChild(col);
+          }
+          return bloc;
+        };
+
+        const blocNouveautes = () => {
+          const n = (N.nouveautes || [])[0];
+          if (!n) return null;
+          const b = elem("div", "nouveautes");
+          b.appendChild(elem("b", "", `Nouveautés de la ${n.version}`));
+          const ul = elem("ul");
+          for (const l of n.lignes) ul.appendChild(riche(elem("li"), l));
+          b.appendChild(ul);
+          return b;
+        };
+
+        // Une fiche, à l'écran comme sur papier.
+        const rendreFiche = (c, cible) => {
+          cible.textContent = "";
+          const rang = N.chapitres.indexOf(c) + 1;
+          cible.appendChild(elem("div", "fil-ariane", `Notice · ${rang}`));
+          cible.appendChild(elem("h2", "", c.titre));
+          cible.appendChild(riche(elem("div", "chapeau"), c.chapeau));
+          if (c.id === "premiers-pas" && !impression) {
+            const n = blocNouveautes();
+            if (n) cible.appendChild(n);
+          }
+          if (c.etapes && c.etapes.length) {
+            const g = elem("div", "etapes");
+            for (const e of c.etapes) {
+              const d = elem("div", "etape");
+              riche(d.appendChild(elem("b")), e.titre);
+              riche(d.appendChild(elem("span")), e.texte);
+              g.appendChild(d);
+            }
+            cible.appendChild(g);
+          }
+          if (c.id === "raccourcis") cible.appendChild(groupesRaccourcis());
+          if (c.conseils && c.conseils.length) {
+            const ul = elem("ul", "conseils");
+            for (const t of c.conseils) ul.appendChild(riche(elem("li"), t));
+            cible.appendChild(ul);
+          }
+          if (c.actions && c.actions.length) {
+            const a = elem("div", "actions");
+            c.actions.forEach((act, i) => {
+              const b = elem("button", i === 0 ? "prim" : "", act.libelle);
+              b.onclick = () => {
+                if (act.chapitre) aller(act.chapitre);
+                else ipc({ m: "ouvrir", action: { type: "commande", id: act.commande } });
+              };
+              a.appendChild(b);
+            });
+            cible.appendChild(a);
+          }
+          if (c.voir && c.voir.length) {
+            const v = elem("div", "voir", "Voir aussi :");
+            for (const id of c.voir) {
+              const autre = N.chapitres.find((x) => x.id === id);
+              if (!autre) continue;
+              const lien = elem("a", "", autre.titre.split(" : ")[0]);
+              lien.onclick = () => aller(id);
+              v.appendChild(lien);
+            }
+            cible.appendChild(v);
+          }
+        };
+
+        // Recherche : tous les mots tapés doivent figurer dans la fiche (titre, texte, mots-clés).
+        const texteDe = (c) =>
+          plat([c.titre, c.chapeau, c.resume, ...(c.mots || []), ...(c.etapes || []).flatMap((e) => [e.titre, e.texte]), ...(c.conseils || [])].join(" "));
+        const rendreNav = () => {
+          const nav = $("nav");
+          nav.textContent = "";
+          const q = plat($("filtre").value.trim());
+          const mots = q.split(/\s+/).filter((m) => m.length >= 2);
+          const liste = mots.length ? N.chapitres.filter((c) => mots.every((m) => texteDe(c).includes(m))) : N.chapitres;
+          if (!liste.length) {
+            nav.appendChild(elem("div", "rien", "Rien dans la notice pour ces mots. Essaie un mot plus court, ou tape ta question dans la barre de Trame (Ctrl+K)."));
+            return;
+          }
+          for (const c of liste) {
+            const a = elem("a", c.id === courant ? "on" : "");
+            a.appendChild(elem("span", "n", String(N.chapitres.indexOf(c) + 1)));
+            const t = elem("span", "", c.titre.split(" : ")[0]);
+            if (mots.length) t.appendChild(elem("span", "extrait", c.resume || c.chapeau));
+            a.appendChild(t);
+            a.onclick = () => aller(c.id);
+            nav.appendChild(a);
+          }
+        };
+
+        const afficher = () => {
+          const id = decodeURIComponent(location.hash.slice(1));
+          const c = chapitre(id);
+          if (!c) return;
+          courant = c.id;
+          rendreFiche(c, $("fiche"));
+          rendreNav();
+          $("main").scrollTop = 0;
+          document.title = `${c.titre.split(" : ")[0]} — Notice de Trame`;
+        };
+        const aller = (id) => {
+          if (location.hash.slice(1) === id) afficher();
+          else location.hash = id;
+        };
+
+        const rendreDocument = () => {
+          const d = $("document");
+          d.textContent = "";
+          const couv = elem("section", "couverture");
+          couv.appendChild(elem("div", "marque", "Notice d'utilisation"));
+          couv.appendChild(elem("h1", "", "Trame"));
+          const v = version();
+          const date = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+          couv.appendChild(elem("div", "version", v ? `Version ${v} · ${date}` : date));
+          const table = elem("ol", "table");
+          for (const c of N.chapitres) table.appendChild(elem("li", "", c.titre.split(" : ")[0]));
+          couv.appendChild(table);
+          const n = blocNouveautes();
+          if (n) couv.appendChild(n);
+          d.appendChild(couv);
+          for (const c of N.chapitres) {
+            const f = elem("section", "fiche");
+            rendreFiche(c, f);
+            d.appendChild(f);
+          }
+          if (!params.has("pdf")) {
+            const r = elem("button", "retour-ecran", "Revenir à la notice");
+            r.onclick = () => { location.href = "aide.html"; };
+            d.appendChild(r);
+          }
+          document.title = v ? `Notice de Trame ${v}` : "Notice de Trame";
+        };
+
+        const rendreAstuces = () => {
+          const on = !!(etat && etat.reglages && etat.reglages.astuces);
+          $("bascule-astuces").classList.toggle("on", on);
+        };
+
+        window.trame = {
+          etat(s) {
+            etat = s;
+            if (window.TrameTeintes && !impression) window.TrameTeintes.suivre(s);
+            $("version").textContent = s.version ? `Version ${s.version}` : "";
+            rendreAstuces();
+            if (impression) rendreDocument();
+          },
+          budget() {}, resultats() {}, toast() {}, focusCouture() {},
+        };
+
+        if (impression) {
+          document.body.classList.add("impression");
+          rendreDocument();
+          if (params.has("imprimer")) setTimeout(() => window.print(), 300);
+        } else {
+          window.addEventListener("hashchange", afficher);
+          $("filtre").addEventListener("input", rendreNav);
+          $("filtre").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              const premier = $("nav").querySelector("a");
+              if (premier) premier.click();
+            }
+          });
+          $("btn-pdf").onclick = () => ipc({ m: "aideNoticePdf" });
+          $("btn-imprimer").onclick = () => { location.href = "aide.html?impression&imprimer"; };
+          $("bascule-astuces").onclick = () => ipc({ m: "astuces", actif: !(etat && etat.reglages && etat.reglages.astuces) });
+          afficher();
+        }
+
+        ipc({ m: "pret", surface: "aide" });
+        setInterval(() => { if (!etat) ipc({ m: "pret", surface: "aide" }); }, 900);
+      })();
+    </script>
+  </body>
+</html>

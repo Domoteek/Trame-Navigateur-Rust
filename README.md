@@ -84,6 +84,7 @@ zéro mémoire tant qu'on n'en ouvre pas un. Un fil de même nom déjà présent
 | **La mémoire de lecture** (`?` dans la barre) | Une page restée affichée 8 s est gardée **sur ce PC** (texte seul, 12 000 caractères au plus, 1 500 pages au plus). `? électrolyte solide` retrouve la page où vous l'avez lu, avec le passage. Jamais les pages qui ont un champ de mot de passe ; un site peut être exclu (et ce qui en avait été gardé est effacé) ; tout s'efface depuis les réglages. Le fichier (`lectures.jsonl`) n'est relu que pendant une recherche, par un fil à part : rien en mémoire vive. |
 | **Le zappeur** (icône œil barré) | Panneau de droite : on désigne un élément dans la page (ou l'on colle un sélecteur CSS) et il disparaît. Règles **par domaine**, relisibles, coupables, supprimables, stockées dans `zap.json`. Livré avec 9 règles YouTube (Shorts, annonces) et 3 règles génériques. |
 | **La sauvegarde** (`Ctrl+,` → Sauvegarde du profil) | Un fichier JSON d'une vingtaine de kilo-octets qui emporte ce que vous cochez (réglages, fils, favoris, accès, zappeur, guets, capsules) et **ne prend jamais** les connexions, la mémoire de lecture ni les téléchargements — le fichier écrit pourquoi. La restauration simule d'abord ce qu'elle changerait, garde l'ancien profil dans `avant-restauration-…\`, et s'applique au démarrage suivant. |
+| **L'aide** (`F1`, bouton `?` de la barre, menu `⋯` → Notice) | Une **Notice** (`trame://localhost/aide.html#<fiche>`) : 14 fiches, chacune dit à quoi sert la fonction, les façons de la lancer, et propose « Essayer maintenant ». `F1` ouvre la fiche de ce qu'on regarde (côte à côte ouvert → Côte à côte, vidéo sortie → Vidéo flottante). La **Couture répond aux questions** (« split écran », « sortir la vidéo »), `Ctrl+/` affiche **tous les raccourcis**, des **astuces** sortent au bon moment (une par jour au plus, jamais deux fois la même, coupables), et la notice existe en **PDF** (bouton de la Notice, menu Démarrer). Tout vient d'une seule source : `ui/notice.js`. |
 | **Les favoris en HTML** | Export et **import** au format Netscape : celui que lisent Chrome, Edge et Firefox. Sans l'import, un export ne servirait qu'à partir. |
 
 ### Moteur de recherche
@@ -112,6 +113,8 @@ moteurs concernés.
 | `Ctrl+D` | ajouter / retirer des favoris | `Ctrl+P` | imprimer ou enregistrer en PDF |
 | `Alt+Entrée` (barre) | ouvrir dans un nouvel onglet du fil | `Maj+Entrée` (barre) | ouvrir à côté de la page |
 | `Maj+clic` (rail) | afficher l'onglet à côté | clic droit (rail) | menu de cette page |
+| `F1` | la Notice, sur la fiche de ce qu'on regarde | `Ctrl+/` | tous les raccourcis |
+| `Alt+P` | vidéo seule, par-dessus tout | `Alt+Maj+P` | vidéo dans une fenêtre à part |
 
 Le zoom et la recherche dans la page sont **par onglet** : grossir un article ne grossit pas la
 banque en ligne, et la barre de recherche se referme sur `Échap` en rendant le clavier à la page.

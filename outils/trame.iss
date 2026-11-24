@@ -62,6 +62,8 @@ Name: "lancement"; Description: "Lancer {#AppName} a la fin de l'installation"; 
 ; executable NON SIGNE sous un setup signe. En lisant la copie signee, cet intervalle disparait.
 Source: "..\dist\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\ui\*"; DestDir: "{app}\ui"; Flags: ignoreversion recursesubdirs createallsubdirs
+; La notice PDF fabriquee par faire-notice.mjs (etape 3 de faire-setup.mjs).
+Source: "..\dist\notice.pdf"; DestDir: "{app}\ui"; Flags: ignoreversion
 Source: "..\extensions\*"; DestDir: "{app}\extensions"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\docs\CONCEPT.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "..\docs\ARCHITECTURE.md"; DestDir: "{app}\docs"; Flags: ignoreversion
@@ -128,6 +130,7 @@ Root: HKCU; Subkey: "Software\Classes\TrameHTML\Application"; ValueType: string;
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; AppUserModelID: "{#AppUserModelId}"
+Name: "{group}\Notice de {#AppName}"; Filename: "{app}\ui\notice.pdf"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; AppUserModelID: "{#AppUserModelId}"; Tasks: desktopicon
 

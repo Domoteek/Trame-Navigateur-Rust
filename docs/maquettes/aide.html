@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aide et notice — propositions</title>
+<style>
+  :root {
+    --fond: #0b1220; --surface: #111a2b; --surface-2: #162238; --bord: rgba(255,255,255,.09);
+    --texte: #e8eef8; --texte-2: #aab6ca; --texte-3: #7c889c;
+    --accent-rgb: 96,165,250; --accent-2-rgb: 167,139,250;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: #070b14; color: var(--texte);
+    font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  .choix {
+    position: sticky; top: 0; z-index: 10; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 12px 18px; background: rgba(7,11,20,.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--bord);
+  }
+  .choix strong { font-size: 13px; margin-right: 6px; }
+  .choix button {
+    font: inherit; font-size: 12.5px; color: var(--texte-2); background: rgba(255,255,255,.04);
+    border: 1px solid var(--bord); border-radius: 9px; padding: 7px 12px; cursor: pointer;
+  }
+  .choix button.actif { color: #fff; border-color: rgba(var(--accent-rgb),.6); background: rgba(var(--accent-rgb),.16); }
+  .note { padding: 14px 18px 0; font-size: 13px; color: var(--texte-2); line-height: 1.6; max-width: 1150px; }
+  .note b { color: var(--texte); }
+  .note .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; margin-right: 6px;
+    border: 1px solid rgba(var(--accent-rgb),.5); color: #cfe2ff; }
+  .scene { padding: 14px 18px 40px; overflow-x: auto; }
+  .ecran { width: 1240px; height: 720px; position: relative; border-radius: 12px; overflow: hidden;
+    border: 1px solid var(--bord); background: var(--fond); display: grid; grid-template-columns: 64px 1fr; }
+
+  /* coquille simplifiée */
+  .rail { background: #0a1020; border-right: 1px solid var(--bord); display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 0; }
+  .rail i { width: 30px; height: 30px; border-radius: 9px; background: rgba(255,255,255,.06); display: block; }
+  .rail i.on { background: rgba(var(--accent-rgb),.35); }
+  .droite { display: grid; grid-template-rows: 46px 1fr; min-width: 0; }
+  .barre { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--bord); background: #0d1526; }
+  .adresse { flex: 1; height: 30px; border-radius: 15px; border: 1px solid var(--bord); background: rgba(255,255,255,.04);
+    display: flex; align-items: center; padding: 0 14px; font-size: 12.5px; color: var(--texte-3); }
+  .btn { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--texte-2); font-size: 15px; }
+  .btn.ouvert { background: rgba(var(--accent-rgb),.18); color: #fff; box-shadow: inset 0 -2px 0 rgba(var(--accent-rgb),.8); }
+  .page { position: relative; overflow: hidden; background: #f4f5f7; }
+  .page .faux { padding: 30px 60px; color: #2a3140; }
+  .page .faux h1 { font-size: 24px; margin: 0 0 14px; }
+  .page .faux p { height: 12px; background: #dde1e8; border-radius: 6px; margin: 10px 0; }
+  kbd { font: inherit; font-size: 11px; color: var(--texte-2); border: 1px solid var(--bord); border-bottom-width: 2px;
+    border-radius: 6px; padding: 1px 7px; background: rgba(255,255,255,.04); }
+
+  /* 1 : page notice */
+  .notice { position: absolute; inset: 0; display: grid; grid-template-columns: 250px 1fr; background: var(--fond); }
+  .sommaire { border-right: 1px solid var(--bord); padding: 18px 12px; overflow: hidden; }
+  .sommaire .cherche { height: 32px; border-radius: 10px; border: 1px solid var(--bord); background: rgba(255,255,255,.04);
+    display: flex; align-items: center; padding: 0 12px; font-size: 12.5px; color: var(--texte-3); margin-bottom: 14px; }
+  .sommaire a { display: flex; gap: 10px; align-items: center; padding: 7px 10px; border-radius: 8px; font-size: 13px; color: var(--texte-2); text-decoration: none; }
+  .sommaire a .n { width: 20px; color: var(--texte-3); font-size: 11.5px; }
+  .sommaire a.on { background: rgba(var(--accent-rgb),.14); color: #fff; }
+  .fiche { padding: 26px 40px; overflow: hidden; }
+  .fiche .fil { font-size: 11.5px; color: var(--texte-3); letter-spacing: .14em; text-transform: uppercase; }
+  .fiche h2 { font-size: 24px; margin: 4px 0 6px; letter-spacing: -.01em; }
+  .fiche .chapeau { color: var(--texte-2); font-size: 14px; margin-bottom: 18px; max-width: 700px; line-height: 1.55; }
+  .etapes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+  .etape { border: 1px solid var(--bord); border-radius: 12px; padding: 14px; background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.015)); }
+  .etape b { display: block; font-size: 13.5px; margin-bottom: 6px; }
+  .etape span { font-size: 12.5px; color: var(--texte-2); line-height: 1.5; }
+  .schema { height: 120px; border-radius: 12px; border: 1px dashed rgba(255,255,255,.14); display: grid; grid-template-columns: 1fr 6px 1fr; gap: 0; overflow: hidden; margin-bottom: 18px; }
+  .schema div { background: rgba(255,255,255,.04); display: grid; place-items: center; font-size: 12px; color: var(--texte-3); }
+  .schema .sep { background: rgba(var(--accent-rgb),.7); }
+  .actions { display: flex; gap: 10px; }
+  .act { font-size: 13px; padding: 9px 16px; border-radius: 10px; border: 1px solid var(--bord); color: var(--texte-2); }
+  .act.prim { background: rgba(var(--accent-rgb),.9); color: #07101f; border-color: transparent; font-weight: 600; }
+  .voir { margin-top: 18px; font-size: 12.5px; color: var(--texte-3); }
+  .voir u { color: #9cc3ff; text-decoration: none; margin-right: 12px; }
+
+  /* 2 : couture */
+  .voile { position: absolute; inset: 0; background: rgba(5,8,15,.55); }
+  .couture { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); width: 680px; border-radius: 14px;
+    background: var(--surface); border: 1px solid var(--bord); box-shadow: 0 20px 60px rgba(0,0,0,.5); overflow: hidden; }
+  .couture .saisie { padding: 14px 18px; font-size: 16px; border-bottom: 1px solid var(--bord); }
+  .couture .saisie em { color: var(--texte-3); font-style: normal; }
+  .groupe { padding: 8px 18px 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--texte-3); }
+  .res { padding: 10px 18px; display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: start; font-size: 13.5px; }
+  .res.on { background: rgba(var(--accent-rgb),.12); }
+  .res .ic { width: 22px; height: 22px; border-radius: 6px; background: rgba(var(--accent-2-rgb),.3); display: grid; place-items: center; font-size: 12px; }
+  .res small { display: block; color: var(--texte-2); font-size: 12.5px; margin-top: 3px; line-height: 1.5; }
+  .res .faire { font-size: 12px; padding: 5px 10px; border-radius: 8px; background: rgba(var(--accent-rgb),.85); color: #07101f; font-weight: 600; white-space: nowrap; }
+
+  /* 3 : astuce contextuelle */
+  .astuce { position: absolute; left: 14px; top: 160px; width: 330px; border-radius: 12px; background: var(--surface-2);
+    border: 1px solid rgba(var(--accent-rgb),.4); box-shadow: 0 14px 40px rgba(0,0,0,.45); padding: 14px 16px; font-size: 13px; line-height: 1.5; }
+  .astuce::before { content: ""; position: absolute; left: -7px; top: 22px; width: 12px; height: 12px; background: var(--surface-2);
+    border-left: 1px solid rgba(var(--accent-rgb),.4); border-bottom: 1px solid rgba(var(--accent-rgb),.4); transform: rotate(45deg); }
+  .astuce .t { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #9cc3ff; margin-bottom: 4px; }
+  .astuce .bas { display: flex; gap: 8px; margin-top: 10px; font-size: 12px; }
+  .astuce .bas span { padding: 5px 10px; border-radius: 8px; border: 1px solid var(--bord); color: var(--texte-2); }
+  .astuce .bas span.prim { background: rgba(var(--accent-rgb),.85); color: #07101f; border-color: transparent; font-weight: 600; }
+
+  /* 4 : calque des raccourcis */
+  .calque { position: absolute; inset: 30px 60px; border-radius: 16px; background: rgba(17,26,43,.97); border: 1px solid var(--bord);
+    box-shadow: 0 20px 60px rgba(0,0,0,.5); padding: 22px 28px; }
+  .calque h3 { margin: 0 0 4px; font-size: 18px; }
+  .calque .sous { color: var(--texte-3); font-size: 12.5px; margin-bottom: 16px; }
+  .cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .cols h4 { margin: 0 0 8px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--texte-3); font-weight: 600; }
+  .cols div.l { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.05); font-size: 13px; color: var(--texte-2); }
+
+  /* 5 : notice en document */
+  .doc { position: absolute; inset: 0; background: #e9ebef; overflow: hidden; display: grid; place-items: start center; padding-top: 24px; }
+  .feuille { width: 620px; height: 760px; background: #fff; color: #1d2433; box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 46px 56px; font-size: 12.5px; line-height: 1.6; }
+  .feuille .couv { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: #6b7487; }
+  .feuille h1 { font-size: 30px; margin: 6px 0 2px; }
+  .feuille .ver { color: #6b7487; margin-bottom: 22px; }
+  .feuille ol { padding-left: 18px; margin: 0; columns: 2; column-gap: 30px; }
+  .feuille li { margin: 3px 0; }
+  .feuille .enc { margin-top: 22px; padding: 12px 14px; border-left: 3px solid #3b82f6; background: #f1f5fd; }
+
+  .bloc { display: none; }
+  .bloc.on { display: block; }
+</style>
+</head>
+<body>
+  <div class="choix" id="choix">
+    <strong>Aide et notice de Trame</strong>
+    <button data-v="1" class="actif">1 · Page Notice (F1)</button>
+    <button data-v="2">2 · Aide dans la Couture</button>
+    <button data-v="3">3 · Astuces au bon moment</button>
+    <button data-v="4">4 · Calque des raccourcis</button>
+    <button data-v="5">5 · Notice imprimable (PDF)</button>
+  </div>
+
+  <!-- 1 -->
+  <div class="bloc on" data-v="1">
+    <div class="note">
+      <span class="tag">socle</span><b>1 · Une page « Notice »</b> (<code>trame://aide</code>), construite comme les Réglages :
+      un sommaire à gauche avec une recherche, une fiche par fonction à droite. Elle s'ouvre par <kbd>F1</kbd>, par un bouton
+      <b>?</b> dans la barre, ou par la ligne « Aide » du menu <b>⋯</b>. Chaque fiche dit <b>à quoi ça sert</b>, <b>comment le
+      lancer</b> (les trois façons, quand il y en a trois) et propose un bouton <b>« Essayer maintenant »</b> qui le fait
+      vraiment. Ouverte avec <kbd>F1</kbd> sur une page, elle arrive directement sur la fiche qui va avec ce que tu regardes
+      (côte à côte ouvert → fiche Côte à côte).
+    </div>
+    <div class="scene"><div class="ecran">
+      <div class="rail"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+      <div class="droite">
+        <div class="barre"><span class="btn">‹</span><span class="btn">↻</span><div class="adresse">trame://aide/cote-a-cote</div><span class="btn">☆</span><span class="btn ouvert">?</span><span class="btn">⋯</span></div>
+        <div class="page"><div class="notice">
+          <div class="sommaire">
+            <div class="cherche">Chercher dans la notice…</div>
+            <a><span class="n">1</span>Premiers pas</a>
+            <a><span class="n">2</span>Onglets et fils</a>
+            <a><span class="n">3</span>Le rail et les accès rapides</a>
+            <a><span class="n">4</span>La Couture (Ctrl+K)</a>
+            <a class="on"><span class="n">5</span>Côte à côte</a>
+            <a><span class="n">6</span>Rendez-vous et fermeture</a>
+            <a><span class="n">7</span>Le guetteur</a>
+            <a><span class="n">8</span>Vidéo flottante, plein écran</a>
+            <a><span class="n">9</span>Zappeur et saute-pub</a>
+            <a><span class="n">10</span>Navigation privée</a>
+            <a><span class="n">11</span>Extensions</a>
+            <a><span class="n">12</span>Sauvegarde et favoris</a>
+            <a><span class="n">13</span>Tous les raccourcis</a>
+          </div>
+          <div class="fiche">
+            <div class="fil">Notice · 5</div>
+            <h2>Côte à côte</h2>
+            <div class="chapeau">Deux pages dans la même fenêtre, pour comparer deux produits, lire en prenant des notes
+              ou suivre une vidéo pendant qu'on cherche autre chose.</div>
+            <div class="etapes">
+              <div class="etape"><b>Maj + clic sur un onglet</b><span>L'onglet s'ouvre à droite de la page que tu regardes. Le plus rapide.</span></div>
+              <div class="etape"><b>Maj + Entrée dans la barre</b><span>Ce que tu viens de taper s'ouvre à droite, ta page reste à gauche.</span></div>
+              <div class="etape"><b>Menu ⋯ → Côte à côte</b><span>Met à côté le dernier onglet que tu as regardé.</span></div>
+            </div>
+            <div class="schema"><div>page active</div><div class="sep"></div><div>glisse la séparation : 20 à 80 %</div></div>
+            <div class="actions"><span class="act prim">Essayer maintenant</span><span class="act">Inverser</span><span class="act">Lier le défilement</span></div>
+            <div class="voir">Voir aussi : <u>Onglets et fils</u><u>Vidéo flottante</u><u>Raccourcis</u></div>
+          </div>
+        </div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- 2 -->
+  <div class="bloc" data-v="2">
+    <div class="note">
+      <span class="tag">complément de 1</span><b>2 · La Couture répond aux questions.</b> Dans <kbd>Ctrl+K</kbd>, taper
+      « écran en deux », « split », « comparer deux pages » ou « comment… » fait apparaître une section <b>Aide</b> en tête :
+      la réponse en deux lignes et un bouton <b>« Faire »</b>. Les mots de chaque fiche sont écrits à la main (synonymes
+      compris : <i>split</i>, <i>diviser</i>, <i>deux pages</i>…), sans IA ni réseau. <kbd>Entrée</kbd> sur la ligne ouvre la fiche
+      complète de la Notice. Le <b>?</b> de la barre reste la mémoire de lecture : on n'y touche pas.
+    </div>
+    <div class="scene"><div class="ecran">
+      <div class="rail"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+      <div class="droite">
+        <div class="barre"><span class="btn">‹</span><span class="btn">↻</span><div class="adresse">amazon.fr/casque-audio</div><span class="btn">☆</span><span class="btn">⋯</span></div>
+        <div class="page">
+          <div class="faux"><h1>Casque audio sans fil</h1><p style="width:70%"></p><p style="width:55%"></p><p style="width:62%"></p></div>
+          <div class="voile"></div>
+          <div class="couture">
+            <div class="saisie">split écran<em>  — onglets, fils, commandes, aide</em></div>
+            <div class="groupe">Aide</div>
+            <div class="res on"><span class="ic">?</span><div>Côte à côte : deux pages dans la fenêtre
+              <small><kbd>Maj</kbd> + clic sur un onglet du rail, ou <kbd>Maj</kbd> + <kbd>Entrée</kbd> dans la barre. La séparation se glisse.</small></div><span class="faire">Faire</span></div>
+            <div class="res"><span class="ic">?</span><div>Vidéo flottante
+              <small>La vidéo dans une petite fenêtre au-dessus des autres : <kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>P</kbd>.</small></div><span class="faire">Faire</span></div>
+            <div class="groupe">Commandes</div>
+            <div class="res"><span class="ic" style="background:rgba(255,255,255,.08)">›</span><div>Ouvrir la notice complète<small>F1</small></div><span></span></div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- 3 -->
+  <div class="bloc" data-v="3">
+    <div class="note">
+      <span class="tag">facultatif</span><b>3 · Une astuce quand elle sert.</b> Trame repère un geste qui a un raccourci plus
+      simple et le propose <b>une seule fois</b> : passer cinq fois de suite entre les deux mêmes onglets → « Maj + clic pour
+      les voir côte à côte ». Jamais plus d'une astuce par jour, jamais deux fois la même, jamais pendant une vidéo en plein
+      écran. Un réglage les coupe toutes. Les astuces déjà vues restent lisibles dans la Notice.
+    </div>
+    <div class="scene"><div class="ecran">
+      <div class="rail"><i></i><i class="on"></i><i class="on" style="opacity:.6"></i><i></i><i></i></div>
+      <div class="droite">
+        <div class="barre"><span class="btn">‹</span><span class="btn">↻</span><div class="adresse">ldlc.com/casque-b</div><span class="btn">☆</span><span class="btn">⋯</span></div>
+        <div class="page">
+          <div class="faux"><h1>Casque B — fiche technique</h1><p style="width:70%"></p><p style="width:55%"></p><p style="width:62%"></p></div>
+          <div class="astuce">
+            <div class="t">Astuce</div>
+            Tu passes souvent de cet onglet à « Casque A ». <b>Maj + clic</b> sur l'un d'eux les affiche côte à côte.
+            <div class="bas"><span class="prim">Les mettre côte à côte</span><span>Merci, compris</span><span>Plus d'astuces</span></div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- 4 -->
+  <div class="bloc" data-v="4">
+    <div class="note">
+      <span class="tag">complément de 1</span><b>4 · Tous les raccourcis d'un coup d'œil.</b> <kbd>Ctrl</kbd> + <kbd>/</kbd> (ou
+      maintenir <kbd>Ctrl</kbd> une seconde) affiche ce calque par-dessus la page ; <kbd>Échap</kbd> le ferme. Il est généré
+      depuis la même liste que les raccourcis réels : un raccourci ajouté y apparaît tout seul, jamais d'oubli.
+    </div>
+    <div class="scene"><div class="ecran">
+      <div class="rail"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+      <div class="droite">
+        <div class="barre"><span class="btn">‹</span><span class="btn">↻</span><div class="adresse">youtube.com</div><span class="btn">☆</span><span class="btn">⋯</span></div>
+        <div class="page">
+          <div class="faux"><h1>&nbsp;</h1></div>
+          <div class="voile"></div>
+          <div class="calque">
+            <h3>Raccourcis de Trame</h3><div class="sous">Échap pour fermer · F1 pour la notice complète</div>
+            <div class="cols">
+              <div><h4>Onglets</h4>
+                <div class="l">Nouvel onglet<kbd>Ctrl+T</kbd></div><div class="l">Fermer<kbd>Ctrl+W</kbd></div>
+                <div class="l">Rouvrir le dernier fermé<kbd>Ctrl+Maj+T</kbd></div><div class="l">Onglet suivant<kbd>Ctrl+Tab</kbd></div>
+                <div class="l">Onglet n° 1 à 9<kbd>Ctrl+1…9</kbd></div><div class="l">Privé<kbd>Ctrl+Maj+N</kbd></div></div>
+              <div><h4>Pages</h4>
+                <div class="l">Côte à côte<kbd>Maj+clic</kbd></div><div class="l">Ouvrir à côté<kbd>Maj+Entrée</kbd></div>
+                <div class="l">Ouvrir dans le fil<kbd>Alt+Entrée</kbd></div><div class="l">Favori<kbd>Ctrl+D</kbd></div>
+                <div class="l">Chercher dans la page<kbd>Ctrl+F</kbd></div><div class="l">Imprimer / PDF<kbd>Ctrl+P</kbd></div></div>
+              <div><h4>Trame</h4>
+                <div class="l">La Couture<kbd>Ctrl+K</kbd></div><div class="l">La trame<kbd>Ctrl+Espace</kbd></div>
+                <div class="l">Replier le rail<kbd>Ctrl+B</kbd></div><div class="l">Réglages<kbd>Ctrl+,</kbd></div>
+                <div class="l">Vidéo flottante<kbd>Alt+Maj+P</kbd></div><div class="l">Notice<kbd>F1</kbd></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- 5 -->
+  <div class="bloc" data-v="5">
+    <div class="note">
+      <span class="tag">découle de 1</span><b>5 · La notice en document.</b> Le même texte que la page Notice (une seule
+      source, aucune double écriture), mis en page pour l'impression : bouton <b>« Télécharger la notice (PDF) »</b> en haut
+      de la Notice, et un exemplaire livré avec l'installation. Elle porte le numéro de version et la date ; chaque nouvelle
+      version de Trame la refait. Une rubrique « Nouveautés » en tête dit ce qui a changé depuis la version d'avant.
+    </div>
+    <div class="scene"><div class="ecran" style="grid-template-columns: 1fr;">
+      <div class="doc"><div class="feuille">
+        <div class="couv">Notice d'utilisation</div>
+        <h1>Trame</h1>
+        <div class="ver">Version 0.4.62 · 24 novembre 2026</div>
+        <ol>
+          <li>Premiers pas</li><li>Onglets et fils</li><li>Le rail et les accès rapides</li><li>La Couture (Ctrl+K)</li>
+          <li>Côte à côte</li><li>Rendez-vous et fermeture</li><li>Le guetteur</li><li>Vidéo flottante, plein écran</li>
+          <li>Zappeur et saute-pub</li><li>Navigation privée</li><li>Extensions</li><li>Sauvegarde et favoris</li><li>Tous les raccourcis</li>
+        </ol>
+        <div class="enc"><b>Nouveautés de la 0.4.62</b><br>Une notice et une aide dans Trame : F1 sur n'importe quelle page.</div>
+      </div></div>
+    </div></div>
+  </div>
+
+<script>
+  const boutons = document.querySelectorAll("#choix button");
+  const blocs = document.querySelectorAll(".bloc");
+  function montrer(v) {
+    boutons.forEach(b => b.classList.toggle("actif", b.dataset.v === v));
+    blocs.forEach(b => b.classList.toggle("on", b.dataset.v === v));
+    try { localStorage.setItem("maquette-aide", v); } catch (e) {}
+  }
+  boutons.forEach(b => b.onclick = () => montrer(b.dataset.v));
+  try { const v = localStorage.getItem("maquette-aide"); if (v) montrer(v); } catch (e) {}
+</script>
+</body>
+</html>

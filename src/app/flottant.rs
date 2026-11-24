@@ -49,6 +49,14 @@ impl App {
             // 2026-11-22 : sans ce message, la page restait `hidden` — la video revenait dans un
             // onglet que Clement ne voyait pas.
             "montrer" if !ici => self.montrer_onglet(id),
+            // « Vidéo seule » : la page doit rester vivante tant que sa video flotte.
+            "incrustation" => {
+                if v["actif"].as_bool().unwrap_or(false) {
+                    self.incrustes.insert(id);
+                } else {
+                    self.incrustes.remove(&id);
+                }
+            }
             "deplacer" if ici => {
                 if let Some(f) = &self.flottant {
                     let _ = f.fenetre.drag_window();

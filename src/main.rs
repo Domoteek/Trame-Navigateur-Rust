@@ -10,6 +10,7 @@
 // cles : il depasse la limite par defaut du macro.
 #![recursion_limit = "256"]
 
+mod aide;
 mod app;
 mod carnet;
 mod chien_de_garde;

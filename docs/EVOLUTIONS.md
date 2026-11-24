@@ -1260,6 +1260,34 @@ comme `MOTEUR_DEFAUT`.
 - Pas encore là : barre qui se replie au défilement, glisser sur l'adresse, fils, teintes,
   téléchargements, vidéo en incrustation.
 
+## 10 octodecies. 2026-11-24 — une notice et une aide dans Trame (0.4.62)
+
+Demande de Clément, après avoir cherché comment faire un écran partagé (« il faut un système
+d'aide à l'utilisation et une notice ») ; cinq propositions sur `docs/maquettes/aide.html`, il a
+choisi « les cinq ». Pendant le travail, une précision : la pastille vidéo doit dire clairement ce
+que fait chacun de ses deux boutons — avec « Sortir la vidéo », il croyait devoir rester sur
+l'onglet, alors qu'avec l'icône de droite on peut changer d'onglet.
+
+| Ce qui change | Où |
+|---|---|
+| **Une seule source** pour toute l'aide : `window.NOTICE = {…}` (JSON strict après le `=`) — 14 fiches, les raccourcis, les astuces, les nouveautés. Un script et pas un `.json` : la page s'ouvre aussi en `file://` pour le PDF | `ui/notice.js` |
+| **La Notice** : sommaire et recherche à gauche, une fiche à droite (étapes, conseils, « Essayer maintenant », voir aussi) ; les touches deviennent des `<kbd>` ; `?impression` = toutes les fiches à la suite, sur fond blanc | `ui/aide.html` |
+| **F1** (fiche du contexte : trame, côte à côte, vidéo sortie, privé, réglages, sites vidéo…), bouton **?** de la barre, ligne « Notice » du menu `⋯`, bouton dans Réglages → Général → Aide | `src/app/aide.rs`, `ui/raccourcis.js`, `ui/chrome.*`, `ui/reglages.html` |
+| **La Couture répond** : mots et expressions de chaque fiche, sans accents ni mots vides ; une question ou une phrase nette passe **en tête** avec un bouton « Faire », un mot seul se range en fin de liste, une adresse n'affiche rien | `src/aide.rs`, `src/app.rs` (requête) |
+| **Ctrl+/** : le calque des raccourcis, dessiné par la barre dans son panneau ; Échap le referme d'abord (`window.__trame_echap`, appelé par `raccourcis.js`) au lieu d'arrêter la page | `ui/chrome.js` |
+| **Astuces** : allers-retours entre deux onglets (→ côte à côte), vidéo quittée qui joue encore (→ fenêtre à part), page refermée puis retapée (→ Ctrl+Maj+T). Une à la fois, une par jour au plus, jamais deux fois la même (`astuces_vues`), coupables ; posée dans la page comme le popup de mise à jour, ses trois boutons ne sont acceptés que tant qu'elle est affichée | `src/app/aide.rs`, `src/model.rs` |
+| **PDF** : `outils/faire-notice.mjs` imprime `aide.html?impression` avec Edge sans fenêtre (profil jetable) ; `faire-setup` le met dans `{app}\ui\notice.pdf` et le menu Démarrer (« Notice de Trame ») ; « Télécharger la notice » le copie dans les téléchargements. Sans PDF (poste de dev) : la page d'impression | `outils/`, `trame.iss` |
+| **Vidéo** : boutons « **Vidéo seule** » (Alt+P) et « **Fenêtre à part** » (Alt+Maj+P, texte ajouté à l'icône), bulles qui disent ce qui sort et que les deux laissent changer d'onglet | `ui/incrustation.js` |
+| **Vidéo seule jamais endormie** : la page annonce `flottant/incrustation` ; l'onglet est traité comme affiché (ni veille, ni budget, ni mémoire basse, ni pause). Avant, rien ne protégeait l'onglet : la veille ou le budget de pages vivantes détruisaient la page et la petite fenêtre disparaissait — sans doute ce qui a fait croire à Clément qu'il fallait rester sur l'onglet | `src/app.rs`, `src/app/flottant.rs` |
+
+**Éprouvé** : `cargo test --release` (218), `node outils/tester-ui.mjs` (95/95, dont 7 nouveaux cas :
+chaque raccourci réel de `raccourcis.js` doit figurer dans la notice), et dans le vrai binaire caché
+`node outils/eprouver-aide.mjs` (8/8) : vidéo sortie toujours là après « Endormir les onglets
+froids » (« 0 onglet(s) en veille »), F1 → fiche `#video`, « split écran » → Côte à côte en tête,
+« leboncoin.fr » → aucune aide, calque de 29 lignes, astuce « rouvrir » montrée puis retenue.
+**Pas éprouvé** : le bouton « Télécharger la notice » avec un vrai `notice.pdf` installé (il n'existe
+qu'après `faire-setup`), et les astuces « côte à côte » et « vidéo » en vraie fenêtre.
+
 ## 11. L'état aujourd'hui
 
 ```

@@ -227,7 +227,14 @@
       let action = null;
       if (e.key === "F5") action = "recharger";
       else if (e.key === "F12") action = "devtools";
-      else if (e.key === "Escape") action = "arret";
+      // F1 : la Notice. Ctrl+/ (Ctrl+Maj+: sur un clavier AZERTY, ou le / du pave) : les raccourcis.
+      else if (e.key === "F1") action = "aide";
+      else if (ctrl && (e.key === "/" || e.code === "NumpadDivide")) action = "raccourcisCalque";
+      // Echap ferme d'abord ce que la barre a ouvert (calque des raccourcis), sinon arrete la page.
+      else if (e.key === "Escape" && typeof window.__trame_echap === "function" && window.__trame_echap()) {
+        e.preventDefault();
+        return;
+      } else if (e.key === "Escape") action = "arret";
       else if (ctrl && e.shiftKey && k === "t") action = "reouverture";
       // Navigation privee : Ctrl+Maj+N, comme les autres navigateurs.
       else if (ctrl && e.shiftKey && k === "n") action = "prive";

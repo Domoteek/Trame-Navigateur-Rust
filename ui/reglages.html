@@ -392,6 +392,26 @@
               </div>
             </div>
           </div>
+
+          <div class="groupe" data-mots="aide notice astuces conseils raccourcis f1 mode d'emploi">
+            <h3>Aide</h3>
+            <div class="carte">
+              <div class="ligne">
+                <div class="libelle">
+                  <b>Notice de Trame</b>
+                  <span>Comment tout marche, fiche par fiche. Aussi par F1, ou le bouton ? de la barre. Ctrl+/ montre tous les raccourcis.</span>
+                </div>
+                <button id="btn-notice">Ouvrir la notice</button>
+              </div>
+              <div class="ligne">
+                <div class="libelle">
+                  <b>Astuces au bon moment</b>
+                  <span>Quand un raccourci te ferait gagner du temps, Trame le dit une fois. Une par jour au plus, jamais deux fois la même.</span>
+                </div>
+                <div class="bascule" id="bascule-astuces"></div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- =============================== APPARENCE =============================== -->
@@ -1476,6 +1496,7 @@
 
           const r = etat.reglages || {};
           $("bascule-veille").className = "bascule" + (r.veilleAuto ? " on" : "");
+          $("bascule-astuces").className = "bascule" + (r.astuces ? " on" : "");
           $("bascule-barre-ext").className = "bascule" + (r.barreExtensions ? " on" : "");
           const selPlein = $("plein-ecran");
           if (document.activeElement !== selPlein) selPlein.value = r.pleinEcran || "fenetre";
@@ -1614,6 +1635,8 @@
           lecturesDemandees = false;
         };
 
+        $("bascule-astuces").onclick = () => ipc({ m: "astuces", actif: !reglage("astuces") });
+        $("btn-notice").onclick = () => ipc({ m: "aideOuvrir", chapitre: "premiers-pas" });
         $("bascule-veille").onclick = () =>
           ipc({ m: "veilleAuto", actif: !((etat && etat.reglages && etat.reglages.veilleAuto) || false) });
         $("btn-par-defaut").onclick = () => ipc({ m: "navigateurParDefaut" });

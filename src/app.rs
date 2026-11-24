@@ -274,6 +274,13 @@ pub struct App {
     /// Depuis quand chaque onglet reveille est cache (ms), et lesquels sont en memoire basse.
     cache_depuis: std::collections::HashMap<TabId, u64>,
     en_memoire_basse: std::collections::HashSet<TabId>,
+    /// Onglets dont une video flotte dans la fenetre d'incrustation de Chromium (« Vidéo seule »,
+    /// Alt+P), annonces par `ui/incrustation.js`. Traites comme affiches : jamais endormis, jamais
+    /// en memoire basse ni en pause — sinon la petite fenetre disparaissait apres quelques minutes
+    /// passees sur un autre onglet (constat de Clement, 2026-11-24).
+    pub(super) incrustes: std::collections::HashSet<TabId>,
+    /// La Notice et les astuces (`app/aide.rs`).
+    aide: aide::EtatAide,
     /// Page a charger dans un onglet des qu'il est entierement mis en place.
     navigation_differee: std::collections::HashMap<TabId, String>,
     /// Les extensions du dossier ont-elles ete comparees a celles du moteur (au demarrage) ?
@@ -397,6 +404,7 @@ pub struct App {
     purge_prives_prochain: u64,
 }
 
+mod aide;
 mod fenetre;
 mod flottant;
 mod outils;
@@ -761,6 +769,8 @@ impl App {
             installations: Vec::new(),
             cache_depuis: std::collections::HashMap::new(),
             en_memoire_basse: std::collections::HashSet::new(),
+            incrustes: std::collections::HashSet::new(),
+            aide: aide::EtatAide::default(),
             zap_profil: None,
             derniere_mesure: probe::Mesure::default(),
             nettoyage: std::sync::Arc::new((
@@ -1937,6 +1947,7 @@ impl App {
     fn naviguer_actif(&mut self, saisie: &str) {
         let url = urls::normaliser_avec(saisie, &self.reglages.moteur);
         let url = self.adresse_propre(url);
+        self.aide_sur_saisie(&url);
         let Some(id) = self.actif else {
             self.ouvrir_onglet(url, Declencheur::Saisie, None);
             return;
@@ -2043,7 +2054,11 @@ impl App {
                 }
             }
         }
+        let ancien_actif = self.actif;
         self.actif = Some(id);
+        if ancien_actif != Some(id) {
+            self.aide_sur_activation(ancien_actif, id);
+        }
         let now = maintenant_ms();
         if let Some(o) = self.onglet_mut(id) {
             vitality::sur_focus(o, now);
@@ -2270,7 +2285,8 @@ impl App {
         let reduite = self.window.is_minimized();
         let ids: Vec<TabId> = self.webviews.keys().copied().collect();
         for id in ids {
-            let visible = !reduite && !self.vue_trame && (Some(id) == self.actif || self.dans_cote_affiche(id));
+            let visible = self.incrustes.contains(&id)
+                || (!reduite && !self.vue_trame && (Some(id) == self.actif || self.dans_cote_affiche(id)));
             // L'instant ou l'onglet a ete cache est note dans tous les cas : la pause s'en sert
             // aussi, meme quand la memoire basse est coupee.
             let cache_depuis = if visible {
@@ -2313,7 +2329,8 @@ impl App {
         // affiche est repris avant tout.
         let ids: Vec<TabId> = self.webviews.keys().copied().collect();
         for id in ids {
-            let visible = !reduite && !self.vue_trame && (Some(id) == self.actif || self.dans_cote_affiche(id));
+            let visible = self.incrustes.contains(&id)
+                || (!reduite && !self.vue_trame && (Some(id) == self.actif || self.dans_cote_affiche(id)));
             if visible {
                 if self.en_pause.remove(&id) | self.pause_demandee.remove(&id) {
                     if let Some(w) = self.webviews.get(&id) {
@@ -2348,6 +2365,7 @@ impl App {
         self.en_memoire_basse.retain(|id| vivantes.contains_key(id));
         self.en_pause.retain(|id| vivantes.contains_key(id));
         self.pause_demandee.retain(|id| vivantes.contains_key(id));
+        self.incrustes.retain(|id| vivantes.contains_key(id));
     }
 
     fn reveiller(&mut self, id: TabId) {
@@ -2387,7 +2405,7 @@ impl App {
     }
 
     fn endormir(&mut self, id: TabId) -> bool {
-        if self.actif == Some(id) || self.dans_cote_affiche(id) {
+        if self.actif == Some(id) || self.dans_cote_affiche(id) || self.incrustes.contains(&id) {
             return false;
         }
         let retire = self.webviews.remove(&id).is_some();
@@ -2434,6 +2452,7 @@ impl App {
         let onglet = self.session.onglets.remove(position);
         self.webviews.remove(&id);
         // On garde de quoi rouvrir (Ctrl+Maj+T), sans limite raisonnable.
+        self.aide_sur_fermeture(&onglet.url);
         self.fermes.push(onglet.clone());
         if self.fermes.len() > 25 {
             self.fermes.remove(0);
@@ -2686,7 +2705,7 @@ impl App {
                 .webviews
                 .keys()
                 .copied()
-                .filter(|id| Some(*id) != actif && !endormir.contains(id))
+                .filter(|id| Some(*id) != actif && !endormir.contains(id) && !self.incrustes.contains(id))
                 .map(|id| (id, self.trouver(id).map(|o| o.vitalite).unwrap_or(0.0)))
                 .collect();
             candidats.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
@@ -2720,6 +2739,7 @@ impl App {
         self.secours_chargement(now);
         self.relever_liens_externes();
         self.outils_tick(now);
+        self.aide_tick();
         self.sauvegarde_auto_tick(now);
         // Une seule tentative de plus sur les profils prives, quelques secondes apres le
         // demarrage : Chromium peut avoir recree le dossier de celui qu'il connaissait. Insister
@@ -3050,6 +3070,7 @@ impl App {
                 "antiPistage": self.reglages.anti_pistage.clone(),
                 "pauseOnglets": self.reglages.pause_onglets,
                 "memoireLecture": self.reglages.memoire_lecture,
+                "astuces": self.reglages.astuces,
                 "lectureExclus": self.reglages.lecture_exclus.clone(),
                 "parDefaut": self.par_defaut,
                 "adressesNettoyees": self.adresses_nettoyees,
@@ -3738,12 +3759,15 @@ impl App {
         // fermait sans rien faire (constate par Clement le 2026-11-23), et le mode dynamique ne
         // recevait jamais aucune couleur.
         let popup_mise_a_jour = self.maj.is_some() && matches!(m, "majInstaller" | "majPlusTard");
+        // Meme raison pour les trois boutons d'une astuce (`app/aide.rs`), et seulement tant
+        // qu'une astuce est affichee : l'action faite est celle de l'astuce, jamais une demande.
+        let astuce_affichee = self.aide.proposee.is_some() && matches!(m, "astuceFaire" | "astuceVue" | "astucesCouper");
         let autorise = match m {
             "extCall" | "defilement" | "raccourci" | "pret" | "hello" | "clicPage" | "zapChoisi"
             | "zapCompte" | "coupDoeil" | "flottant" | "couleur" => !matches!(source, Source::Apercu),
             // L'apercu n'a droit qu'a ses deux boutons.
             "apercuOuvrir" | "apercuFermer" => true,
-            _ => (!matches!(source, Source::Onglet(_) | Source::Apercu) || interne) || popup_mise_a_jour,
+            _ => (!matches!(source, Source::Onglet(_) | Source::Apercu) || interne) || popup_mise_a_jour || astuce_affichee,
         };
         if !autorise {
             return;
@@ -3778,7 +3802,7 @@ impl App {
             self.fermer_apercu();
         }
 
-        if self.traiter_ipc_outils(source, m, &v) || self.traiter_ipc_fenetre(source, m, &v) {
+        if self.traiter_ipc_outils(source, m, &v) || self.traiter_ipc_fenetre(source, m, &v) || self.traiter_ipc_aide(m, &v) {
             return;
         }
 
@@ -4079,6 +4103,23 @@ impl App {
                     let mut cmds = search::commandes(&q);
                     cmds.append(&mut items);
                     items = cmds;
+                }
+
+                // L'aide (`ui/notice.js`) : une question passe en tete, avant meme d'aller ou de
+                // chercher (« écran en deux ») ; un simple mot qui rappelle une fiche la met en
+                // fin de liste, sans gener la navigation.
+                if !commandes_demandees && !lectures_seules {
+                    let aide = crate::aide::resultats_couture(&propre);
+                    if !aide.is_empty() {
+                        // En tete : une question, ou plusieurs mots qui designent nettement une
+                        // fiche (« split écran »). Un mot seul (« split ») reste en fin de liste.
+                        let nette = aide[0].score >= 0.85 && propre.split_whitespace().count() >= 2;
+                        if crate::aide::est_question(&propre) || nette {
+                            items.splice(0..0, aide);
+                        } else {
+                            items.extend(aide.into_iter().take(1));
+                        }
+                    }
                 }
                 let reponse = json!({
                     "rid": rid,
@@ -4929,6 +4970,12 @@ impl App {
                     self.naviguer_actif(url);
                 }
             }
+            // Une fiche de la Notice proposee par la Couture (Entree) ; son bouton « Faire »
+            // envoie directement la commande.
+            "aide" => {
+                let chapitre = action["chapitre"].as_str().unwrap_or("").to_string();
+                self.ouvrir_aide(&chapitre);
+            }
             "commande" => {
                 if let Some(id) = action["id"].as_str() {
                     self.commande(id);
@@ -4954,6 +5001,18 @@ impl App {
             }
             "rouvrir" => self.rouvrir_ferme(),
             "prive" => self.ouvrir_prive(),
+            "aide" => {
+                let chapitre = self.chapitre_contexte();
+                self.ouvrir_aide(chapitre);
+            }
+            "raccourcis" => self.afficher_calque_raccourcis(),
+            "couture" => self.raccourci("couture"),
+            // Cote a cote avec l'onglet regarde juste avant (« Essayer » de la Notice, astuce).
+            "cote" => {
+                if let Some(actif) = self.actif {
+                    self.cote_avec(actif);
+                }
+            }
             "reglages" => self.ouvrir_reglages(),
             "telechargements" => self.ouvrir_page_interne(PAGE_TELECHARGEMENTS),
             "zap" => self.basculer_zap(),
@@ -5097,6 +5156,9 @@ impl App {
                 }
             }
             "reouverture" => self.rouvrir_ferme(),
+            // F1 : la Notice, sur la fiche de ce qu'on regarde. Ctrl+/ : le calque des raccourcis.
+            "aide" => self.commande("aide"),
+            "raccourcisCalque" => self.afficher_calque_raccourcis(),
             // Navigation privee (Ctrl+Maj+N) : un fil a part, profil jetable.
             "prive" => self.ouvrir_prive(),
             "zoomPlus" => self.zoom_pas(1),

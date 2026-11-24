@@ -28,6 +28,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { faireNotice } from "./faire-notice.mjs";
 
 const ICI = path.dirname(fileURLToPath(import.meta.url));
 const RACINE = path.resolve(ICI, "..");
@@ -210,6 +211,8 @@ function copierRessources(destination) {
   };
   copier(EXE, path.join(destination, "trame.exe"));
   copier(path.join(RACINE, "ui"), path.join(destination, "ui"));
+  // La notice PDF fabriquee a l'etape 3 (`faire-notice.mjs`) : lue par « Télécharger la notice ».
+  copier(path.join(DIST, "notice.pdf"), path.join(destination, "ui", "notice.pdf"));
   copier(path.join(RACINE, "extensions"), path.join(destination, "extensions"));
   copier(path.join(RACINE, "README.md"), path.join(destination, "README.md"));
   copier(path.join(ICI, "LISEZMOI-install.txt"), path.join(destination, "LISEZMOI.txt"));
@@ -262,6 +265,13 @@ function main() {
   fs.rmSync(DIST, { recursive: true, force: true });
   fs.mkdirSync(DIST, { recursive: true });
   fs.copyFileSync(EXE, path.join(DIST, "trame.exe"));
+  // La notice PDF (ui/aide.html?impression, imprimee par Edge) : embarquee dans {app}\ui.
+  try {
+    const notice = faireNotice(path.join(DIST, "notice.pdf"));
+    dire(`   notice : ${path.basename(notice)} (${tailleLisible(fs.statSync(notice).size)})`);
+  } catch (e) {
+    echouer(`notice PDF impossible : ${e.message}`);
+  }
 
   const zip = portePortable(v);
   const setup = compilerSetup(v);

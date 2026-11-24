@@ -92,6 +92,11 @@ window.trame = {
     if (selection < 0 && items.length) selection = 0;
     rendreResultats();
   },
+  /** Ctrl+/ : tous les raccourcis, tires de `notice.js` (la meme liste que la Notice). */
+  calqueRaccourcis() {
+    if (surface !== "barre") return;
+    ouvrirCalqueRaccourcis();
+  },
   menuPage(ancre) {
     if (surface !== "barre") return;
     ouvrirMenuPage(ancre);
@@ -994,6 +999,7 @@ let pageVisible = false;
 /** `{ y, h }` quand le menu de la page vient d'un clic droit sur un onglet du rail. */
 let ancreMenu = null;
 let commandesVisibles = false;
+let calqueVisible = false;
 let signaturePage = "";
 let lecturesAttendues = false;
 let panneauOuvert = false;
@@ -1008,6 +1014,9 @@ function champ() {
 }
 
 function ouvrirPanneau() {
+  // Tout autre contenu du panneau remplace le calque des raccourcis.
+  calqueVisible = false;
+  document.getElementById("calque-raccourcis").hidden = true;
   if (!panneauOuvert) {
     panneauOuvert = true;
     ipc({ m: "panneau", open: true });
@@ -1035,9 +1044,11 @@ function fermerPanneau() {
   document.getElementById("extensions").hidden = true;
   document.getElementById("menu-page").hidden = true;
   document.getElementById("menu-commandes").hidden = true;
+  document.getElementById("calque-raccourcis").hidden = true;
   extensionsVisibles = false;
   pageVisible = false;
   commandesVisibles = false;
+  calqueVisible = false;
   champ().blur();
 }
 
@@ -1076,6 +1087,7 @@ function ajusterHauteur() {
       document.getElementById("extensions"),
       document.getElementById("menu-page"),
       document.getElementById("menu-commandes"),
+      document.getElementById("calque-raccourcis"),
     ]) {
       if (zone && !zone.hidden) hContenu = Math.max(hContenu, naturelle(zone));
     }
@@ -1152,6 +1164,24 @@ function rendreResultats() {
     corps.appendChild(elem("div", "t", item.titre));
     corps.appendChild(elem("div", "s", item.sousTitre));
     ligne.appendChild(corps);
+    // Une fiche de la Notice : Entree (ou clic) ouvre la fiche, « Faire » le fait tout de suite.
+    if (item.genre === "aide") {
+      ligne.classList.add("aide");
+      const a = item.action || {};
+      if (a.commande) {
+        const faire = elem("button", "faire", "Faire");
+        faire.title = a.faire || "Le faire maintenant";
+        const lancerFaire = (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          ipc({ m: "ouvrir", action: { type: "commande", id: a.commande } });
+          fermerPanneau();
+        };
+        faire.onpointerdown = (e) => { if (e.button === 0) lancerFaire(e); };
+        faire.onclick = (e) => e.stopPropagation();
+        ligne.appendChild(faire);
+      }
+    }
     ligne.onmouseenter = () => {
       selection = index;
       surligner();
@@ -1634,6 +1664,7 @@ function marquerBoutons() {
   allumer("btn-zap", etat && etat.zap && etat.zap.ouvert);
   allumer("btn-reglages", pageInterneOuverte("reglages"));
   allumer("btn-dl", pageInterneOuverte("telechargements"));
+  allumer("btn-aide", pageInterneOuverte("aide") || montre("calque-raccourcis"));
 }
 
 function rendreBarre(s) {
@@ -1719,6 +1750,59 @@ function ouvrirMenuAccesBarre(x) {
   m.style.marginTop = Math.max(0, Math.min(voulu, maxi)) + "px";
   ajusterHauteur();
 }
+
+/** Ctrl+/ : le calque des raccourcis, toute la largeur de la page, sous la barre. Échap ou un
+ *  clic ailleurs le referme. Les lignes viennent de `notice.js` : la Notice et le calque ne
+ *  peuvent pas se contredire, et `outils/tester-ui.mjs` verifie que chaque touche reelle y est. */
+function ouvrirCalqueRaccourcis() {
+  if (calqueVisible) {
+    fermerPanneau();
+    return;
+  }
+  ancreAcces = null;
+  ouvrirPanneau();
+  extensionsVisibles = false;
+  pageVisible = false;
+  commandesVisibles = false;
+  for (const id of ["extensions", "resultats", "menu-page", "menu-commandes"]) document.getElementById(id).hidden = true;
+  const zone = document.getElementById("calque-raccourcis");
+  zone.textContent = "";
+  const tete = elem("div", "calque-tete");
+  tete.appendChild(elem("b", "", "Raccourcis de Trame"));
+  tete.appendChild(elem("span", "", "Échap pour fermer · F1 pour la notice complète"));
+  zone.appendChild(tete);
+  const groupes = new Map();
+  for (const r of (window.NOTICE && window.NOTICE.raccourcis) || []) {
+    if (!groupes.has(r.groupe)) groupes.set(r.groupe, []);
+    groupes.get(r.groupe).push(r);
+  }
+  const cols = elem("div", "calque-colonnes");
+  for (const [nom, lignes] of groupes) {
+    const col = elem("div", "calque-colonne");
+    col.appendChild(elem("div", "calque-groupe", nom));
+    for (const r of lignes) {
+      const l = elem("div", "calque-ligne");
+      l.appendChild(elem("span", "", r.effet));
+      l.appendChild(elem("kbd", "", r.touche));
+      col.appendChild(l);
+    }
+    cols.appendChild(col);
+  }
+  zone.appendChild(cols);
+  const pied = elem("button", "calque-notice", "Ouvrir la notice complète");
+  pied.onclick = () => { ipc({ m: "raccourci", action: "aide" }); fermerPanneau(); };
+  zone.appendChild(pied);
+  zone.hidden = false;
+  calqueVisible = true;
+  ajusterHauteur();
+}
+
+// Appele par `raccourcis.js` sur Echap : le calque se ferme au lieu d'arreter la page.
+window.__trame_echap = () => {
+  if (!calqueVisible) return false;
+  fermerPanneau();
+  return true;
+};
 
 function ouvrirMenuCommandes(liste) {
   ancreAcces = null;
@@ -2085,6 +2169,8 @@ function rendreMenuPage(s) {
       colonne.appendChild(elem("div", "menu-astuce", "Ce site n'est jamais gardé (Réglages pour changer)."));
     }
   }
+  colonne.appendChild(elem("div", "menu-section", "Aide"));
+  colonne.appendChild(lignePage("Notice de Trame", "F1 · tous les raccourcis : Ctrl+/", "aide", { m: "raccourci", action: "aide" }));
   placerMenuPage();
   ajusterHauteur();
 }
@@ -2295,6 +2381,7 @@ function brancherBarre() {
     }
   });
   document.getElementById("btn-zap").onclick = () => ipc({ m: "zap" });
+  document.getElementById("btn-aide").onclick = () => ipc({ m: "raccourci", action: "aide" });
   document.getElementById("btn-dl").onclick = () => ipc({ m: "ouvrirTelechargements" });
   // Le panneau s'ouvre et se ferme a plusieurs endroits : on suit ses `hidden` pour allumer
   // le bon bouton, plutot que d'appeler marquerBoutons() partout.

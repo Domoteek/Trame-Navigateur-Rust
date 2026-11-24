@@ -1583,7 +1583,9 @@ async function suite() {
     await p.mouse.move(420, 260);
     await p.mouse.move(420, 200);
     await p.waitForTimeout(250);
-    await p.mouse.click(420, 107);
+    // Depuis la 0.4.62 le bouton de droite porte un texte (« Fenêtre à part ») : le centre de la
+    // pastille tombe dessus. « Vidéo seule » est la moitie gauche.
+    await p.mouse.click(372, 107);
     await p.waitForTimeout(500);
     const etat = await p.evaluate(() => ({
       clics: window.__clicsLecteur,
@@ -2730,7 +2732,7 @@ async function suite() {
   await cas("contrat : tout message envoye par l'interface est traite par l'hote", async () => {
     // Test statique, sans navigateur : il attrape la faute qui ne se voit qu'au clic —
     // un bouton qui envoie `chromeInstallerMagasin` alors que l'hote attend un autre nom.
-    const fichiers = ["chrome.js", "newtab.html", "trame.html", "reglages.html", "zap.html", "raccourcis.js", "apercu.js"];
+    const fichiers = ["chrome.js", "newtab.html", "trame.html", "reglages.html", "zap.html", "raccourcis.js", "apercu.js", "aide.html"];
     const envoyes = new Set();
     for (const f of fichiers) {
       const texte = fs.readFileSync(path.join(UI, f), "utf8");
@@ -2738,7 +2740,7 @@ async function suite() {
     }
     // Le coeur, ses outils (favoris, rendez-vous, cote a cote, guets : `src/app/outils.rs`) et
     // la barre de la fenetre (`src/app/fenetre.rs`).
-    const app = ["app.rs", path.join("app", "outils.rs"), path.join("app", "fenetre.rs")]
+    const app = ["app.rs", path.join("app", "outils.rs"), path.join("app", "fenetre.rs"), path.join("app", "aide.rs")]
       .map((f) => fs.readFileSync(path.join(RACINE, "src", f), "utf8"))
       .join("\n");
     const traites = new Set();
@@ -2750,6 +2752,127 @@ async function suite() {
     verifier(envoyes.size > 30, `extraction suspecte : ${envoyes.size} messages`);
     const orphelins = [...envoyes].filter((m) => !traites.has(m)).sort();
     egal(orphelins, [], "ces messages ne sont traites par aucun bras de l'hote");
+  });
+
+  // ---------------------------------------------------------------- aide (2026-11-24)
+
+  // `ui/notice.js` : du JSON strict apres `window.NOTICE =`.
+  const lireNotice = () => {
+    const t = fs.readFileSync(path.join(UI, "notice.js"), "utf8");
+    return JSON.parse(t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1));
+  };
+
+  await cas("aide : chaque raccourci reel de raccourcis.js figure dans la notice", async () => {
+    // Le calque (Ctrl+/) et la Notice lisent `notice.js` : un raccourci ajoute dans
+    // `raccourcis.js` sans ligne dans la notice serait un raccourci que personne ne connait.
+    const reels = new Set();
+    for (const m of fs.readFileSync(path.join(UI, "raccourcis.js"), "utf8").matchAll(/action = (?:e\.shiftKey \? )?"([a-zA-Z:]+)"/g)) reels.add(m[1]);
+    for (const m of fs.readFileSync(path.join(UI, "raccourcis.js"), "utf8").matchAll(/action = "onglet:"/g)) reels.add("onglet:");
+    const notice = lireNotice();
+    const documentes = new Set(notice.raccourcis.map((r) => r.action).filter(Boolean));
+    // Variantes d'une meme ligne : precedent avec suivant, zoom arriere avec zoom avant.
+    for (const [variante, ligne] of [["ongletPrecedent", "ongletSuivant"], ["zoomMoins", "zoomPlus"]]) if (documentes.has(ligne)) documentes.add(variante);
+    verifier(reels.size > 20, `extraction suspecte : ${reels.size} actions`);
+    egal([...reels].filter((a) => !documentes.has(a)).sort(), [], "raccourcis absents de ui/notice.js");
+  });
+
+  await cas("aide : la Notice ouvre la fiche demandee, ses touches en <kbd>, et « Essayer » envoie la commande", async () => {
+    const p = await page("aide.html", { query: "#cote-a-cote" });
+    await pousser(p, { ...etatDeBase(), version: "0.4.62", reglages: { astuces: true } });
+    egal(await p.$eval(".fiche h2", (n) => n.textContent), "Côte à côte : deux pages dans la fenêtre", "fiche du lien");
+    verifier((await p.$$eval(".etape kbd", (n) => n.map((k) => k.textContent))).includes("Maj + clic"), "« Maj + clic » en touche");
+    egal(await p.$eval("#version", (n) => n.textContent), "Version 0.4.62", "version affichee");
+    verifier(await p.$eval("#bascule-astuces", (n) => n.classList.contains("on")), "astuces allumees");
+    await vider(p);
+    await p.click("text=Essayer maintenant");
+    egal(await messages(p), [{ m: "ouvrir", action: { type: "commande", id: "cote" } }], "Essayer = commande cote");
+    // Recherche : « split » ne garde que la fiche Cote a cote.
+    await p.fill("#filtre", "split");
+    egal(await p.$$eval("nav a", (n) => n.length), 1, "une seule fiche pour « split »");
+    // Alt+F4 reste une seule touche.
+    await p.evaluate(() => { location.hash = "video"; });
+    await p.waitForFunction(() => document.querySelector(".fiche h2").textContent.startsWith("Vidéo"));
+    verifier((await p.$$eval(".fiche kbd", (n) => n.map((k) => k.textContent))).includes("Alt+F4"), "Alt+F4 entier");
+    await vider(p);
+    await p.click("#btn-pdf");
+    await p.click("#bascule-astuces");
+    egal(await messages(p), [{ m: "aideNoticePdf" }, { m: "astuces", actif: false }], "PDF et bascule des astuces");
+    await p.close();
+  });
+
+  await cas("aide : la version imprimable met toutes les fiches a la suite", async () => {
+    const p = await page("aide.html", { query: "?impression&pdf&version=0.4.62" });
+    egal(await p.$$eval(".document .fiche", (n) => n.length), lireNotice().chapitres.length, "une section par fiche");
+    verifier((await p.$eval(".couverture .version", (n) => n.textContent)).startsWith("Version 0.4.62"), "version sur la couverture");
+    await p.close();
+  });
+
+  await cas("aide : Ctrl+/ dessine le calque dans la barre, Echap le referme", async () => {
+    const p = await page("chrome.html", { query: "?surface=barre" });
+    await pousser(p, etatDeBase());
+    await p.evaluate(() => window.trame.calqueRaccourcis());
+    verifier(await p.$eval("#calque-raccourcis", (n) => !n.hidden), "calque visible");
+    const texte = await p.$eval("#calque-raccourcis", (n) => n.textContent);
+    for (const t of ["Ctrl+Maj+T", "Afficher l'onglet à côté", "Vidéo dans une fenêtre à part", "Notice"]) {
+      verifier(texte.includes(t), `« ${t} » absent du calque`);
+    }
+    verifier(await p.$eval("#btn-aide", (n) => n.classList.contains("ouvert")), "bouton ? allume");
+    egal(await p.evaluate(() => window.__trame_echap()), true, "Echap consomme par le calque");
+    verifier(await p.$eval("#calque-raccourcis", (n) => n.hidden), "calque ferme");
+    egal(await p.evaluate(() => window.__trame_echap()), false, "Echap rendu a la page ensuite");
+    await vider(p);
+    await p.click("#btn-aide");
+    egal(await messages(p), [{ m: "raccourci", action: "aide" }], "le bouton ? ouvre la Notice");
+    await p.close();
+  });
+
+  await cas("aide : une fiche dans la Couture garde sa reponse lisible et son bouton Faire", async () => {
+    const p = await page("chrome.html", { query: "?surface=barre" });
+    await pousser(p, etatDeBase());
+    await p.click("#couture");
+    await p.type("#couture", "split", { delay: 10 });
+    await p.waitForTimeout(150);
+    const r = await p.evaluate(() => window.__ipc.filter((m) => m.m === "requete").pop().rid);
+    await p.evaluate((rid) => window.trame.resultats({ rid, q: "split", items: [
+      { genre: "aide", id: "aide:cote-a-cote", titre: "Côte à côte", sousTitre: "Maj + clic sur un onglet du rail, ou Maj + Entrée dans la barre.",
+        action: { type: "aide", chapitre: "cote-a-cote", commande: "cote", faire: "Essayer maintenant" } },
+    ] }), r);
+    egal(await p.$eval(".resultat.aide .s", (n) => getComputedStyle(n).whiteSpace), "normal", "reponse sur deux lignes");
+    await vider(p);
+    await p.click(".resultat.aide .faire");
+    egal((await messages(p)).filter((m) => m.m === "ouvrir"), [{ m: "ouvrir", action: { type: "commande", id: "cote" } }], "Faire = la commande, pas la fiche");
+    await p.close();
+  });
+
+  await cas("aide : F1 et Ctrl+/ partent de n'importe quelle page", async () => {
+    const p = await page("newtab.html");
+    await p.addScriptTag({ path: path.join(UI, "raccourcis.js") });
+    await vider(p);
+    await p.keyboard.press("F1");
+    await p.keyboard.press("Control+/");
+    const recus = (await messages(p)).filter((m) => m.m === "raccourci").map((m) => m.action);
+    verifier(recus.includes("aide") && recus.includes("raccourcisCalque"), `recu ${JSON.stringify(recus)}`);
+    await p.close();
+  });
+
+  await cas("incrustation : libelles explicites, et l'hote apprend qu'une video flotte", async () => {
+    const p = await page("newtab.html");
+    await p.setContent(PAGE_VIDEO);
+    await p.waitForFunction(() => document.getElementById("v").readyState > 0);
+    await p.addScriptTag({ path: path.join(UI, "incrustation.js") });
+    await p.mouse.move(420, 260);
+    await p.mouse.move(421, 262);
+    await p.waitForTimeout(250);
+    await vider(p);
+    await p.evaluate(() => {
+      document.getElementById("v").dispatchEvent(new Event("enterpictureinpicture", { bubbles: true }));
+    });
+    const recus = (await messages(p)).filter((m) => m.m === "flottant");
+    verifier(recus.some((m) => m.action === "incrustation"), `annonce attendue, recu ${JSON.stringify(recus)}`);
+    // La pastille vit dans une racine fantome fermee : ses libelles se verifient dans la source.
+    const source = fs.readFileSync(path.join(UI, "incrustation.js"), "utf8");
+    verifier(source.includes('"Vidéo seule"') && source.includes('"Fenêtre à part"'), "libelles « Vidéo seule » et « Fenêtre à part »");
+    await p.close();
   });
 
   // ---------------------------------------------------------------- fin

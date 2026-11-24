@@ -33,10 +33,10 @@
  * Video flottante, injectee dans chaque page visitee (et dans ses cadres).
  *
  * Au survol d'une video, une pastille apparait en haut de l'image, en deux parties :
- * - « Sortir la vidéo » (Alt+P) : la fenetre d'incrustation de Chromium, toujours au premier
+ * - « Vidéo seule » (Alt+P ; « Sortir la vidéo » jusqu'a la 0.4.61) : la fenetre d'incrustation de Chromium, toujours au premier
  *   plan, deplacable sur n'importe quel ecran ; lecture/pause seulement. Un second clic, ou
  *   Alt+P, la ramene ;
- * - l'icone de fenetre (Alt+Maj+P) : l'onglet entier part dans une mini-fenetre de Trame
+ * - « Fenêtre à part » (Alt+Maj+P, icone seule jusqu'a la 0.4.61) : l'onglet entier part dans une mini-fenetre de Trame
  *   (`src/app/flottant.rs`), le lecteur y garde toutes ses commandes. Page principale seulement.
  * Alt+P sans survol prend la video principale (celle qui joue, sinon la plus grande).
  * Demande de Clement (2026-11-22), sur le modele de l'icone d'Opera GX.
@@ -177,7 +177,7 @@
       button:hover { color: ${T.clair}; }
       button:focus-visible { outline: 2px solid ${T.accent}; outline-offset: -2px; }
       .principal { padding: 0 11px 0 9px; }
-      .onglet { padding: 0 9px; border-left: 1px solid rgba(255, 255, 255, .16); }
+      .onglet { padding: 0 11px 0 9px; border-left: 1px solid rgba(255, 255, 255, .16); }
       svg { width: 16px; height: 16px; flex: none; }
       .barre {
         position: fixed; left: 0; right: 0; top: 0; height: 34px; display: flex;
@@ -198,6 +198,11 @@
     principal.className = "principal";
     libelle = document.createElement("span");
     principal.append(icone(ICONE_INCRUSTATION), libelle);
+    // Demande de Clement (2026-11-24) : que la difference entre les deux boutons se lise sans
+    // essayer. Les deux laissent changer d'onglet ; ce qui change, c'est ce qui sort.
+    principal.title =
+      "Vidéo seule (Alt+P) : seule l'image sort, par-dessus toutes les fenêtres.\n" +
+      "Lecture et pause seulement. Tu peux changer d'onglet.";
     principal.addEventListener("click", (e) => {
       e.preventDefault();
       basculer(cible);
@@ -207,9 +212,13 @@
       const onglet = document.createElement("button");
       onglet.type = "button";
       onglet.className = "onglet";
-      onglet.title = "Mini-fenêtre avec les commandes du lecteur (Alt+Maj+P)";
+      onglet.title =
+        "Fenêtre à part (Alt+Maj+P) : toute la page de la vidéo dans sa propre fenêtre,\n" +
+        "avec toutes les commandes du lecteur. Tu peux changer d'onglet.";
       onglet.setAttribute("aria-label", onglet.title);
-      onglet.append(icone(ICONE_FENETRE));
+      const texteOnglet = document.createElement("span");
+      texteOnglet.textContent = "Fenêtre à part";
+      onglet.append(icone(ICONE_FENETRE), texteOnglet);
       onglet.addEventListener("click", (e) => {
         e.preventDefault();
         derniere = cible;
@@ -259,7 +268,7 @@
     const r = cible.getBoundingClientRect();
     pastille.style.left = Math.round(r.left + r.width / 2) + "px";
     pastille.style.top = Math.round(Math.max(r.top, 0) + 12) + "px";
-    libelle.textContent = document.pictureInPictureElement === cible ? "Ramener" : "Sortir la vidéo";
+    libelle.textContent = document.pictureInPictureElement === cible ? "Ramener" : "Vidéo seule";
   };
 
   const montrer = (v) => {
@@ -395,6 +404,15 @@
   document.addEventListener("fullscreenchange", () => document.fullscreenElement && cacher());
   document.addEventListener("enterpictureinpicture", placer, true);
   document.addEventListener("leavepictureinpicture", placer, true);
+
+  // L'hote doit savoir qu'une video de cet onglet flotte : sinon la veille (vitalite, budget de
+  // pages vivantes) ou la pause des onglets caches pouvaient detruire ou figer la page, et la
+  // petite fenetre disparaissait des qu'on restait un moment sur un autre onglet — constat de
+  // Clement le 2026-11-24 (« il faut que je reste dans la fenetre »).
+  const annoncerIncrustation = () =>
+    envoi({ m: "flottant", action: "incrustation", actif: !!document.pictureInPictureElement });
+  document.addEventListener("enterpictureinpicture", annoncerIncrustation, true);
+  document.addEventListener("leavepictureinpicture", annoncerIncrustation, true);
 
   // La croix de la fenetre d'incrustation met la video en pause (choix de Chromium) : Clement
   // veut qu'elle continue dans la page (2026-11-22). Une pause qui tombe a moins d'une seconde

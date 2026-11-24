@@ -445,6 +445,16 @@ pub struct Reglages {
     /// (seulement celles que Trame a ecrites : prefixe et extension verifies).
     #[serde(default = "sauvegarde_garder_defaut")]
     pub sauvegarde_garder: u32,
+    /// Astuces au bon moment (`src/aide.rs`) : une seule a la fois, au plus une par jour,
+    /// jamais deux fois la meme. Demande de Clement (2026-11-24).
+    #[serde(default = "vrai")]
+    pub astuces: bool,
+    /// Astuces deja montrees (identifiants de `ui/notice.js`) : chacune ne sort qu'une fois.
+    #[serde(default)]
+    pub astuces_vues: Vec<String>,
+    /// Instant (ms) de la derniere astuce montree, pour en espacer deux d'au moins un jour.
+    #[serde(default)]
+    pub astuce_derniere: u64,
 }
 
 fn sauvegarde_heures_defaut() -> u32 {
@@ -642,6 +652,9 @@ impl Default for Reglages {
             dossier_sauvegardes: String::new(),
             sauvegarde_heures: sauvegarde_heures_defaut(),
             sauvegarde_garder: sauvegarde_garder_defaut(),
+            astuces: true,
+            astuces_vues: Vec::new(),
+            astuce_derniere: 0,
         }
     }
 }
