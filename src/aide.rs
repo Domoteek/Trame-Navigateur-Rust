@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn la_couture_comprend_les_questions_de_clement() {
-        for q in ["split écran", "comment split les ecrans", "écran en deux", "comparer deux pages", "diviser l'écran"] {
+        for q in ["split écran", "comment split les ecrans", "écran en deux", "comparer deux pages", "diviser l'écran", "revenir à une seule page", "comment quitter le côte à côte"] {
             let r = resultats_couture(q);
             assert_eq!(r.first().map(|x| x.id.as_str()), Some("aide:cote-a-cote"), "{q}");
         }

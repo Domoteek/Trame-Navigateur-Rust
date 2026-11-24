@@ -1288,6 +1288,25 @@ froids » (« 0 onglet(s) en veille »), F1 → fiche `#video`, « split écran 
 **Pas éprouvé** : le bouton « Télécharger la notice » avec un vrai `notice.pdf` installé (il n'existe
 qu'après `faire-setup`), et les astuces « côte à côte » et « vidéo » en vraie fenêtre.
 
+## 10 novodecies. 2026-11-24 — des menus qui tiennent sur un portable (0.4.63)
+
+Clément : « sur le PC de mon fils, le menu ⋯ ne fonctionne littéralement pas », puis « ouvre un
+menu et redimensionne la fenêtre : le menu reste affiché mais avec rien dedans ». Banc neuf,
+`outils/eprouver-menus.mjs` : le vrai binaire caché à quatre tailles (`TRAME_TAILLE`, sonde
+ajoutée), chaque menu ouvert comme à la souris, puis une vraie fenêtre redimensionnée
+(`outils/redimensionner-fenetre.ps1`, `SetWindowPos` sans activer).
+
+| Constat (mesuré) | Cause | Correction |
+|---|---|---|
+| Menu ⋯ de 637 px dans une fenêtre de 560 : bas coupé, sans défilement — la section « Côte à côte » (et son Quitter) hors de l'écran | `placerMenuPage` supposait 720 px de fenêtre (`720 - haut`) | l'hôte envoie `hauteurFenetre` / `largeurFenetre` ; le menu se borne à `min(720, fenêtre)` |
+| Commandes (rail replié) : 843 px quelle que soit la fenêtre | aucune hauteur maximale | bornées de même, et défilantes |
+| Menu ouvert, fenêtre redimensionnée : bas hors de la fenêtre, région de l'hôte restée à l'ancienne place du menu → panneau vide | rien ne réagissait au changement de taille | la fenêtre change de taille → les menus se referment (barre et rail), comme ceux de Windows. Pas d'écouteur `resize` de la barre : l'hôte l'élargit lui-même pour ses menus collés au rail |
+| Ctrl+/ rouvert, barre déjà focalisée : le calque se refermait aussitôt | l'hôte donnait le focus APRÈS l'ouverture → `blur` → fermeture | focus d'abord ; un `blur` dans les 400 ms qui suivent l'ouverture du calque est ignoré |
+
+La fiche « Côte à côte » dit aussi comment revenir à une seule page (Quitter garde la page active).
+**Éprouvé** : `eprouver-menus.mjs` (8 menus × 4 tailles + 6 redimensionnements, tout tient),
+`tester-ui.mjs` 96/96, `cargo test --release` 218. **Pas éprouvé** sur le PC du fils lui-même.
+
 ## 11. L'état aujourd'hui
 
 ```

@@ -67,7 +67,10 @@ function toast(message) {
 window.trame = {
   etat(nouvelEtat) {
     pret = true;
+    const ancienne = etat && etat.hauteurFenetre ? `${etat.largeurFenetre}x${etat.hauteurFenetre}` : "";
     etat = nouvelEtat;
+    // La fenetre a change de taille : les menus ouverts se referment (voir `tailleFenetreChangee`).
+    if (ancienne && etat.hauteurFenetre && ancienne !== `${etat.largeurFenetre}x${etat.hauteurFenetre}`) tailleFenetreChangee();
     rendreFenetre(etat);
     if (surface === "rail") rendreRail(etat);
     else rendreBarre(etat);
@@ -1000,6 +1003,7 @@ let pageVisible = false;
 let ancreMenu = null;
 let commandesVisibles = false;
 let calqueVisible = false;
+let calqueOuvertA = 0;
 let signaturePage = "";
 let lecturesAttendues = false;
 let panneauOuvert = false;
@@ -1755,7 +1759,8 @@ function ouvrirMenuAccesBarre(x) {
  *  clic ailleurs le referme. Les lignes viennent de `notice.js` : la Notice et le calque ne
  *  peuvent pas se contredire, et `outils/tester-ui.mjs` verifie que chaque touche reelle y est. */
 function ouvrirCalqueRaccourcis() {
-  if (calqueVisible) {
+  // Ouvert = vraiment a l'ecran : un drapeau seul pouvait survivre a une fermeture par l'hote.
+  if (calqueVisible && panneauOuvert && !document.getElementById("calque-raccourcis").hidden) {
     fermerPanneau();
     return;
   }
@@ -1794,6 +1799,7 @@ function ouvrirCalqueRaccourcis() {
   zone.appendChild(pied);
   zone.hidden = false;
   calqueVisible = true;
+  calqueOuvertA = Date.now();
   ajusterHauteur();
 }
 
@@ -1804,6 +1810,20 @@ window.__trame_echap = () => {
   return true;
 };
 
+/* La fenetre change de taille, un menu ouvert : il se referme, comme les menus de Windows.
+   Avant, il restait ouvert mais l'hote gardait la region decoupee a l'ANCIENNE place du menu,
+   qui s'etait deplace avec son bouton : on voyait le fond du panneau, vide, et le bas du menu
+   sortait de la fenetre (constat de Clement, 2026-11-24 ; `outils/eprouver-menus.mjs`).
+   La taille de la FENETRE arrive par l'etat (`largeurFenetre`, `hauteurFenetre`) : celle de la
+   barre ne dit rien, l'hote l'agrandit et l'elargit lui-meme pour dessiner ses menus. */
+function tailleFenetreChangee() {
+  if (surface === "rail") {
+    fermerCommandesRail();
+    fermerMenuAccesRail();
+  } else if (panneauOuvert) {
+    fermerPanneau();
+  }
+}
 function ouvrirMenuCommandes(liste) {
   ancreAcces = null;
   ouvrirPanneau();
@@ -1818,7 +1838,14 @@ function ouvrirMenuCommandes(liste) {
   zone.textContent = "";
   // Pas de classe « page » : sa hauteur maximale suit la fenetre de la barre, encore basse a
   // l'ouverture — le menu sortait tronque a une ligne (retour de Clement, 2026-11-22).
-  if (liste) zone.appendChild(colonneCommandes(liste, fermerPanneau));
+  if (liste) {
+    const colonne = colonneCommandes(liste, fermerPanneau);
+    zone.appendChild(colonne);
+    // Bornee a la place reelle (fenetre, 720 px au plus pour la barre), et defilante : sans cela
+    // ses 843 px sortaient de toute fenetre plus basse (`outils/eprouver-menus.mjs`, 2026-11-24).
+    const plafond = Math.min(720, (etat && etat.hauteurFenetre) || 720);
+    colonne.style.maxHeight = Math.max(160, plafond - zone.getBoundingClientRect().top - 8) + "px";
+  }
   ajusterHauteur();
 }
 
@@ -2191,9 +2218,12 @@ function placerMenuPage() {
   // Hauteur choisie a la poignee (gardee d'une ouverture a l'autre), bornee par la place reelle.
   const choisie = tailleMenuChoisie();
   if (!ancreMenu) {
-    // Sous le bouton « … » : l'hote accorde 720 px au plus a la barre. La hauteur maximale ne
-    // suit plus 100vh : la barre, encore basse a l'ouverture, bridait le menu a quelques lignes.
-    const dispoBouton = Math.max(160, 720 - haut - marge);
+    // Sous le bouton « … » : l'hote accorde 720 px au plus a la barre, et jamais plus que la
+    // fenetre. La hauteur maximale ne suit pas 100vh : la barre, encore basse a l'ouverture,
+    // bridait le menu a quelques lignes. Mais supposer 720 px coupait le bas du menu (son
+    // « Côte à côte → Quitter ») dans une fenetre plus basse, sans defilement possible (2026-11-24).
+    const plafond = Math.min(720, (etat && etat.hauteurFenetre) || 720);
+    const dispoBouton = Math.max(160, plafond - haut - marge);
     colonne.style.marginTop = "";
     colonne.style.maxHeight = Math.min(dispoBouton, choisie || dispoBouton) + "px";
     return;
@@ -2392,6 +2422,9 @@ function brancherBarre() {
 
   // Perdre le focus de la fenetre = clic dans la page : le panneau se referme.
   window.addEventListener("blur", () => {
+    // Le calque vient de s'ouvrir sur Ctrl+/ : l'hote donne alors le focus a la barre, et ce
+    // passage produit un « blur » qui le refermait aussitot (mesure du 2026-11-24, banc des menus).
+    if (calqueVisible && Date.now() - calqueOuvertA < 400) return;
     if (panneauOuvert) fermerPanneau();
     // La saisie est abandonnee : le champ reprend l'adresse reelle de la page tout de suite,
     // sans attendre la prochaine poussee d'etat.

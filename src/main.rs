@@ -128,6 +128,15 @@ fn main() {
             )
         })
         .unwrap_or((1440.0, 900.0));
+    // `TRAME_TAILLE=LxH` (diagnostic) : taille imposee, pour eprouver un petit ecran de portable
+    // sur ce PC (menu ⋯ muet chez le fils de Clement, 2026-11-24).
+    let (largeur, hauteur) = std::env::var("TRAME_TAILLE")
+        .ok()
+        .and_then(|t| {
+            let (l, h) = t.split_once('x')?;
+            Some((l.trim().parse::<f64>().ok()?.max(880.0), h.trim().parse::<f64>().ok()?.max(560.0)))
+        })
+        .unwrap_or((largeur, hauteur));
     // Centree dans la hauteur utile (ecran moins barre des taches) : Windows la posait en
     // cascade, et son bas tombait sous la barre des taches.
     let position = ecran.as_ref().map(|m| {

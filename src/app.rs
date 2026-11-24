@@ -1792,6 +1792,7 @@ impl App {
         self.derniere_taille = (taille.width, taille.height);
         self.appliquer_geometrie();
         self.suivre_agrandissement();
+        self.pousser_etat();
     }
 
     /// La fenetre vient de reprendre le focus (alt-tab, clic sur la barre de titre) : on le
@@ -3038,6 +3039,11 @@ impl App {
             "chargement": actif.map(|o| o.chargement).unwrap_or(false),
             "interne": actif.map(|o| o.interne()).unwrap_or(true),
             "railReplie": self.rail_replie,
+            // Hauteur utile de la fenetre (px logiques) : le menu ⋯ s'y borne. Sans elle, il
+            // supposait toujours 720 px et sortait coupe d'une fenetre plus basse — le menu
+            // « ne marchait pas » sur le portable du fils de Clement (2026-11-24).
+            "hauteurFenetre": (self.window.inner_size().height as f64 / self.window.scale_factor()).round(),
+            "largeurFenetre": (self.window.inner_size().width as f64 / self.window.scale_factor()).round(),
             "panneau": self.panneau_ouvert,
             "version": crate::maj::ACTUELLE,
             "theme": self.reglages.theme,

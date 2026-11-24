@@ -109,13 +109,15 @@ window.NOTICE = {
       "conseils": [
         "Glisse la séparation pour changer les largeurs (20 à 80 %).",
         "Un clic dans une page la rend active : la barre d'adresse et les raccourcis visent celle-là.",
-        "Menu ⋯ → Côte à côte : Inverser, Lier le défilement (les deux pages défilent ensemble), Quitter.",
+        "Revenir à une seule page : clique dans la page à garder, puis menu ⋯ → Côte à côte → Quitter. C'est toujours la page active (celle où tu as cliqué en dernier) qui reste en pleine page.",
+        "Cliquer sur un autre onglet du rail l'affiche seul, mais ne défait pas le côte à côte : recliquer sur l'une des deux pages les ramène ensemble. Seul « Quitter » les sépare pour de bon.",
+        "Menu ⋯ → Côte à côte : Inverser (échange gauche et droite), Lier le défilement (les deux pages défilent ensemble), Quitter.",
         "Il faut au moins deux onglets ouverts. Deux pages au plus."
       ],
       "actions": [
         { "libelle": "Essayer maintenant", "commande": "cote" }
       ],
-      "mots": ["côte à côte", "cote a cote", "split", "split view", "écran partagé", "partager l'écran", "diviser", "deux pages", "deux écrans", "écran en deux", "comparer", "séparer", "moitié", "à côté"],
+      "mots": ["côte à côte", "cote a cote", "split", "split view", "écran partagé", "partager l'écran", "diviser", "deux pages", "deux écrans", "écran en deux", "comparer", "séparer", "moitié", "à côté", "quitter", "défaire", "pleine page", "une seule page", "annuler"],
       "voir": ["video", "couture", "raccourcis"]
     },
     {
@@ -327,6 +329,15 @@ window.NOTICE = {
   ],
 
   "nouveautes": [
+    {
+      "version": "0.4.63",
+      "lignes": [
+        "Les menus tiennent dans les petites fenêtres (portables) : le menu ⋯ n'est plus coupé, celui des commandes défile.",
+        "Redimensionner la fenêtre referme proprement un menu ouvert, au lieu de laisser un panneau vide.",
+        "Ctrl+/ ne se referme plus tout seul quand le curseur est déjà dans la barre.",
+        "La Notice dit comment revenir à une seule page après un côte à côte."
+      ]
+    },
     {
       "version": "0.4.62",
       "lignes": [

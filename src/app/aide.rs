@@ -185,9 +185,11 @@ impl App {
     }
 
     pub(super) fn afficher_calque_raccourcis(&mut self) {
+        // Le focus d'abord (Echap doit arriver a la barre), le calque ensuite : donner le focus
+        // apres l'ouverture produisait un « blur » qui refermait le calque aussitot.
         if let Some(w) = &self.barre {
-            let _ = w.evaluate_script("window.trame && window.trame.calqueRaccourcis && window.trame.calqueRaccourcis()");
             let _ = w.focus();
+            let _ = w.evaluate_script("window.trame && window.trame.calqueRaccourcis && window.trame.calqueRaccourcis()");
         }
     }
 

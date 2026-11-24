@@ -1193,7 +1193,7 @@ input {
 }
 .menu-poignee:hover .trait { background: rgba(255, 255, 255, 0.38); }
 /* Commandes (clic droit sur le logo) : a gauche, pres du rail d'ou elles viennent. */
-.menu-colonne.commandes { margin-left: 0; margin-right: auto; width: min(100%, 360px); }
+.menu-colonne.commandes { margin-left: 0; margin-right: auto; width: min(100%, 360px); overflow-y: auto; overscroll-behavior: contain; }
 /* Dans le rail deplie : sous le logo, par-dessus les fils, defilant si la fenetre est basse. */
 .rail { position: relative; }
 .commandes-rail {

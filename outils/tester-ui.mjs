@@ -2875,6 +2875,31 @@ async function suite() {
     await p.close();
   });
 
+  await cas("menus : bornés à la fenêtre réelle, refermés quand elle change de taille", async () => {
+    // Le menu ⋯ supposait 720 px de fenetre : sur un portable, son bas (Côte à côte → Quitter)
+    // sortait de l'ecran. Et une fenetre redimensionnee laissait un panneau vide (2026-11-24).
+    const p = await page("chrome.html", { query: "?surface=barre" });
+    const etat = etatDeBase();
+    etat.actif = 1;
+    etat.onglets = [onglet(1, 1, "Page", "https://exemple.fr/", { actif: true })];
+    etat.carnet = { pageWeb: true, favori: false, favoris: [], guets: [], guetsNonVus: 0 };
+    etat.hauteurFenetre = 560;
+    etat.largeurFenetre = 880;
+    await pousser(p, etat);
+    await p.click("#btn-page");
+    const borne = await p.$eval("#menu-page .menu-colonne", (n) => parseFloat(n.style.maxHeight));
+    verifier(borne > 150 && borne <= 560 - 40, `menu ⋯ borné à la fenêtre de 560 px : ${borne}`);
+    await vider(p);
+    await pousser(p, { ...etat, hauteurFenetre: 600, largeurFenetre: 1000 });
+    verifier(await p.$eval("#menu-page", (n) => n.hidden), "la fenêtre change de taille : le menu se referme");
+    verifier((await messages(p)).some((m) => m.m === "panneau" && m.open === false), "et l'hôte rend la place");
+    // Meme taille : un etat ordinaire ne ferme rien.
+    await p.click("#btn-page");
+    await pousser(p, { ...etat, hauteurFenetre: 600, largeurFenetre: 1000 });
+    verifier(await p.$eval("#menu-page", (n) => !n.hidden), "un état sans changement de taille laisse le menu ouvert");
+    await p.close();
+  });
+
   // ---------------------------------------------------------------- fin
 
   await navigateur.close();
