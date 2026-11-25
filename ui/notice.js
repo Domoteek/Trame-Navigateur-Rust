@@ -177,7 +177,7 @@ window.NOTICE = {
       "etapes": [
         { "titre": "Le zappeur", "texte": "L'icône œil barré ouvre un panneau à droite : clique sur un élément de la page et il disparaît, sur ce site seulement." },
         { "titre": "Les règles", "texte": "Chaque règle se relit, se coupe ou se supprime dans le même panneau. Trame en livre pour YouTube (Shorts, annonces)." },
-        { "titre": "Le saute-pub", "texte": "Extension livrée : retire les pubs de YouTube avant qu'elles démarrent et saute les passages sponsorisés." }
+        { "titre": "Le saute-pub", "texte": "Extension livrée : rend les pubs de YouTube muettes, les passe en accéléré et clique « Passer » (YouTube ne voit pas de bloqueur), et saute les passages sponsorisés." }
       ],
       "conseils": [],
       "actions": [
@@ -350,6 +350,12 @@ window.NOTICE = {
   ],
 
   "nouveautes": [
+    {
+      "version": "0.4.66",
+      "lignes": [
+        "Saute-pub en mode discret : YouTube charge ses pubs, Trame les rend muettes, les accélère et clique « Passer » — YouTube ne refuse plus la lecture pour « bloqueur de pub »."
+      ]
+    },
     {
       "version": "0.4.65",
       "lignes": [

@@ -227,7 +227,7 @@
   }
   setInterval(fermerVoilesOrphelins, 700);
 
-  // Pubs retirees par debut.js avant le lecteur : comptees ici (le stockage n'existe pas au
+  // Pubs retirees par debut.js avant le lecteur (retire en 3.0 : YouTube le detectait) : comptees ici (le stockage n'existe pas au
   // debut du document).
   let retireesVues = 0;
   setInterval(() => {

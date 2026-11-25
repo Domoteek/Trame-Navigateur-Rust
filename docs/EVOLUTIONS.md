@@ -1345,6 +1345,17 @@ consentement gardé avec son voile, puis lecteur cliquable, rien fermé à tort 
 **Pas éprouvé** : la fenêtre « bloqueurs » réelle (YouTube la montre selon le compte) — d'où le
 compteur dans le rapport.
 
+## 10 duovicies. 2026-11-25 — saute-pub en mode discret (0.4.66)
+
+Après la 0.4.65, Clément : « YouTube capte que j'ai un bloqueur, je n'ai plus le droit de
+regarder ». Le saute-pub 2.x retirait les pubs de la réponse du lecteur (`debut.js`) et bloquait
+les adresses publicitaires : c'est ce que YouTube détecte. Choix de Clément (« 1 ») : **saute-pub
+3.0.0**, `debut.js` et `bloquer` retirés ; les pubs se chargent, `contenu.js` les rend muettes,
+×16, les mène à leur fin et clique « Passer » (le comportement de la 1.0). Encarts masqués,
+SponsorBlock et voile orphelin gardés. Éprouvé : 220 + 100/100, vrai YouTube dans Trame caché
+(lecteur cliquable). **Pas éprouvé** : chez le fils, face à la détection réelle — rien ne garantit
+que YouTube ne repère jamais l'accéléré.
+
 ## 11. L'état aujourd'hui
 
 ```

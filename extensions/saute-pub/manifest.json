@@ -1,20 +1,19 @@
 {
   "name": "Saute-pub YouTube",
-  "version": "2.1.0",
-  "description": "Retire les pubs de la réponse du lecteur avant qu'il ne les voie, refuse les adresses publicitaires de YouTube, masque les encarts et saute les passages sponsorisés signalés sur SponsorBlock. Si une pub passe quand même : son coupé, ×16 et « Passer ».",
+  "version": "3.0.0",
+  "description": "Mode discret : laisse YouTube charger ses pubs (il ne voit donc pas de bloqueur), puis les rend muettes, les passe en accéléré et clique « Passer ». Masque les encarts et saute les passages sponsorisés signalés sur SponsorBlock.",
   "author": "Trame",
-  "matches": ["*://www.youtube.com/*", "*://m.youtube.com/*", "*://youtube.com/*", "*://www.youtube-nocookie.com/*"],
-  "js_debut": ["debut.js"],
-  "js": ["contenu.js"],
-  "css": ["style.css"],
-  "bloquer": [
-    "*://*.doubleclick.net/*",
-    "*://*.googlesyndication.com/*",
-    "*://*.googleadservices.com/*",
-    "*://www.youtube.com/pagead/*",
-    "*://www.youtube.com/api/stats/ads*",
-    "*://www.youtube.com/ptracking*",
-    "*://www.youtube.com/get_midroll_*"
+  "matches": [
+    "*://www.youtube.com/*",
+    "*://m.youtube.com/*",
+    "*://youtube.com/*",
+    "*://www.youtube-nocookie.com/*"
+  ],
+  "js": [
+    "contenu.js"
+  ],
+  "css": [
+    "style.css"
   ],
   "run_at": "document_end",
   "accent": "#f87171"
