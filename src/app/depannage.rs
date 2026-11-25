@@ -165,6 +165,20 @@ impl App {
                 ligne(format!("  - {nom} {} : {etat}", crate::profile::version_manifeste(&d).unwrap_or_else(|| "?".into())));
             }
         }
+        // Les compteurs des extensions (nombres seulement) : pubs sautées, voiles gris retirés…
+        // C'est par eux qu'on sait si le saute-pub a croisé la fenêtre « bloqueurs » de YouTube.
+        ligne("Compteurs des extensions :".into());
+        if let Some(racine) = self.ext_storage.as_object() {
+            for (ext, valeurs) in racine {
+                let nombres: Vec<String> = valeurs
+                    .as_object()
+                    .map(|o| o.iter().filter(|(_, v)| v.is_number()).map(|(k, v)| format!("{k} = {v}")).collect())
+                    .unwrap_or_default();
+                if !nombres.is_empty() {
+                    ligne(format!("  - {ext} : {}", nombres.join(", ")));
+                }
+            }
+        }
         ligne("Extensions Chrome :".into());
         for e in self.liste_extensions_chrome() {
             ligne(format!(

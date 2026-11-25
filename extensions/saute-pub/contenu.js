@@ -172,6 +172,61 @@
   }
   setInterval(suivreSponsors, 300);
 
+  /* --- Voile gris orphelin -----------------------------------------------------------------
+     Une fenetre de YouTube (« les bloqueurs de publicites ne sont pas autorises ») s'ouvre dans
+     une boite de dialogue qui pose sur toute la page un voile gris (`tp-yt-iron-overlay-backdrop`)
+     qui prend les clics. style.css cache le message, debut.js le retire de la reponse : la boite
+     peut alors rester ouverte, vide ou cachee, avec son voile — la video grisee, plus rien de
+     cliquable, et a chaque rechargement (constat chez un fils de Clement, 2026-11-24).
+     Regle : un voile ouvert alors qu'AUCUNE fenetre de YouTube n'est visible est un orphelin,
+     on le ferme. Les vraies fenetres (partager, enregistrer…) gardent le leur. */
+  const visible = (el) => {
+    if (!el || !el.isConnected) return false;
+    const st = getComputedStyle(el);
+    if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 24 && r.height > 24;
+  };
+  let voilesFermes = 0;
+  // Orphelin a deux releves de suite (1,4 s) : a l'ouverture d'une vraie fenetre, le voile peut
+  // paraitre un instant avant elle.
+  let orphelinVu = false;
+  function fermerVoilesOrphelins() {
+    const voiles = [...document.querySelectorAll("tp-yt-iron-overlay-backdrop")].filter(visible);
+    if (!voiles.length) {
+      orphelinVu = false;
+      return;
+    }
+    const fenetres = document.querySelectorAll("tp-yt-paper-dialog, tp-yt-iron-dropdown, ytd-popup-container [role='dialog']");
+    // Une fenetre d'avertissement de bloqueur ne compte pas : on ne veut pas la voir.
+    const uneVraie = [...fenetres].some((f) => visible(f) && !f.querySelector("ytd-enforcement-message-view-model"));
+    if (uneVraie) {
+      orphelinVu = false;
+      return;
+    }
+    if (!orphelinVu) {
+      orphelinVu = true;
+      return;
+    }
+    orphelinVu = false;
+    for (const v of voiles) {
+      try { if (typeof v.close === "function") v.close(); } catch (e) {}
+      v.style.setProperty("display", "none", "important");
+      v.removeAttribute("opened");
+    }
+    // La boite d'avertissement elle-meme, si elle est la : refermee, pas seulement cachee.
+    for (const f of fenetres) {
+      if (!f.querySelector("ytd-enforcement-message-view-model") && visible(f)) continue;
+      try { if (typeof f.close === "function") f.close(); } catch (e) {}
+    }
+    // Le voile bloque aussi le defilement de la page.
+    if (document.body && document.body.style.overflow === "hidden") document.body.style.overflow = "";
+    voilesFermes += voiles.length;
+    compter("voiles", voiles.length);
+    signaler("Voile gris retiré");
+  }
+  setInterval(fermerVoilesOrphelins, 700);
+
   // Pubs retirees par debut.js avant le lecteur : comptees ici (le stockage n'existe pas au
   // debut du document).
   let retireesVues = 0;
@@ -189,6 +244,7 @@
       pubEnCours,
       lecteurObserve: !!observe,
       avant,
+      voilesFermes,
       sponsor: { video: sbVideo, segments: sbSegments.length, sautes: sbSautes.size },
       avantLecteur: window.__trameSansPub && window.__trameSansPub.etat ? window.__trameSansPub.etat() : null,
     }),

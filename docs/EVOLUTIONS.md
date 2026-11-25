@@ -1328,6 +1328,23 @@ version » remis à neuf au démarrage, rapport sans adresse ni recherche, répa
 autres réglages intacts — 22/22), `cargo test --release` 220, `tester-ui.mjs` 97/97.
 **Pas éprouvé** : sur le PC du fils, où le lecteur YouTube était figé.
 
+## 10 unvicies. 2026-11-25 — le voile gris de YouTube (0.4.65)
+
+Clément : sur le PC d'un de ses fils, « un filtre gris apparaît » sur YouTube, plus rien n'est
+cliquable dans la vidéo ; plein écran puis retour répare, un rafraîchissement le remet.
+
+| Constat | Cause la plus probable | Correction |
+|---|---|---|
+| Le saute-pub cachait `ytd-enforcement-message-view-model` (« les bloqueurs de publicités ne sont pas autorisés ») et `debut.js` retirait ce message de la réponse du lecteur — mais rien ne s'occupait de la boîte de dialogue qui le porte, ni de son **voile** `tp-yt-iron-overlay-backdrop`, plein écran et semi-transparent, qui prend les clics | la boîte restait ouverte, vide ou cachée : voile gris sur la vidéo, à chaque chargement | saute-pub **2.1.0** : la boîte d'avertissement est cachée elle aussi, et un voile ouvert alors qu'**aucune** fenêtre de YouTube n'est visible (deux relevés de suite, 1,4 s) est refermé, le défilement rendu, le compteur `voiles` incrémenté. Les vraies fenêtres (consentement, partager…) gardent le leur |
+| Pas de moyen de savoir, chez le fils, si c'était bien cela | — | le rapport pour Claude liste les **compteurs des extensions** (nombres seulement) : `voiles` > 0 confirmera la cause |
+
+Écartée en mesurant : un consentement aux cookies non retenu (le choix tient après rechargement).
+**Éprouvé** : `tester-ui.mjs` 100/100 (3 cas : voile « bloqueurs » retiré, voile de « Partager »
+gardé, voile en avance sur sa fenêtre gardé) ; vrai YouTube dans Trame caché, profil neuf :
+consentement gardé avec son voile, puis lecteur cliquable, rien fermé à tort (`voilesFermes` 0).
+**Pas éprouvé** : la fenêtre « bloqueurs » réelle (YouTube la montre selon le compte) — d'où le
+compteur dans le rapport.
+
 ## 11. L'état aujourd'hui
 
 ```

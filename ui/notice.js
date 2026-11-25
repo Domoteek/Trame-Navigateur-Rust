@@ -351,6 +351,13 @@ window.NOTICE = {
 
   "nouveautes": [
     {
+      "version": "0.4.65",
+      "lignes": [
+        "YouTube : un voile gris laissé par une fenêtre de YouTube cachée (« les bloqueurs de publicités… ») ne bloque plus la vidéo.",
+        "Le rapport pour Claude compte aussi les pubs sautées et les voiles retirés."
+      ]
+    },
+    {
       "version": "0.4.64",
       "lignes": [
         "Après chaque mise à jour, Trame vérifie le contenu de ses extensions et remet à neuf ce qui a changé.",

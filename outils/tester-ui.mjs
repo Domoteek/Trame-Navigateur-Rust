@@ -2918,6 +2918,47 @@ async function suite() {
     await p.close();
   });
 
+  // Saute-pub : le voile gris d'une fenetre YouTube cachee bloquait la video (2026-11-25).
+  const PAGE_VOILE = (fenetre) => `<!doctype html><meta charset="utf-8"><body style="margin:0;height:900px">
+    <div class="html5-video-player" style="position:absolute;left:100px;top:80px;width:640px;height:360px;background:#123"><video></video></div>
+    <tp-yt-iron-overlay-backdrop opened style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2201;display:block"></tp-yt-iron-overlay-backdrop>
+    <ytd-popup-container>${fenetre}</ytd-popup-container></body>`;
+  const DIALOGUE = (dedans) =>
+    `<tp-yt-paper-dialog style="position:fixed;left:900px;top:100px;width:300px;height:200px;z-index:2202;display:block;background:#fff">${dedans}</tp-yt-paper-dialog>`;
+  const ouvrirVoile = async (html) => {
+    const p = await page("newtab.html");
+    await p.setContent(html);
+    await p.addStyleTag({ path: path.join(RACINE, "extensions", "saute-pub", "style.css") });
+    await p.addScriptTag({ path: path.join(RACINE, "extensions", "saute-pub", "contenu.js") });
+    return p;
+  };
+  const sousLaVideo = (p) => p.evaluate(() => document.elementFromPoint(420, 260)?.tagName.toLowerCase());
+
+  await cas("saute-pub : le voile gris de la fenêtre « bloqueurs » est retiré, la vidéo redevient cliquable", async () => {
+    const p = await ouvrirVoile(PAGE_VOILE(DIALOGUE("<ytd-enforcement-message-view-model>Les bloqueurs de publicités ne sont pas autorisés</ytd-enforcement-message-view-model>")));
+    egal(await sousLaVideo(p), "tp-yt-iron-overlay-backdrop", "au départ, le voile prend les clics");
+    await p.waitForTimeout(2000);
+    egal(await sousLaVideo(p), "div", "le voile ne recouvre plus la vidéo");
+    egal(await p.evaluate(() => window.__trameSautePub.etat().voilesFermes), 1, "un voile fermé, compté");
+    await p.close();
+  });
+
+  await cas("saute-pub : une vraie fenêtre de YouTube garde son voile", async () => {
+    const p = await ouvrirVoile(PAGE_VOILE(DIALOGUE("<div>Partager</div>")));
+    await p.waitForTimeout(2200);
+    egal(await sousLaVideo(p), "tp-yt-iron-overlay-backdrop", "le voile de « Partager » reste");
+    await p.close();
+  });
+
+  await cas("saute-pub : un voile qui précède de peu sa fenêtre n'est pas touché", async () => {
+    const p = await ouvrirVoile(PAGE_VOILE(""));
+    await p.waitForTimeout(500);
+    await p.evaluate((html) => document.querySelector("ytd-popup-container").insertAdjacentHTML("beforeend", html), DIALOGUE("<div>Enregistrer</div>"));
+    await p.waitForTimeout(2000);
+    egal(await sousLaVideo(p), "tp-yt-iron-overlay-backdrop", "le voile de la fenêtre arrivée en retard reste");
+    await p.close();
+  });
+
   // ---------------------------------------------------------------- fin
 
   await navigateur.close();

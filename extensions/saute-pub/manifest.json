@@ -1,6 +1,6 @@
 {
   "name": "Saute-pub YouTube",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Retire les pubs de la réponse du lecteur avant qu'il ne les voie, refuse les adresses publicitaires de YouTube, masque les encarts et saute les passages sponsorisés signalés sur SponsorBlock. Si une pub passe quand même : son coupé, ×16 et « Passer ».",
   "author": "Trame",
   "matches": ["*://www.youtube.com/*", "*://m.youtube.com/*", "*://youtube.com/*", "*://www.youtube-nocookie.com/*"],
