@@ -992,6 +992,9 @@
         // importee change de nom ou de resume.
         let attenteImport = false;
         let confAvantImport = "";
+        // L'instant du dernier import connu : il change même quand on réimporte le même profil
+        // (pour y ajouter des identifiants), ce que l'identité seule ne verrait pas.
+        let importeAvant = 0;
         const identiteTunnel = (r) => {
           const actif = (r && r.tunnels && r.tunnels.actif) || "";
           if (actif) return actif;
@@ -1688,12 +1691,17 @@
           $("ligne-tunnel-erreur").hidden = !erreurTunnel;
           $("txt-tunnel-erreur").textContent = erreurTunnel;
           // Une configuration vient d'être importée alors que le portier est armé : le tunnel ne
-          // se montera qu'au démarrage, on propose donc de redémarrer tout de suite. La question
-          // est posée après le rendu : une boîte bloquante au milieu d'un rafraîchissement
-          // laisserait la liste à moitié dessinée.
-          if (attenteImport && r.tunnelOblige && identiteTunnel(r) && identiteTunnel(r) !== confAvantImport) {
+          // se montera qu'au démarrage, on propose donc de redémarrer tout de suite. Deux témoins :
+          // l'identité de la configuration (nouvel import) et l'instant d'import (`tunnelImporteLe`,
+          // qui change aussi quand on réimporte le même profil pour y ajouter des identifiants).
+          const importeLe = r.tunnelImporteLe || 0;
+          const nouveau = importeLe !== importeAvant;
+          if (attenteImport && r.tunnelOblige && (nouveau || (identiteTunnel(r) && identiteTunnel(r) !== confAvantImport))) {
             attenteImport = false;
+            importeAvant = importeLe;
             setTimeout(() => proposerRedemarrage(true), 0);
+          } else if (!attenteImport) {
+            importeAvant = importeLe;
           }
           // L'affiliation n'a de sens que si l'on nettoie : grisee, mais toujours reglable.
           $("ligne-affiliation").classList.toggle("gris", !r.nettoyerAdresses);

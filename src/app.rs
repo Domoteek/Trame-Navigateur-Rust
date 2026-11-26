@@ -331,6 +331,10 @@ pub struct App {
     /// l'interface affiche : sans elle, un tunnel muet ne laissait aucune trace visible (constat
     /// de Clement, 2026-11-28 : « ca fonctionne pas », et rien a lire). Effacee des que ca monte.
     tunnel_erreur: Option<String>,
+    /// Instant du dernier import de configuration réussi. L'interface s'en sert pour proposer le
+    /// redémarrage : réimporter **le même** profil (pour ajouter des identifiants) ne change pas son
+    /// identité, donc sans ce compteur la proposition ne viendrait jamais.
+    tunnel_importe_le: u64,
     /// Le mandataire SOCKS5 qui fait passer les pages dans le tunnel, quand il tourne. Il doit
     /// demarrer AVANT la premiere webview : le proxy de WebView2 est fixe a la creation de
     /// l'environnement, et ne se change plus ensuite.
@@ -842,6 +846,7 @@ impl App {
             tunnel_verifie: 0,
             tunnel_actif,
             tunnel_erreur: None,
+            tunnel_importe_le: 0,
             mandataire: None,
             blocage: crate::moteur_ext::Blocage::default(),
             adresses_nettoyees: 0,
@@ -3448,6 +3453,9 @@ impl App {
                 // Pourquoi le tunnel integre n'a pas monte, quand c'est le cas : l'interface
                 // l'affiche tel quel, sinon la panne reste dans le journal.
                 "tunnelErreur": self.tunnel_erreur.clone(),
+                // Instant du dernier import réussi : l'interface s'en sert pour proposer le
+                // redémarrage même quand on réimporte le même profil (identité inchangée).
+                "tunnelImporteLe": self.tunnel_importe_le,
                 // Toutes les configurations rangees (plusieurs pays) et celle qui est active.
                 "tunnels": Self::etat_tunnels(self.profil.racine()),
             },
@@ -4844,6 +4852,7 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
                                 Ok(id) => {
                                     info!("tunnel : profil OpenVPN importe dans tunnels/{id} ({nom})");
                                     self.tunnel_actif = crate::tunnel::charger_active(self.profil.racine());
+                                    self.tunnel_importe_le = crate::log::maintenant_ms();
                                     // Un profil NordVPN (auth-user-pass) ne monte pas sans ses
                                     // identifiants de service : le dire tout de suite plutôt que de
                                     // laisser l'utilisateur devant un échec de connexion.
@@ -4876,6 +4885,7 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
                                         let resume = config.resume();
                                         info!("tunnel : configuration importee dans tunnels/{id} ({resume})");
                                         self.tunnel_actif = crate::tunnel::charger_active(self.profil.racine());
+                                        self.tunnel_importe_le = crate::log::maintenant_ms();
                                         self.signaler(&format!("Tunnel importé : {resume}"));
                                     }
                                     Err(e) => {
