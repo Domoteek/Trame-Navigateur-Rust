@@ -1725,6 +1725,29 @@ function marquerBoutons() {
   allumer("btn-reglages", pageInterneOuverte("reglages"));
   allumer("btn-dl", pageInterneOuverte("telechargements"));
   allumer("btn-aide", pageInterneOuverte("aide") || montre("calque-raccourcis"));
+  rendreVpn();
+}
+
+/**
+ * La pastille VPN : elle dit, d'un coup d'oeil, si les pages passent par le tunnel.
+ *   - tunnel monté  -> point vert, la bulle donne son nom ;
+ *   - exigé, absent -> point rouge, la bulle dit que la navigation est bloquée ;
+ *   - rien d'exigé  -> cachée.
+ */
+function rendreVpn() {
+  const bouton = document.getElementById("btn-vpn");
+  if (!bouton) return;
+  const r = (etat && etat.reglages) || {};
+  const tunnel = r.tunnel || null;
+  const oblige = !!r.tunnelOblige;
+  bouton.hidden = !tunnel && !oblige;
+  bouton.classList.toggle("actif", !!tunnel);
+  bouton.classList.toggle("bloque", !tunnel && oblige);
+  bouton.title = tunnel
+    ? `VPN actif : toutes les pages de Trame passent par « ${tunnel} »`
+    : oblige
+      ? "VPN absent : aucun tunnel monté, la navigation vers les sites est bloquée (Réglages → Confidentialité)"
+      : "VPN";
 }
 
 function rendreBarre(s) {
@@ -2520,6 +2543,9 @@ function brancherBarre() {
   });
   document.getElementById("btn-zap").onclick = () => ipc({ m: "zap" });
   document.getElementById("btn-aide").onclick = () => ipc({ m: "raccourci", action: "aide" });
+  // La pastille VPN mène aux réglages du tunnel : c'est là qu'on l'allume, qu'on l'éteint ou
+  // qu'on importe une configuration.
+  document.getElementById("btn-vpn").onclick = () => ipc({ m: "ouvrirReglages", rubrique: "confidentialite" });
   document.getElementById("btn-dl").onclick = () => ipc({ m: "ouvrirTelechargements" });
   // Le panneau s'ouvre et se ferme a plusieurs endroits : on suit ses `hidden` pour allumer
   // le bon bouton, plutot que d'appeler marquerBoutons() partout.

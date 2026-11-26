@@ -211,6 +211,13 @@
             <svg class="ic"><use href="#i-etoile" /></svg>
           </button>
         </div>
+        <!-- VPN : une pastille qui dit si le tunnel est actif. Verte quand les pages passent par
+             le tunnel, rouge quand il est exigé mais absent (la navigation est alors bloquée),
+             cachée quand aucun tunnel n'est exigé et qu'il n'y en a pas. -->
+        <button class="nav vpn" id="btn-vpn" hidden title="Tunnel">
+          <svg class="ic"><use href="#i-masque" /></svg>
+          <span class="vpn-point" id="vpn-point"></span>
+        </button>
         <button class="nav" id="btn-aide" title="Notice : comment faire (F1)&#10;Tous les raccourcis : Ctrl+/">
           <svg class="ic"><use href="#i-aide" /></svg>
         </button>

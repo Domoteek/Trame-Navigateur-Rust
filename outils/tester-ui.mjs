@@ -2062,6 +2062,40 @@ async function suite() {
     await p.close();
   });
 
+  await cas("barre : la pastille VPN dit si le tunnel est actif, et mène aux réglages", async () => {
+    const p = await page("chrome.html", { query: "?surface=barre" });
+    // 1. Rien d'exigé, aucun tunnel : la pastille est cachée.
+    await pousser(p, etatDeBase());
+    egal(await p.$eval("#btn-vpn", (n) => n.hidden), true, "aucun tunnel : pastille cachée");
+    // 2. Tunnel monté : pastille verte, avec le nom dans la bulle.
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: { tunnelOblige: true, tunnel: "Tunnel intégré (WireGuard)" },
+    });
+    egal(await p.$eval("#btn-vpn", (n) => n.hidden), false, "tunnel actif : pastille visible");
+    egal(await p.$eval("#btn-vpn", (n) => n.className.includes("actif")), true, "classe « actif » (verte)");
+    verifier(
+      (await p.$eval("#btn-vpn", (n) => n.title)).includes("Tunnel intégré"),
+      "la bulle donne le nom du tunnel"
+    );
+    // 3. Exigé mais absent : pastille rouge, et la bulle dit que la navigation est bloquée.
+    await pousser(p, { ...etatDeBase(), reglages: { tunnelOblige: true, tunnel: null } });
+    egal(await p.$eval("#btn-vpn", (n) => n.className.includes("bloque")), true, "classe « bloqué » (rouge)");
+    verifier(
+      (await p.$eval("#btn-vpn", (n) => n.title)).includes("bloquée"),
+      "la bulle dit que la navigation est bloquée"
+    );
+    // 4. Un clic mène aux réglages, sur la rubrique Confidentialité.
+    await vider(p);
+    await p.click("#btn-vpn");
+    egal(
+      (await messages(p)).filter((m) => m.m === "ouvrirReglages"),
+      [{ m: "ouvrirReglages", rubrique: "confidentialite" }],
+      "le clic ouvre les réglages sur Confidentialité"
+    );
+    await p.close();
+  });
+
   await cas("rail : les marques gauche/droite ne s'affichent que si la paire est à l'écran", async () => {
     const p = await page("chrome.html", { query: "?surface=rail" });
     const etat = etatDeBase();

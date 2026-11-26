@@ -650,6 +650,17 @@ input {
   color: #b4c2d8;
   transition: background 0.13s, color 0.13s, opacity 0.13s;
 }
+
+/* La pastille VPN : discret, mais lisible d'un coup d'oeil. Verte = les pages passent par le
+   tunnel ; rouge = tunnel exigé et absent (la navigation est bloquee). */
+.nav.vpn { width: 34px; gap: 3px; }
+.nav.vpn .ic { width: 15px; height: 15px; }
+.nav.vpn .vpn-point { width: 7px; height: 7px; border-radius: 50%; background: transparent; display: block; }
+.nav.vpn.actif { color: #86efac; }
+.nav.vpn.actif .vpn-point { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.75); }
+.nav.vpn.bloque { color: #fca5a5; }
+.nav.vpn.bloque .vpn-point { background: #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.7); }
+
 .nav:hover { background: rgba(255, 255, 255, 0.08); color: #f2f6ff; }
 .nav:disabled { opacity: 0.28; cursor: default; }
 .nav:disabled:hover { background: transparent; }

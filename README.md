@@ -249,6 +249,14 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.83, publiée et installée le 2026-11-28.** « Il me faut une info si le VPN est actif » : une
+> **pastille VPN dans la barre**, à côté de la Notice. **Point vert** = les pages passent par le tunnel
+> (la bulle donne son nom : « VPN actif : toutes les pages de Trame passent par « Tunnel intégré
+> (WireGuard) » ») ; **point rouge** = tunnel exigé mais absent, donc navigation bloquée ; **cachée**
+> quand aucun tunnel n'est exigé. Un clic ouvre les réglages **directement sur Confidentialité**
+> (`reglages.html#confidentialite`). Preuves : `cargo test` **245/245**, `tester-ui` **108/108** (+1),
+> et la pastille lue sur le vrai binaire avec le tunnel monté : `cachee=false`, classe `nav vpn actif`.
+>
 > **0.4.82, publiée et installée le 2026-11-28.** « C'est activé mais beaucoup d'onglets ne se chargent
 > pas. » Deux causes, mesurées : (1) **un seul nom pouvait être résolu à la fois** — la page suivante
 > écrasait la résolution en cours, d'où des onglets qui n'arrivaient jamais ; chaque connexion a
@@ -477,7 +485,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.82-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.83-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

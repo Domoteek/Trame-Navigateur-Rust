@@ -4890,7 +4890,7 @@ impl App {
                     self.pousser_etat();
                 }
             }
-            "ouvrirReglages" => self.ouvrir_reglages(),
+            "ouvrirReglages" => self.ouvrir_reglages_sur(v["rubrique"].as_str()),
             "zap" => self.basculer_zap(),
             "zapChoisir" => self.demarrer_selecteur(),
             "zapChoisi" if self.selection_guet => {
@@ -5676,7 +5676,17 @@ impl App {
     /// Ouvre la page de reglages : dans l'onglet courant s'il est deja interne, sinon
     /// dans un nouvel onglet — comme le fait un navigateur pour ses pages internes.
     fn ouvrir_reglages(&mut self) {
-        self.ouvrir_page_interne(PAGE_REGLAGES);
+        self.ouvrir_reglages_sur(None);
+    }
+
+    /// Ouvre les réglages, éventuellement **sur une rubrique** : la page lit son `#ancre`
+    /// (`reglages.html#confidentialite`). La pastille VPN de la barre s'en sert.
+    fn ouvrir_reglages_sur(&mut self, rubrique: Option<&str>) {
+        let page = match rubrique.filter(|r| !r.is_empty()) {
+            Some(r) => format!("{PAGE_REGLAGES}#{r}"),
+            None => PAGE_REGLAGES.to_string(),
+        };
+        self.ouvrir_page_interne(&page);
     }
 
     /// Ouvre une page interne : dans l'onglet affiche s'il est deja une page interne, sinon dans
