@@ -62,9 +62,13 @@ Deux choses à savoir (lues dans la [documentation Nord](https://support.nord-he
 
 ## 3. Importer le fichier dans Trame
 
+> **Deux formats sont acceptés depuis la 0.4.87** : le `.conf` de **WireGuard** et le `.ovpn`
+> d'**OpenVPN**. Trame reconnaît le format **au contenu**, pas à l'extension. Pour OpenVPN, voir la
+> section « Profil OpenVPN » plus bas (identifiants en plus).
+
 1. Ouvrir Trame → menu **Réglages** (ou `Ctrl+,`).
 2. Colonne de gauche : **Confidentialité**.
-3. Groupe **Tunnel (VPN)** → carte **Tunnel intégré (WireGuard)** → bouton **Importer…**
+3. Groupe **Tunnel (VPN)** → carte **Tunnel intégré** → bouton **Importer…**
 4. Choisir le `.conf` téléchargé.
 
 La configuration apparaît dans la liste, avec son résumé (`10.5.0.2/16 → 185.61.156.20:51820`) et la
@@ -123,7 +127,60 @@ Comparer avec un navigateur sans VPN : l'adresse n'est pas la même. C'est la se
 | On veut revenir en arrière | D'abord **éteindre** « Exiger un tunnel » (Trame propose de redémarrer : accepter, les pages repassent alors en direct), **puis** **Supprimer** les configurations de la liste pour effacer leurs clés. Dans cet ordre : la proposition de redémarrage n'apparaît que s'il reste une configuration. |
 
 Le journal de Trame est ici : `%LOCALAPPDATA%\Trame\trame.log`. Les lignes utiles commencent par
-`tunnel :` (montage, poignée de main, proxy).
+`tunnel :` et `openvpn :` (montage, poignée de main, proxy, messages du moteur OpenVPN).
+
+## 6 bis. Profil OpenVPN (.ovpn)
+
+Depuis la **0.4.87**, Trame sait aussi monter un tunnel **OpenVPN**, avec le même confort : aucun
+pilote, aucun droit administrateur, et les pages de Trame seulement. Le moteur est OpenVPN 3 Core,
+celui d'OpenVPN Connect, lié dans Trame avec un tunnel en espace utilisateur.
+
+### Le télécharger chez Nord
+
+Même page que pour WireGuard (étape 2) : **Serveur recommandé** → **Get setup configuration** → cette
+fois choisir **OpenVPN UDP** → **Download config** → code de vérification par courriel. Le fichier
+s'appelle `NordVPN_<pays>_<serveur>.ovpn` et contient ses certificats (`<ca>`, `<cert>`, `<key>`) et
+sa clé statique (`<tls-crypt>`) : **il ne faut rien éditer**.
+
+### Les identifiants de service
+
+Nord ne laisse pas OpenVPN se connecter sans identifiants. Ils sont sur la même page du compte :
+onglet **Service credentials** (dans *Manual setup*). C'est un couple **utilisateur / mot de passe**
+qui n'a rien à voir avec le compte Nord lui-même.
+
+Dans Trame : **Réglages → Confidentialité → Tunnel intégré**, remplir les deux champs
+**Identifiants du fournisseur**, puis **Importer…** et choisir le `.ovpn`. Ils sont chiffrés par
+Windows (DPAPI) dans le profil, comme la clé WireGuard, et ne servent qu'au tunnel.
+
+### Ce qui doit se passer
+
+1. La configuration apparaît dans la liste avec le résumé `openvpn udp <serveur>`.
+2. On arme **Exiger un tunnel**, Trame propose de redémarrer → **Oui**.
+3. Au démarrage, le journal dit `openvpn : tunnel monté — adresse …, MTU …, DNS …`, puis
+   `tunnel : proxy socks5://… posé sur la webview`.
+4. La page de contrôle (`https://ipinfo.io/json`) montre l'adresse du serveur Nord, pas celle de la
+   maison.
+
+### Si ça ne monte pas
+
+La raison s'affiche **dans les réglages**, sous la liste, et sur la page de blocage. Les cas déjà
+rencontrés :
+
+| Message | Ce que ça veut dire |
+|---|---|
+| `ce profil demande un utilisateur et un mot de passe` | les champs d'identifiants étaient vides à l'import : les remplir et réimporter |
+| `ce profil attend un certificat client hors du fichier (external PKI)` | le `.ovpn` n'a pas ses sections `<cert>` et `<key>` — souvent un profil « client » généré pour un autre outil : en reprendre un complet chez le fournisseur |
+| `session terminée (…)` | le serveur a refusé ou coupé : la parenthèse est le message du moteur OpenVPN lui-même |
+
+Pour éprouver un profil sans toucher au profil de tous les jours :
+
+```powershell
+node outils/eprouver-openvpn.mjs --profil <fichier.ovpn> --utilisateur <service> --motdepasse <…>
+```
+
+Le banc importe dans un profil jetable, vérifie que le profil et les identifiants sont **chiffrés sur
+le disque**, arme le portier, redémarre, attend le montage, puis **lit l'adresse de sortie** à travers
+le mandataire. Il ne dit jamais les identifiants.
 
 ## 7. Ce que le tunnel ne fait pas (limites connues, dites plutôt que cachées)
 
