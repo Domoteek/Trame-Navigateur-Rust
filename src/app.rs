@@ -1390,9 +1390,17 @@ impl App {
             return;
         }
         self.tunnel_verifie = now;
-        // Le tunnel de Trame d'abord : s'il tourne, il n'y a rien d'autre a chercher.
+        // Le tunnel de Trame d'abord : s'il tourne, il n'y a rien d'autre a chercher. Son nom dit
+        // le moteur reellement employe — annoncer « WireGuard » a quelqu'un qui tourne en OpenVPN
+        // ferait douter de ce qui est monte.
         let tunnel = match self.mandataire.as_ref() {
-            Some(_) => Some("Tunnel intégré (WireGuard)".to_string()),
+            Some(_) => {
+                let moteur = match self.tunnel_actif.as_ref() {
+                    Some(crate::tunnel::Configuration::OpenVpn { .. }) => "OpenVPN",
+                    _ => "WireGuard",
+                };
+                Some(format!("Tunnel intégré ({moteur})"))
+            }
             None => crate::reseau::tunnel_actif(),
         };
         let bloque = self.reglages.tunnel_oblige && tunnel.is_none();
