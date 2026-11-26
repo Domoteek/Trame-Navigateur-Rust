@@ -10,7 +10,7 @@
 //!   - un **résolveur DNS dans le tunnel** (le DNS du fournisseur, jamais celui de la box) ;
 //!   - le **SOCKS5** lui-même, qui relie une connexion locale à un socket de la pile.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{ErrorKind, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -162,86 +162,100 @@ impl Device for Pile {
     }
 }
 
-// ------------------------------------------------------------------ le résolveur (DNS dans le tunnel)
+// ------------------------------------------------------------------ ports locaux et identifiants DNS
 
-struct Resolveur {
-    serveur: IpEndpoint,
-    socket: SocketHandle,
-    /// Identifiant de la demande en cours (`0` : aucune).
-    en_cours: u16,
-    nom: String,
-    envoye_le: u64,
-    essais: u8,
-    /// La réponse, gardée jusqu'à ce que le client qui l'attend la prenne.
-    resultat: Option<Result<IpAddr, String>>,
+/// Distribue les ports locaux de la pile, un par socket vivant.
+///
+/// Défaut corrigé en 0.4.93 : toutes les connexions TCP partaient du port 40000, et les sockets
+/// DNS d'un même tour de boucle tombaient sur le même port. Deux connexions vers le même serveur
+/// (Google en ouvre plusieurs) avaient alors la même identité : les réponses allaient à la
+/// mauvaise, et la page restait en « SynSent » ou sans DNS.
+struct Ports {
+    suivant: u16,
+    pris: HashSet<u16>,
 }
 
-impl Resolveur {
-    fn nouveau(adresse: IpAddr, sockets: &mut SocketSet<'_>) -> Resolveur {
-        let rx = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0u8; 2048]);
-        let tx = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0u8; 2048]);
-        let mut socket = udp::Socket::new(rx, tx);
-        let _ = socket.bind(40000u16);
-        Resolveur {
-            serveur: IpEndpoint::new(ip_smoltcp(adresse), 53),
-            socket: sockets.add(socket),
-            en_cours: 0,
-            nom: String::new(),
-            envoye_le: 0,
-            essais: 0,
-            resultat: None,
-        }
+const PORT_MIN: u16 = 49152;
+
+impl Ports {
+    fn nouveau(graine: u64) -> Ports {
+        Ports { suivant: PORT_MIN + (graine % 16000) as u16, pris: HashSet::new() }
     }
 
-    /// Envoie une requête A pour `nom`. Rend l'identifiant à attendre.
-    fn demander(&mut self, sockets: &mut SocketSet<'_>, nom: &str, maintenant: u64) -> Option<u16> {
-        self.en_cours = (self.en_cours % 60000) + 1;
-        self.nom = nom.to_string();
-        self.envoye_le = maintenant;
-        self.essais = 1;
-        self.resultat = None;
-        self.envoyer(sockets)?;
-        Some(self.en_cours)
-    }
-
-    fn envoyer(&mut self, sockets: &mut SocketSet<'_>) -> Option<()> {
-        let requete = requete_dns(self.en_cours, &self.nom);
-        let socket = sockets.get_mut::<udp::Socket>(self.socket);
-        socket
-            .send_slice(&requete, udp::UdpMetadata::from(self.serveur))
-            .ok()?;
-        Some(())
-    }
-
-    /// Fait avancer le résolveur : lit la réponse et la GARDE, relance au besoin.
-    ///
-    /// C'est la boucle qui l'appelle, jamais le client : deux lectures du même socket UDP se
-    /// voleraient la réponse (mesure du 2026-11-28 : le client recevait un EOF au lieu de sa
-    /// réponse SOCKS5, parce que la boucle avait déjà consommé le datagramme).
-    fn entretenir(&mut self, sockets: &mut SocketSet<'_>, maintenant: u64) {
-        if self.en_cours == 0 || self.resultat.is_some() {
-            return;
-        }
-        let mut tampon = [0u8; 2048];
-        let socket = sockets.get_mut::<udp::Socket>(self.socket);
-        if let Ok((n, _)) = socket.recv_slice(&mut tampon) {
-            self.resultat = Some(match extraire_a(&tampon[..n], self.en_cours) {
-                Some(ip) => Ok(ip),
-                None => Err(format!("« {} » introuvable (DNS du tunnel)", self.nom)),
-            });
-            return;
-        }
-        if maintenant.saturating_sub(self.envoye_le) > 2_000 {
-            if self.essais >= 3 {
-                self.resultat = Some(Err(format!(
-                    "le DNS du tunnel n'a pas répondu pour « {} »",
-                    self.nom
-                )));
-                return;
+    fn prendre(&mut self) -> Option<u16> {
+        for _ in 0..16384 {
+            let port = self.suivant;
+            self.suivant = if self.suivant == u16::MAX { PORT_MIN } else { self.suivant + 1 };
+            if self.pris.insert(port) {
+                return Some(port);
             }
-            self.essais += 1;
-            self.envoye_le = maintenant;
-            self.envoyer(sockets);
+        }
+        None
+    }
+
+    fn rendre(&mut self, port: u16) {
+        self.pris.remove(&port);
+    }
+}
+
+/// Ce que tous les clients partagent : ports, identifiants DNS, cache, sockets en fermeture.
+struct Commun {
+    ports: Ports,
+    prochain_id: u16,
+    /// Noms déjà résolus, gardés une minute (une page demande souvent le même nom plusieurs fois).
+    cache: HashMap<String, (IpAddr, u64)>,
+    /// Sockets TCP à qui l'on a demandé de se fermer : retirés une fois fermés (ou après 10 s).
+    fermants: Vec<(SocketHandle, u16, u64)>,
+}
+
+const DUREE_CACHE_MS: u64 = 60_000;
+
+impl Commun {
+    fn identifiant(&mut self) -> u16 {
+        self.prochain_id = self.prochain_id.wrapping_add(1).max(1);
+        self.prochain_id
+    }
+
+    /// Ferme proprement un socket TCP et le range parmi ceux à retirer plus tard.
+    fn fermer_tcp(&mut self, sockets: &mut SocketSet<'_>, handle: SocketHandle, port: u16, maintenant: u64, net: bool) {
+        let socket = sockets.get_mut::<tcp::Socket>(handle);
+        if net {
+            socket.abort();
+        } else {
+            socket.close();
+        }
+        self.fermants.push((handle, port, maintenant + 10_000));
+    }
+
+    fn retirer_udp(&mut self, sockets: &mut SocketSet<'_>, handle: SocketHandle, port: u16) {
+        sockets.remove(handle);
+        self.ports.rendre(port);
+    }
+
+    /// Retire les sockets fermés ; coupe net ceux qui traînent depuis plus de 10 s.
+    fn ranger(&mut self, sockets: &mut SocketSet<'_>, maintenant: u64) {
+        let mut i = 0;
+        while i < self.fermants.len() {
+            let (handle, port, limite) = self.fermants[i];
+            let socket = sockets.get_mut::<tcp::Socket>(handle);
+            match socket.state() {
+                tcp::State::Closed | tcp::State::TimeWait => {
+                    sockets.remove(handle);
+                    self.ports.rendre(port);
+                    self.fermants.swap_remove(i);
+                    continue;
+                }
+                _ if maintenant > limite => {
+                    // Le RST part au prochain passage de la pile ; le socket sera alors fermé.
+                    socket.abort();
+                    self.fermants[i].2 = u64::MAX;
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        if self.cache.len() > 2000 {
+            self.cache.retain(|_, (_, expire)| *expire > maintenant);
         }
     }
 }
@@ -316,6 +330,20 @@ pub fn extraire_a(reponse: &[u8], identifiant: u16) -> Option<IpAddr> {
     None
 }
 
+/// Décrit une réponse DNS sans adresse (code, compteurs, troncature) pour le journal.
+fn decrire_reponse(reponse: &[u8]) -> String {
+    if reponse.len() < 12 {
+        return format!("{} octet(s)", reponse.len());
+    }
+    format!(
+        "{} octets, rcode {}, {} réponse(s), tronquée {}",
+        reponse.len(),
+        reponse[3] & 0x0f,
+        u16::from_be_bytes([reponse[6], reponse[7]]),
+        reponse[2] & 0x02 != 0
+    )
+}
+
 /// Rend l'index qui suit le nom à `i` (gère la compression `0xC0`).
 fn sauter_nom(reponse: &[u8], mut i: usize) -> Option<usize> {
     loop {
@@ -335,20 +363,35 @@ fn sauter_nom(reponse: &[u8], mut i: usize) -> Option<usize> {
 enum Etat {
     Salutation,
     Requete,
-    /// On attend la résolution DNS du nom, sur CE client (socket, identifiant, envoi, essais).
-    Resolution { socket: SocketHandle, id: u16, envoye_le: u64, essais: u8, nom: String },
-    Connexion(SocketHandle),
-    Relais(SocketHandle),
+    /// On attend la résolution DNS du nom, sur un socket propre à ce client.
+    Resolution { socket: SocketHandle, port: u16, id: u16, envoye_le: u64, essais: u8, nom: String },
+    Connexion { socket: SocketHandle, port: u16, debut: u64 },
+    Relais { socket: SocketHandle, port: u16, fin_envoyee: bool },
+    /// Plus rien à faire : le client sera retiré.
+    Fini,
 }
 
 struct Client {
     flux: TcpStream,
     etat: Etat,
+    /// Ce que le navigateur a envoyé et qui doit partir dans le tunnel.
     tampon: Vec<u8>,
-    /// Ce que le navigateur a déjà envoyé et qui doit partir dans le tunnel.
-    a_pousser: Vec<u8>,
+    /// Ce que le tunnel a rendu et que le navigateur n'a pas encore pris.
+    vers_navigateur: Vec<u8>,
+    /// Le navigateur a fermé son côté.
+    navigateur_fini: bool,
     hote: Option<(IpAddr, u16)>,
+    /// Le nom demandé, pour le journal.
+    nom: String,
 }
+
+/// Au-delà, on cesse de lire le navigateur tant que le tunnel n'a pas absorbé.
+const RETENUE: usize = 256 * 1024;
+const SYN_MAX_MS: u64 = 20_000;
+
+const REFUS_HOTE: [u8; 10] = [0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0];
+const REFUS_CONNEXION: [u8; 10] = [0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0];
+const ACCORD: [u8; 10] = [0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0];
 
 fn boucle(
     mut tunnel: Box<dyn crate::moteur::Tunnel>,
@@ -363,8 +406,9 @@ fn boucle(
         mtu,
     };
 
+    let graine = crate::log::maintenant_ms();
     let mut conf = ConfIface::new(HardwareAddress::Ip);
-    conf.random_seed = crate::log::maintenant_ms();
+    conf.random_seed = graine;
     let mut iface = Interface::new(conf, &mut pile, instant(0));
     let v4 = parametres.adresses.iter().find_map(|(ip, prefixe)| match ip {
         IpAddr::V4(a) => Some((*a, *prefixe)),
@@ -392,6 +436,12 @@ fn boucle(
 
     let mut sockets = SocketSet::new(Vec::new());
     let dns: Option<IpAddr> = parametres.dns;
+    let mut commun = Commun {
+        ports: Ports::nouveau(graine),
+        prochain_id: (graine % 60000) as u16,
+        cache: HashMap::new(),
+        fermants: Vec::new(),
+    };
 
     let mut clients: Vec<Client> = Vec::new();
     crate::info!(
@@ -404,11 +454,13 @@ fn boucle(
     while !arret.load(Ordering::Relaxed) {
         let maintenant = crate::log::maintenant_ms();
         let temps = instant(maintenant);
+        let mut actif = false;
 
         // 1. Le tunnel : ce qui arrive, ce qui part.
         tunnel.pomper()?;
         while let Some(paquet) = tunnel.prendre_paquet() {
             pile.entrants.push_back(paquet);
+            actif = true;
         }
 
         // 2. Les connexions du navigateur.
@@ -416,13 +468,17 @@ fn boucle(
             match ecoute.accept() {
                 Ok((flux, _)) => {
                     let _ = flux.set_nonblocking(true);
+                    let _ = flux.set_nodelay(true);
                     clients.push(Client {
                         flux,
                         etat: Etat::Salutation,
                         tampon: Vec::new(),
-                        a_pousser: Vec::new(),
+                        vers_navigateur: Vec::new(),
+                        navigateur_fini: false,
                         hote: None,
+                        nom: String::new(),
                     });
+                    actif = true;
                 }
                 Err(e) if e.kind() == ErrorKind::WouldBlock => break,
                 Err(_) => break,
@@ -432,28 +488,31 @@ fn boucle(
         // 3. La pile travaille (elle consomme les entrants et produit les sortants).
         iface.poll(temps, &mut pile, &mut sockets);
 
-        // 4. Le résolveur, s'il a une demande en cours.
-        // 5. Chaque client avance d'un cran.
-        let mut a_oublier = Vec::new();
+        // 4. Chaque client avance d'un cran ; ceux qui ont fini rendent leurs sockets.
         {
             let contexte = iface.context();
-            for (index, client) in clients.iter_mut().enumerate() {
-                if client.avancer(&mut sockets, dns, contexte, maintenant).is_err() {
-                    a_oublier.push(index);
+            for client in clients.iter_mut() {
+                if client.avancer(&mut sockets, &mut commun, dns, contexte, maintenant) {
+                    actif = true;
                 }
             }
         }
-        for index in a_oublier.into_iter().rev() {
-            clients.swap_remove(index);
-        }
+        clients.retain(|client| !matches!(client.etat, Etat::Fini));
+        commun.ranger(&mut sockets, maintenant);
 
-        // 6. Ce que la pile et les clients ont produit part dans le tunnel.
+        // 5. Ce que la pile et les clients ont produit part dans le tunnel.
         iface.poll(temps, &mut pile, &mut sockets);
         while let Some(paquet) = pile.sortants.pop_front() {
             tunnel.envoyer_paquet(&paquet)?;
+            actif = true;
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(3));
+        // Au repos, on cède la main ; en plein transfert, on enchaîne (débit d'une vidéo).
+        if actif {
+            std::thread::yield_now();
+        } else {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
     }
     crate::info!("mandataire : arrêt demandé");
     Ok(())
@@ -463,219 +522,361 @@ fn instant(ms: u64) -> InstantSmol {
     InstantSmol::from_millis(ms as i64)
 }
 
+/// Ce que donne une lecture du navigateur.
+enum Lecture {
+    Rien,
+    Lu,
+    Fin,
+}
+
 impl Client {
+    /// Fait avancer le client. Rend `true` s'il s'est passé quelque chose. En cas d'échec ou de
+    /// fin, l'état passe à `Fini` et ses sockets sont rendus à `commun`.
     fn avancer(
         &mut self,
         sockets: &mut SocketSet<'_>,
+        commun: &mut Commun,
         serveur_dns: Option<IpAddr>,
         contexte: &mut smoltcp::iface::Context,
         maintenant: u64,
-    ) -> Result<(), ()> {
+    ) -> bool {
+        match self.etape(sockets, commun, serveur_dns, contexte, maintenant) {
+            Ok(actif) => actif,
+            Err(()) => {
+                self.liberer(sockets, commun, maintenant, true);
+                true
+            }
+        }
+    }
+
+    /// Rend les sockets du client et le marque fini.
+    fn liberer(&mut self, sockets: &mut SocketSet<'_>, commun: &mut Commun, maintenant: u64, net: bool) {
+        match std::mem::replace(&mut self.etat, Etat::Fini) {
+            Etat::Resolution { socket, port, .. } => commun.retirer_udp(sockets, socket, port),
+            Etat::Connexion { socket, port, .. } => commun.fermer_tcp(sockets, socket, port, maintenant, true),
+            Etat::Relais { socket, port, .. } => commun.fermer_tcp(sockets, socket, port, maintenant, net),
+            _ => {}
+        }
+        let _ = self.flux.shutdown(std::net::Shutdown::Both);
+    }
+
+    fn etape(
+        &mut self,
+        sockets: &mut SocketSet<'_>,
+        commun: &mut Commun,
+        serveur_dns: Option<IpAddr>,
+        contexte: &mut smoltcp::iface::Context,
+        maintenant: u64,
+    ) -> Result<bool, ()> {
         match self.etat {
+            Etat::Fini => Ok(false),
             Etat::Salutation => {
-                if !self.lire()? {
-                    return Ok(());
+                match self.lire()? {
+                    Lecture::Rien => return Ok(false),
+                    Lecture::Fin => return Err(()),
+                    Lecture::Lu => {}
                 }
                 if self.tampon.len() < 2 {
-                    return Ok(());
+                    return Ok(true);
                 }
                 let attendu = 2 + self.tampon[1] as usize;
                 if self.tampon.len() < attendu {
-                    return Ok(());
+                    return Ok(true);
                 }
-                if self.flux.write_all(&[0x05, 0x00]).is_err() {
-                    return Err(());
-                }
+                self.flux.write_all(&[0x05, 0x00]).map_err(|_| ())?;
                 self.tampon.drain(..attendu);
                 self.etat = Etat::Requete;
+                Ok(true)
             }
             Etat::Requete => {
-                if !self.lire()? {
-                    return Ok(());
+                if let Lecture::Fin = self.lire()? {
+                    return Err(());
                 }
                 if self.tampon.len() < 5 {
-                    return Ok(());
+                    return Ok(false);
                 }
                 let atype = self.tampon[3];
                 let taille = match atype {
                     0x01 => 4 + 4 + 2,
                     0x04 => 4 + 16 + 2,
-                    0x03 => {
-                        let longueur = self.tampon[4] as usize;
-                        5 + longueur + 2
-                    }
+                    0x03 => 5 + self.tampon[4] as usize + 2,
                     _ => return Err(()),
                 };
                 if self.tampon.len() < taille {
-                    return Ok(());
+                    return Ok(false);
                 }
                 let port = u16::from_be_bytes([self.tampon[taille - 2], self.tampon[taille - 1]]);
                 match atype {
                     0x01 => {
                         let ip = Ipv4Addr::new(self.tampon[4], self.tampon[5], self.tampon[6], self.tampon[7]);
                         self.hote = Some((IpAddr::V4(ip), port));
+                        self.nom = ip.to_string();
                     }
                     0x04 => {
                         let mut octets = [0u8; 16];
                         octets.copy_from_slice(&self.tampon[4..20]);
-                        self.hote = Some((IpAddr::V6(Ipv6Addr::from(octets)), port));
+                        let ip = Ipv6Addr::from(octets);
+                        self.hote = Some((IpAddr::V6(ip), port));
+                        self.nom = ip.to_string();
                     }
-                    0x03 => {
+                    _ => {
                         let longueur = self.tampon[4] as usize;
-                        let nom = String::from_utf8_lossy(&self.tampon[5..5 + longueur]).to_string();
+                        let nom = String::from_utf8_lossy(&self.tampon[5..5 + longueur]).to_ascii_lowercase();
                         self.tampon.drain(..taille);
+                        self.nom = nom.clone();
+                        // Une adresse écrite en chiffres n'a pas besoin du DNS.
+                        if let Ok(ip) = nom.parse::<IpAddr>() {
+                            self.hote = Some((ip, port));
+                            self.connecter(sockets, commun, contexte, maintenant)?;
+                            return Ok(true);
+                        }
+                        if let Some((ip, expire)) = commun.cache.get(&nom) {
+                            if *expire > maintenant {
+                                self.hote = Some((*ip, port));
+                                self.connecter(sockets, commun, contexte, maintenant)?;
+                                return Ok(true);
+                            }
+                        }
                         let Some(serveur) = serveur_dns else {
-                            let _ = self.flux.write_all(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+                            let _ = self.flux.write_all(&REFUS_HOTE);
                             return Err(());
                         };
-                        // Un socket DNS PAR CLIENT : deux onglets qui résolvent deux noms en même
-                        // temps ne se volent plus la réponse (défaut constaté le 2026-11-28 :
-                        // beaucoup d'onglets ne se chargeaient pas).
-                        let rx = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0u8; 2048]);
-                        let tx = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0u8; 2048]);
+                        let rx = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0u8; 4096]);
+                        let tx = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0u8; 1024]);
                         let mut socket = udp::Socket::new(rx, tx);
-                        // Un port local DISTINCT : un socket lie au port 0 ne recoit pas sa reponse
-                        // (smoltcp remet le datagramme au socket lie au port de destination).
-                        let port_local = 40000u16 + (maintenant % 10000) as u16;
+                        let Some(port_local) = commun.ports.prendre() else {
+                            let _ = self.flux.write_all(&REFUS_HOTE);
+                            return Err(());
+                        };
                         if socket.bind(port_local).is_err() {
-                            let _ = self.flux.write_all(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+                            commun.ports.rendre(port_local);
+                            let _ = self.flux.write_all(&REFUS_HOTE);
                             return Err(());
                         }
                         let handle = sockets.add(socket);
-                        let identifiant = (maintenant % 60000) as u16 + 1;
-                        let requete = requete_dns(identifiant, &nom);
+                        let id = commun.identifiant();
                         let endpoint = IpEndpoint::new(ip_smoltcp(serveur), 53);
-                        let socket = sockets.get_mut::<udp::Socket>(handle);
-                        if socket.send_slice(&requete, udp::UdpMetadata::from(endpoint)).is_err() {
-                            let _ = self.flux.write_all(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+                        let envoi = sockets
+                            .get_mut::<udp::Socket>(handle)
+                            .send_slice(&requete_dns(id, &nom), udp::UdpMetadata::from(endpoint));
+                        self.hote = Some((IpAddr::V4(Ipv4Addr::UNSPECIFIED), port));
+                        self.etat = Etat::Resolution { socket: handle, port: port_local, id, envoye_le: maintenant, essais: 1, nom };
+                        if envoi.is_err() {
+                            let _ = self.flux.write_all(&REFUS_HOTE);
                             return Err(());
                         }
-                        self.etat = Etat::Resolution { socket: handle, id: identifiant, envoye_le: maintenant, essais: 1, nom };
-                        self.hote = Some((IpAddr::V4(Ipv4Addr::UNSPECIFIED), port));
-                        return Ok(());
+                        return Ok(true);
                     }
-                    _ => return Err(()),
                 }
                 self.tampon.drain(..taille);
-                self.connecter(sockets, contexte)?;
+                self.connecter(sockets, commun, contexte, maintenant)?;
+                Ok(true)
             }
-            Etat::Resolution { socket, id, envoye_le, essais, ref nom } => {
+            Etat::Resolution { socket, port: port_udp, id, envoye_le, essais, ref nom } => {
                 let nom = nom.clone();
-                let mut tampon = [0u8; 2048];
-                let recu = {
-                    let socket = sockets.get_mut::<udp::Socket>(socket);
-                    socket.recv_slice(&mut tampon).ok().map(|(n, _)| n)
-                };
-                if let Some(n) = recu {
+                let mut tampon = [0u8; 4096];
+                // On lit tout ce qui est arrivé : une réponse d'un autre identifiant (ancienne
+                // relance) est ignorée, pas prise pour un échec.
+                loop {
+                    let recu = sockets
+                        .get_mut::<udp::Socket>(socket)
+                        .recv_slice(&mut tampon)
+                        .ok()
+                        .map(|(n, _)| n);
+                    let Some(n) = recu else { break };
+                    if n < 12 || u16::from_be_bytes([tampon[0], tampon[1]]) != id {
+                        continue;
+                    }
+                    commun.retirer_udp(sockets, socket, port_udp);
                     match extraire_a(&tampon[..n], id) {
                         Some(ip) => {
+                            commun.cache.insert(nom.clone(), (ip, maintenant + DUREE_CACHE_MS));
                             if let Some((_, port)) = self.hote {
                                 self.hote = Some((ip, port));
                             }
-                            self.connecter(sockets, contexte)?;
+                            self.etat = Etat::Requete; // le socket UDP n'est plus à nous
+                            self.connecter(sockets, commun, contexte, maintenant)?;
+                            return Ok(true);
                         }
                         None => {
-                            crate::info!("mandataire : « {nom} » introuvable (DNS du tunnel)");
-                            let _ = self.flux.write_all(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
-                            return Err(());
+                            crate::info!(
+                                "mandataire : « {nom} » introuvable (DNS du tunnel : {})",
+                                decrire_reponse(&tampon[..n])
+                            );
+                            self.etat = Etat::Fini;
+                            let _ = self.flux.write_all(&REFUS_HOTE);
+                            let _ = self.flux.shutdown(std::net::Shutdown::Both);
+                            return Ok(true);
                         }
                     }
-                } else if maintenant.saturating_sub(envoye_le) > 2_000 {
-                    if essais >= 3 {
+                }
+                if maintenant.saturating_sub(envoye_le) > 1_500 {
+                    if essais >= 4 {
                         crate::info!("mandataire : le DNS du tunnel n'a pas répondu pour « {nom} »");
-                        let _ = self.flux.write_all(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+                        let _ = self.flux.write_all(&REFUS_HOTE);
                         return Err(());
                     }
                     let Some(serveur) = serveur_dns else { return Err(()) };
-                    let requete = requete_dns(id, &nom);
                     let endpoint = IpEndpoint::new(ip_smoltcp(serveur), 53);
-                    let handle = socket;
-                    let socket = sockets.get_mut::<udp::Socket>(handle);
-                    let _ = socket.send_slice(&requete, udp::UdpMetadata::from(endpoint));
-                    self.etat = Etat::Resolution {
-                        socket: handle,
-                        id,
-                        envoye_le: maintenant,
-                        essais: essais + 1,
-                        nom,
-                    };
+                    let _ = sockets
+                        .get_mut::<udp::Socket>(socket)
+                        .send_slice(&requete_dns(id, &nom), udp::UdpMetadata::from(endpoint));
+                    self.etat = Etat::Resolution { socket, port: port_udp, id, envoye_le: maintenant, essais: essais + 1, nom };
+                    return Ok(true);
                 }
+                Ok(false)
             }
-            Etat::Connexion(handle) => {
-                let socket = sockets.get_mut::<tcp::Socket>(handle);
-                let etat = socket.state();
-                if etat != tcp::State::SynSent || maintenant % 4000 < 4 {
-                    crate::info!("mandataire : TCP {etat:?}");
-                }
-                if etat == tcp::State::Established {
-                    if self.flux.write_all(&[0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]).is_err() {
-                        return Err(());
+            Etat::Connexion { socket: handle, port, debut } => {
+                let etat = sockets.get_mut::<tcp::Socket>(handle).state();
+                match etat {
+                    tcp::State::Established => {
+                        self.flux.write_all(&ACCORD).map_err(|_| ())?;
+                        self.etat = Etat::Relais { socket: handle, port, fin_envoyee: false };
+                        Ok(true)
                     }
-                    self.etat = Etat::Relais(handle);
-                } else if socket.state() == tcp::State::Closed {
-                    let _ = self.flux.write_all(&[0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
-                    return Err(());
-                }
-            }
-            Etat::Relais(handle) => {
-                let mut recu = [0u8; 8192];
-                if !self.lire()? {
-                    // Rien de nouveau côté navigateur : on laisse la place aux autres clients.
-                }
-                let a_envoyer = std::mem::take(&mut self.tampon);
-                let socket = sockets.get_mut::<tcp::Socket>(handle);
-                if !a_envoyer.is_empty() && socket.may_send() {
-                    // `send_slice` en prend ce qu'il peut : le reste repartira au tour suivant.
-                    // Jeter le reliquat tronquait les requêtes (défaut constaté le 2026-11-28).
-                    match socket.send_slice(&a_envoyer) {
-                        Ok(n) if n < a_envoyer.len() => self.tampon.extend_from_slice(&a_envoyer[n..]),
-                        Err(_) => self.tampon.extend_from_slice(&a_envoyer),
-                        _ => {}
+                    tcp::State::Closed => {
+                        crate::info!("mandataire : « {} » a refusé la connexion", self.nom);
+                        let _ = self.flux.write_all(&REFUS_CONNEXION);
+                        Err(())
                     }
-                }
-                if socket.may_recv() {
-                    if let Ok(n) = socket.recv_slice(&mut recu) {
-                        if n > 0 && self.flux.write_all(&recu[..n]).is_err() {
+                    _ if maintenant.saturating_sub(debut) > SYN_MAX_MS => {
+                        crate::info!("mandataire : « {} » ne répond pas (20 s sans poignée de main)", self.nom);
+                        let _ = self.flux.write_all(&REFUS_HOTE);
+                        Err(())
+                    }
+                    _ => {
+                        // Le navigateur a pu abandonner pendant l'attente.
+                        if let Lecture::Fin = self.lire()? {
                             return Err(());
                         }
+                        Ok(false)
                     }
                 }
-                if socket.state() == tcp::State::Closed {
-                    return Err(());
+            }
+            Etat::Relais { socket: handle, port, fin_envoyee } => self.relayer(sockets, commun, handle, port, fin_envoyee, maintenant),
+        }
+    }
+
+    /// Le relais, dans les deux sens, avec retenue : on ne prend au tunnel que ce que le
+    /// navigateur peut absorber, et inversement (sinon des octets se perdaient).
+    fn relayer(
+        &mut self,
+        sockets: &mut SocketSet<'_>,
+        commun: &mut Commun,
+        handle: SocketHandle,
+        port: u16,
+        fin_envoyee: bool,
+        maintenant: u64,
+    ) -> Result<bool, ()> {
+        let mut actif = false;
+
+        // Navigateur → tunnel.
+        if !self.navigateur_fini && self.tampon.len() < RETENUE {
+            match self.lire()? {
+                Lecture::Lu => actif = true,
+                Lecture::Fin => {
+                    self.navigateur_fini = true;
+                    actif = true;
+                }
+                Lecture::Rien => {}
+            }
+        }
+        let socket = sockets.get_mut::<tcp::Socket>(handle);
+        if !self.tampon.is_empty() && socket.can_send() {
+            if let Ok(n) = socket.send_slice(&self.tampon) {
+                if n > 0 {
+                    self.tampon.drain(..n);
+                    actif = true;
                 }
             }
         }
-        Ok(())
+        let mut fin_envoyee = fin_envoyee;
+        if self.navigateur_fini && self.tampon.is_empty() && !fin_envoyee {
+            socket.close();
+            fin_envoyee = true;
+        }
+
+        // Tunnel → navigateur.
+        loop {
+            if !self.vers_navigateur.is_empty() {
+                match self.flux.write(&self.vers_navigateur) {
+                    Ok(0) => return Err(()),
+                    Ok(n) => {
+                        self.vers_navigateur.drain(..n);
+                        actif = true;
+                    }
+                    Err(e) if e.kind() == ErrorKind::WouldBlock => break,
+                    Err(_) => return Err(()),
+                }
+                if !self.vers_navigateur.is_empty() {
+                    break;
+                }
+            }
+            if !socket.can_recv() {
+                break;
+            }
+            let mut recu = [0u8; 65536];
+            match socket.recv_slice(&mut recu) {
+                Ok(n) if n > 0 => {
+                    self.vers_navigateur.extend_from_slice(&recu[..n]);
+                    actif = true;
+                }
+                _ => break,
+            }
+        }
+
+        // Le serveur a tout envoyé et le navigateur a tout pris : fin propre.
+        let serveur_fini = !socket.may_recv() && !matches!(socket.state(), tcp::State::SynSent | tcp::State::SynReceived);
+        if serveur_fini && self.vers_navigateur.is_empty() {
+            self.etat = Etat::Fini;
+            commun.fermer_tcp(sockets, handle, port, maintenant, false);
+            let _ = self.flux.shutdown(std::net::Shutdown::Both);
+            return Ok(true);
+        }
+        self.etat = Etat::Relais { socket: handle, port, fin_envoyee };
+        Ok(actif)
     }
 
-    /// Lit ce que le navigateur a envoyé dans `tampon`. Rend `true` s'il y a de la lecture.
-    fn lire(&mut self) -> Result<bool, ()> {
-        let mut recu = [0u8; 8192];
+    /// Lit ce que le navigateur a envoyé dans `tampon`.
+    fn lire(&mut self) -> Result<Lecture, ()> {
+        let mut recu = [0u8; 65536];
         match self.flux.read(&mut recu) {
-            Ok(0) => Err(()),
+            Ok(0) => Ok(Lecture::Fin),
             Ok(n) => {
                 self.tampon.extend_from_slice(&recu[..n]);
-                Ok(true)
+                Ok(Lecture::Lu)
             }
-            Err(e) if e.kind() == ErrorKind::WouldBlock => Ok(false),
+            Err(e) if e.kind() == ErrorKind::WouldBlock => Ok(Lecture::Rien),
             Err(_) => Err(()),
         }
     }
 
-    fn connecter(&mut self, sockets: &mut SocketSet<'_>, contexte: &mut smoltcp::iface::Context) -> Result<(), ()> {
+    fn connecter(
+        &mut self,
+        sockets: &mut SocketSet<'_>,
+        commun: &mut Commun,
+        contexte: &mut smoltcp::iface::Context,
+        maintenant: u64,
+    ) -> Result<(), ()> {
         let Some((ip, port)) = self.hote else { return Err(()) };
-        let rx = tcp::SocketBuffer::new(vec![0u8; 32768]);
-        let tx = tcp::SocketBuffer::new(vec![0u8; 32768]);
+        let Some(port_local) = commun.ports.prendre() else {
+            let _ = self.flux.write_all(&REFUS_CONNEXION);
+            return Err(());
+        };
+        let rx = tcp::SocketBuffer::new(vec![0u8; 256 * 1024]);
+        let tx = tcp::SocketBuffer::new(vec![0u8; 64 * 1024]);
         let mut socket = tcp::Socket::new(rx, tx);
         socket.set_nagle_enabled(false);
         let endpoint = IpEndpoint::new(ip_smoltcp(ip), port);
         let handle = sockets.add(socket);
-        let socket = sockets.get_mut::<tcp::Socket>(handle);
-        if socket.connect(contexte, endpoint, 40000u16).is_err() {
-            let _ = self.flux.write_all(&[0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+        if sockets.get_mut::<tcp::Socket>(handle).connect(contexte, endpoint, port_local).is_err() {
+            sockets.remove(handle);
+            commun.ports.rendre(port_local);
+            crate::info!("mandataire : connexion impossible vers « {} » ({ip})", self.nom);
+            let _ = self.flux.write_all(&REFUS_CONNEXION);
             return Err(());
         }
-        self.etat = Etat::Connexion(handle);
+        self.etat = Etat::Connexion { socket: handle, port: port_local, debut: maintenant };
         Ok(())
     }
 }

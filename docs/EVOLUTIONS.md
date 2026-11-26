@@ -1576,6 +1576,23 @@ cas), et `outils/eprouver-tunnel.mjs` sur le vrai binaire avec une étape de plu
 configuration importée confirme la chaîne : `tunnel.json` (303 octets) **sans** clé privée,
 `tunnel.cle` (262 octets) chiffrée, et l'interface affiche le résumé.
 
+**0.4.93 (2026-11-26) — le mandataire tient la charge : Google, YouTube, Amazon, GitHub s'ouvrent.**
+Clément : « beaucoup de sites ne sont pas atteignables, comme Google » (tunnel Nord en OpenVPN). Le
+journal montrait des milliers de `TCP SynSent` et des « le DNS du tunnel n'a pas répondu ». Trois
+défauts dans `src/mandataire.rs` : (1) **toutes les connexions TCP partaient du port local 40000** :
+deux connexions vers le même serveur avaient la même identité et une seule aboutissait ; (2) les
+sockets DNS d'un même tour de boucle prenaient **le même port et le même identifiant**, et aucun
+socket n'était jamais retiré : les réponses tombaient chez un autre client ou chez un socket mort ;
+(3) le relais jetait des octets quand le navigateur était lent (`write_all` sans retenue) et ne
+fermait jamais une connexion finie. Correctif : ports locaux distribués (`Ports`, 49152–65535, rendus
+à la fermeture), identifiants DNS à la suite, une réponse d'un autre identifiant ignorée au lieu
+d'échouer, cache DNS d'une minute, relais à retenue dans les deux sens, fermeture propre (FIN, puis
+retrait des sockets ; RST après 10 s), abandon après 20 s sans poignée de main, et boucle qui
+n'attend plus quand des octets circulent. Banc nouveau `outils/eprouver-mandataire-sites.mjs` (copie
+de la configuration active, Trame caché, 45 requêtes HTTPS **en même temps** sur 15 sites, puis
+30 Mo) : version 0.4.92 installée **14/45** (exactement une par site), 0.4.93 **90/90** en deux tours
+et **30 000 000/30 000 000 octets à 66 Mbit/s**. `cargo test` 260/260.
+
 ## 11. L'état aujourd'hui
 
 ```
