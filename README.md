@@ -249,6 +249,17 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.74, publiée et installée le 2026-11-27.** Après la 0.4.73, la vidéo en plein écran n'était
+> plus plantée mais restait **« beuguée »** — l'affichage plein écran du lecteur dans une fenêtre
+> normale — et la fenêtre **sautait**. Cause : le moteur garde son propre état de plein écran, et
+> Trame en sortait pour montrer le nouvel onglet **sans le lui dire** ; les deux états divergeaient.
+> Trois corrections : un lien reçu de Windows s'ouvre **en arrière-plan** quand une page est en plein
+> écran (elle le garde), Trame **prévient la page** quand il en sort vraiment (et avant de changer
+> d'onglet, car une page en arrière-plan n'a plus le droit d'en sortir elle-même), et un **garde-fou
+> d'1,5 s** empêche de rentrer dans le plein écran qu'on vient de quitter. Preuves : `cargo test`
+> **227/227**, `tester-ui` **105/105**, `outils/eprouver-plein-ecran-telechargement.mjs` (plein écran
+> « écran », celui de Clément).
+>
 > **0.4.73, publiée et installée le 2026-11-27.** Un lien de **téléchargement** (fichier `.exe` sur
 > Discord) ouvert par Trame laissait un onglet **noir** : la navigation *est* le téléchargement, donc
 > aucune page n'arrivait jamais — et l'onglet restauré au démarrage **retéléchargeait** le fichier à
@@ -383,7 +394,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.73-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.74-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

@@ -27,6 +27,8 @@ façon dont un site demande une fenêtre. Le banc les clique pour de vrai (CDP) 
 
 <a id="lien-fichier" href="about:blank">5. Lien vers un FICHIER (téléchargement) — la page doit rester</a>
 
+<button id="plein-ecran">6. Passer cette page en plein écran (comme une vidéo YouTube)</button>
+
 <script>
   // Le fichier est servi par le banc (`outils/eprouver-telechargement-onglet.mjs`), qui passe son
   // adresse en paramètre : la page de mesure reste locale et ne connaît aucun port.
@@ -58,6 +60,17 @@ façon dont un site demande une fenêtre. Le banc les clique pour de vrai (CDP) 
   document.getElementById("popup-repli").onclick = () => {
     const w = window.open("https://example.com/?fenetre-puis-repli");
     if (!w) location.href = "https://example.com/?fenetre-puis-repli";
+  };
+
+  // Cas 6 : le plein écran d'une page (ce que fait un lecteur vidéo). Sert à vérifier qu'un lien
+  // reçu de Windows ne casse pas une vidéo en plein écran.
+  document.getElementById("plein-ecran").onclick = () => {
+    const el = document.documentElement;
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else if (el.requestFullscreen) {
+      el.requestFullscreen();
+    }
   };
 </script>
 </body>

@@ -1486,6 +1486,27 @@ arrière** et la page reste. Preuves : `cargo test` **227/227**, `tester-ui` **1
 le fichier de **16 Mo arrive entier**, la **session écrite ne le garde pas** (plus de
 re-téléchargement), et le clic sur un lien de fichier **depuis une page** laisse la page en place.
 
+**0.4.74 — le plein écran d'une vidéo ne casse plus.** « Cette fois ça ne plante plus, mais la vidéo
+reste beuguée et la fenêtre saute ; si je double-clique ça la remet dans la fenêtre normale, et il faut
+redoubler-cliquer pour avoir un plein écran correct » (Clément, 27/11, capture d'un direct avec son
+chat). **Le journal du profil réel** montre la chaîne : `onglet 418 : plein ecran (ecran)` →
+`lien externe : …Trame-0.4.39-setup.exe` → `onglet 419 reveille` (le lien prend l'écran) →
+`fermeture de l'onglet 419 : on active 418`. **Cause** : le moteur garde SON état de plein écran
+(`ContainsFullScreenElement`) ; Trame sortait du plein écran (pour montrer l'onglet du lien) **sans le
+lui dire**. La page restait donc en affichage plein écran dans une fenêtre normale, et le moteur
+réclamait le plein écran que Trame venait de quitter — d'où la fenêtre qui saute. Trois corrections :
+(1) un **lien reçu de Windows s'ouvre en arrière-plan** quand une page est en plein écran
+(`ouvrir_onglet_mode(..., premier_plan = false)`), donc la vidéo ne bouge pas et le fichier arrive
+quand même ; (2) quand Trame sort **vraiment** du plein écran, il **prévient la page**
+(`document.exitFullscreen()`), et il le fait **avant** de changer d'onglet — mesuré : une page passée
+en arrière-plan n'a plus le droit d'en sortir elle-même, `exitFullscreen` restait sans effet ;
+(3) un **garde-fou d'1,5 s** (`plein_ecran_quitte`) : un « plein écran » signalé juste après une
+sortie est le reflet de l'état d'avant, on n'y rentre pas. Preuves : `cargo test` **227/227**,
+`tester-ui` **105/105**, et le banc `outils/eprouver-plein-ecran-telechargement.mjs` en mode
+**« ecran »** (celui de Clément) : lien déposé pendant un plein écran → fichier de 8 Mo **entier**, page
+**toujours en plein écran**, **aucun onglet de trop**, onglet affiché inchangé ; puis un vrai
+changement d'onglet → la page **sort** du plein écran (états égaux), sans rentrée parasite.
+
 ## 11. L'état aujourd'hui
 
 ```

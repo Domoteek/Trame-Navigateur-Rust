@@ -176,6 +176,11 @@ pub struct App {
     /// Onglet dont une video occupe toute la fenetre (rail et barre caches), et si c'est Trame
     /// qui a passe la fenetre en plein ecran Windows (mode `ecran`) : il l'en sortira a la fin.
     plein_ecran: Option<TabId>,
+    /// Dernier onglet dont on a QUITTÉ le plein écran, et quand. Le moteur peut signaler « plein
+    /// écran » juste avant de traiter la sortie (il relit la valeur au lieu de l'événement), ce qui
+    /// faisait rentrer dans le plein écran qu'on venait de quitter — la fenêtre sautait (constat de
+    /// Clément, 2026-11-27).
+    plein_ecran_quitte: Option<(TabId, u64)>,
     fenetre_basculee: bool,
     profil: Profil,
     proxy: EventLoopProxy<UserEvent>,
@@ -713,6 +718,7 @@ impl App {
         let mut app = App {
             window,
             plein_ecran: None,
+    plein_ecran_quitte: None,
             fenetre_basculee: false,
             profil,
             proxy,
@@ -1593,6 +1599,14 @@ impl App {
     fn sur_plein_ecran(&mut self, onglet: TabId, actif: bool) {
         if actif {
             let mode = self.reglages.plein_ecran.clone();
+            // Sortie de plein écran en cours : un « plein écran » signalé maintenant est le refLET
+            // de l'état d'avant (voir `plein_ecran_quitte`). Ne pas y rentrer.
+            if let Some((quitte, quand)) = self.plein_ecran_quitte {
+                if quitte == onglet && maintenant_ms().saturating_sub(quand) < 1_500 {
+                    info!("onglet {onglet} : plein ecran ignore (on vient d'en sortir)");
+                    return;
+                }
+            }
             if mode == "page" || Some(onglet) != self.actif || self.plein_ecran.is_some() {
                 return;
             }
@@ -1613,9 +1627,16 @@ impl App {
 
     /// Rend l'interface (fin du plein ecran, ou l'onglet n'est plus celui affiche).
     fn quitter_plein_ecran(&mut self) {
-        if self.plein_ecran.take().is_none() {
-            return;
-        }
+        let Some(id) = self.plein_ecran.take() else { return };
+        self.plein_ecran_quitte = Some((id, maintenant_ms()));
+        // Le moteur garde SON état de plein écran (`ContainsFullScreenElement`). Sortir du plein
+        // écran sans le lui dire laissait la page en affichage plein écran dans une fenêtre
+        // normale : vidéo « beuguée », et fenêtre qui saute en réessayant d'y retourner (constat
+        // de Clément, 2026-11-27). On lui demande donc de sortir : les deux états restent égaux.
+        self.eval_sur(
+            Source::Onglet(id),
+            "document.fullscreenElement && document.exitFullscreen && document.exitFullscreen();",
+        );
         if std::mem::take(&mut self.fenetre_basculee) {
             self.window.set_fullscreen(None);
         }
@@ -1886,6 +1907,21 @@ impl App {
         parent: Option<TabId>,
         fil_impose: Option<ThreadId>,
     ) -> TabId {
+        self.ouvrir_onglet_mode(url, declencheur, parent, fil_impose, true)
+    }
+
+    /// Comme `ouvrir_onglet_dans`, mais `premier_plan = false` ouvre l'onglet **en arrière-plan** :
+    /// il se crée, se charge, mais ne prend pas la place de l'onglet affiché. C'est ce qu'il faut
+    /// pour un lien reçu de Windows quand une vidéo est en plein écran : prendre l'écran la faisait
+    /// sortir du plein écran (constat de Clément, 2026-11-27).
+    pub fn ouvrir_onglet_mode(
+        &mut self,
+        url: String,
+        declencheur: Declencheur,
+        parent: Option<TabId>,
+        fil_impose: Option<ThreadId>,
+        premier_plan: bool,
+    ) -> TabId {
         let url = self.adresse_propre(url);
         // Une adresse interne de Chromium ne mene nulle part ici : WebView2 la refuse et la
         // webview reste bloquee sur « ERR_INVALID_URL ». Mieux vaut un onglet neuf et une
@@ -1930,18 +1966,22 @@ impl App {
         }
         self.session.onglets.push(onglet);
         self.renommer_fils_auto();
-        self.actif = Some(id);
-        self.vue_trame = false;
-        if let Some(v) = &self.vue {
-            let _ = v.set_visible(false);
+        if premier_plan {
+            self.actif = Some(id);
+            self.vue_trame = false;
+            if let Some(v) = &self.vue {
+                let _ = v.set_visible(false);
+            }
         }
         self.reveiller(id);
-        // Un onglet ouvert depuis la Couture doit MASQUER les autres : sans cela, l'ancienne
-        // page reste visible sous la nouvelle, et l'onglet actif semble ne pas s'ouvrir.
-        let montrer = !self.vue_trame;
-        self.montrer_seul(id, montrer);
-        if let Some(w) = self.webviews.get(&id) {
-            let _ = w.focus();
+        if premier_plan {
+            // Un onglet ouvert depuis la Couture doit MASQUER les autres : sans cela, l'ancienne
+            // page reste visible sous la nouvelle, et l'onglet actif semble ne pas s'ouvrir.
+            let montrer = !self.vue_trame;
+            self.montrer_seul(id, montrer);
+            if let Some(w) = self.webviews.get(&id) {
+                let _ = w.focus();
+            }
         }
         self.marquer_modifie();
         self.pousser_etat();
@@ -2067,6 +2107,13 @@ impl App {
         if self.trouver(id).is_none() {
             return;
         }
+        // Quitter le plein écran AVANT de changer d'onglet : une page passée en arrière-plan n'a
+        // plus le droit de sortir du plein écran elle-même (son document n'est plus actif, mesure
+        // du 2026-11-27 : `exitFullscreen` restait sans effet), et les deux états divergeaient —
+        // vidéo « beuguée » et fenêtre qui saute. On lui laisse donc la sortie, puis on change.
+        if self.plein_ecran.is_some() && self.plein_ecran != Some(id) {
+            self.quitter_plein_ecran();
+        }
         // Activer l'onglet en mini-fenetre le ramene dans la fenetre principale.
         if self.onglet_flottant() == Some(id) {
             self.ramener_flottant();
@@ -2151,8 +2198,16 @@ impl App {
                 continue;
             }
             info!("lien externe : {}", urls::affichage_court(&adresse));
-            let id = self.ouvrir_onglet(adresse, Declencheur::NouvelOnglet, None);
-            self.activer(id);
+            // Une vidéo en plein écran : le lien s'ouvre EN ARRIÈRE-PLAN. Le prendre au premier
+            // plan faisait sortir la vidéo du plein écran, et l'écran restait en affichage plein
+            // écran dans une fenêtre normale (constat de Clément, 2026-11-27).
+            let premier_plan = self.plein_ecran.is_none();
+            let id = self.ouvrir_onglet_mode(adresse, Declencheur::NouvelOnglet, None, None, premier_plan);
+            if premier_plan {
+                self.activer(id);
+            } else {
+                info!("lien externe : ouvert en arrière-plan (plein écran en cours)");
+            }
         }
         self.window.set_minimized(false);
         self.window.set_focus();
