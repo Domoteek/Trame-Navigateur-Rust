@@ -1356,6 +1356,20 @@ SponsorBlock et voile orphelin gardés. Éprouvé : 220 + 100/100, vrai YouTube 
 (lecteur cliquable). **Pas éprouvé** : chez le fils, face à la détection réelle — rien ne garantit
 que YouTube ne repère jamais l'accéléré.
 
+**0.4.67 — déplacer les onglets dans les groupes.** « Je peux déplacer les groupes, il faudrait
+aussi pouvoir déplacer les onglets dans les groupes » (Clément, 26/11). Le rail ordonne ses onglets
+dans l'ordre de `session.onglets` : le déplacement se fait donc à la source, et l'ordre est écrit
+dans la session. `model::deplacer_onglet(session, id, avant, fil)` (fonction pure, 2 tests) reçoit
+`avant` = l'onglet devant lequel poser, `None` = fin de son fil, et `fil` pour changer de groupe en
+même temps. Côté interface, le glisser **déjà présent** des onglets gagne deux cibles : **moitié
+haute** d'un onglet = devant lui, **moitié basse** = juste après ; le trait de dépôt reprend la
+forme de celui des groupes. Le dépôt sur l'en-tête d'un groupe continue de tisser dans ce fil.
+Message `ongletDeplacer`, routé dans `traiter_ipc`. Preuves : `cargo test` **222/222**,
+`tester-ui` **101/101**, et `outils/eprouver-onglet-deplacer.mjs` sur le vrai binaire (rail
+`[1,2,3,4]` → `[4,1,2,3]`, **et l'ordre écrit dans `session.json` le garde** — le troisième maillon
+est celui qui compte au redémarrage). Limite : ce glisser est celui du navigateur, il n'existe pas
+au doigt ; le geste des groupes, lui, est au pointeur.
+
 ## 11. L'état aujourd'hui
 
 ```

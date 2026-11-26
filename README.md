@@ -249,6 +249,15 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.67, publiée et installée le 2026-11-26.** On pouvait ranger les **groupes**, pas les
+> **onglets** dans leur groupe. Désormais : glisser un onglet sur la **moitié haute** d'un autre le
+> pose devant lui, sur la **moitié basse** juste après, après le dernier à la fin ; sur l'onglet
+> d'un autre groupe, il change de groupe **et** de place. L'ordre du rail est celui de
+> `session.onglets`, donc il est écrit dans la session et relu au démarrage. Preuves :
+> `cargo test` **222/222**, `tester-ui` **101/101**, et `outils/eprouver-onglet-deplacer.mjs` sur le
+> vrai binaire (rail `[1,2,3,4]` → `[4,1,2,3]`, ordre écrit identique). Limite : ce glisser est
+> celui du navigateur, il n'existe pas au doigt (le geste des groupes, lui, est au pointeur).
+>
 > **0.4.57, publiée et installée le 2026-11-23.** Deuxième cause du même symptôme (« le clic droit,
 > si je clique plusieurs fois ça finit par faire ça ») : la **hauteur du menu mémorisée par la
 > poignée**. Un simple **clic** sur la poignée (sans glisser) enregistrait la hauteur du moment —
@@ -320,7 +329,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.57-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.67-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >
