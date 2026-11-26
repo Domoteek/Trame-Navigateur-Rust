@@ -1370,6 +1370,23 @@ Message `ongletDeplacer`, routé dans `traiter_ipc`. Preuves : `cargo test` **22
 est celui qui compte au redémarrage). Limite : ce glisser est celui du navigateur, il n'existe pas
 au doigt ; le geste des groupes, lui, est au pointeur.
 
+**0.4.68 — un onglet neuf va dans un groupe choisi.** « Quand on fait ajouter en haut, ça crée un
+groupe et un onglet » (Clément, 26/11). **Le pourquoi, écrit pour ne pas le redécouvrir** : un
+onglet neuf n'a aucun contenu ; or le tissage note un fil par provenance, domaine, proximité
+lexicale et fraîcheur — sans contenu, aucun fil ne marque de points, donc `weave::evaluer` ne rend
+aucun candidat au-dessus du seuil et `ouvrir_onglet` **crée un fil**. Le comportement était logique
+et n'était pas le bon. Trois corrections :
+(1) chaque groupe porte un **« + »** (`Nouvel onglet dans ce groupe : s'ajoute à la fin de « … », sans
+tissage`) qui envoie `{m:"nouvelOnglet", fil: <id>}` — le fil est **imposé** ;
+(2) le **« + » de la tête du rail**, **Ctrl+T** et la commande « Nouvel onglet » ouvrent dans le fil
+de l'onglet **affiché** (`App::fil_affiche`), donc plus de groupe improvisé ;
+(3) le tissage automatique reste pour les onglets ouverts **depuis une page** (lien, adresse), où
+provenance et domaine veulent dire quelque chose. « ＋ Nouveau fil » reste le geste explicite.
+Preuves : `cargo test` **222/222**, `tester-ui` **102/102** (+1 cas : le « + » du groupe demande son
+fil ; celui de la tête n'en force aucun), et `outils/eprouver-nouvel-onglet-groupe.mjs` sur le vrai
+binaire : `[{"fil":1,"onglets":1}]` → après le « + » du groupe `2` onglets, après celui de la tête
+`3`, **aucun groupe créé**, et la session écrite met les trois dans le fil 1.
+
 ## 11. L'état aujourd'hui
 
 ```

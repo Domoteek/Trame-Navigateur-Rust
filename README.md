@@ -249,6 +249,16 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.68, publiée et installée le 2026-11-26.** « Quand on fait ajouter en haut, ça crée un groupe
+> et un onglet » — exact, et voilà pourquoi : un onglet neuf n'a **aucun contenu**, donc le tissage
+> (provenance, domaine, proximité, fraîcheur) ne peut pas le placer et fabriquait un fil de plus.
+> Trois corrections : chaque groupe a son **« + »** (l'onglet naît **dans ce groupe**, fil imposé),
+> le **« + » de la tête du rail** et **Ctrl+T** ouvrent dans le fil de l'onglet **affiché**, et le
+> tissage reste pour les onglets ouverts **depuis une page**. « ＋ Nouveau fil » reste le geste
+> explicite pour créer un groupe. Preuves : `cargo test` **222/222**, `tester-ui` **102/102**,
+> `outils/eprouver-nouvel-onglet-groupe.mjs` sur le vrai binaire (aucun groupe créé, un onglet de
+> plus dans le bon fil, session écrite cohérente).
+>
 > **0.4.67, publiée et installée le 2026-11-26.** On pouvait ranger les **groupes**, pas les
 > **onglets** dans leur groupe. Désormais : glisser un onglet sur la **moitié haute** d'un autre le
 > pose devant lui, sur la **moitié basse** juste après, après le dernier à la fin ; sur l'onglet
@@ -329,7 +339,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.67-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.68-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >
