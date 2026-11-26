@@ -2405,6 +2405,55 @@ async function suite() {
     await b.close();
   });
 
+  await cas("rail : glisser un onglet entre deux onglets demande sa position", async () => {
+    const p = await page("chrome.html", { query: "?surface=rail" });
+    await p.setViewportSize({ width: 292, height: 700 });
+    const e = etatDeBase();
+    e.fils = [{ id: 1, nom: "Achats", onglets: [1, 2, 3] }];
+    e.onglets = [
+      onglet(1, 1, "Un", "https://a.fr/"),
+      onglet(2, 1, "Deux", "https://b.fr/"),
+      onglet(3, 1, "Trois", "https://c.fr/"),
+    ];
+    await pousser(p, e);
+
+    const glisser = async (source, cible, moitie) => {
+      const pt = await p.$eval(
+        `.onglet[data-onglet="${cible}"]`,
+        (n, m) => {
+          const r = n.getBoundingClientRect();
+          return { x: Math.round(r.left + 20), y: Math.round(m === "haut" ? r.top + 4 : r.bottom - 4) };
+        },
+        moitie
+      );
+      await vider(p);
+      await p.evaluate(
+        ({ source, cible, x, y }) => {
+          const dt = new DataTransfer();
+          const d = document.querySelector(`.onglet[data-onglet="${source}"]`);
+          const c = document.querySelector(`.onglet[data-onglet="${cible}"]`);
+          d.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: dt }));
+          c.dispatchEvent(new DragEvent("dragover", { bubbles: true, dataTransfer: dt, clientX: x, clientY: y }));
+          c.dispatchEvent(new DragEvent("drop", { bubbles: true, dataTransfer: dt, clientX: x, clientY: y }));
+        },
+        { source, cible, x: pt.x, y: pt.y }
+      );
+      return (await messages(p)).find((m) => m.m === "ongletDeplacer");
+    };
+
+    const dessus = await glisser(3, 1, "haut");
+    verifier(
+      dessus && dessus.id === 3 && dessus.avant === 1 && dessus.fil === 1,
+      `moitié haute : devant l'onglet visé (${JSON.stringify(dessus)})`
+    );
+    const dessous = await glisser(3, 1, "bas");
+    verifier(
+      dessous && dessous.id === 3 && dessous.avant === 2 && dessous.fil === 1,
+      `moitié basse : juste après lui (${JSON.stringify(dessous)})`
+    );
+    await p.close();
+  });
+
   await cas("accueil : l'entrée Navigation privée demande la navigation privée", async () => {
     // Une touche qu'on ne connait pas n'existe pas : l'entree est sur la page ou l'on commence.
     const p = await page("newtab.html");

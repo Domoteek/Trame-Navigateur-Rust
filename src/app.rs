@@ -3833,6 +3833,22 @@ impl App {
                 };
                 self.ouvrir_onglet(url, Declencheur::NouvelOnglet, None);
             }
+            // Deplacer un onglet dans son fil (ou dans un autre) : c'est l'ordre de
+            // `session.onglets` qui ordonne le rail, et l'hote est seul juge. Meme geste que le
+            // rangement des groupes, un seul message au relachement.
+            "ongletDeplacer" => {
+                let id = v["id"].as_u64().map(|n| n as TabId);
+                let avant = v["avant"].as_u64().map(|n| n as TabId).filter(|n| *n != 0);
+                let fil = v["fil"].as_u64().map(|n| n as ThreadId);
+                if let Some(id) = id {
+                    if crate::model::deplacer_onglet(&mut self.session, id, avant, fil) {
+                        info!("onglet {id} deplace (devant {avant:?}, fil {fil:?})");
+                        self.marquer_modifie();
+                        self.nettoyer_fils();
+                        self.pousser_etat();
+                    }
+                }
+            }
             "fermer" => {
                 if let Some(id) = v["id"].as_u64() {
                     self.fermer_onglet(id as TabId);

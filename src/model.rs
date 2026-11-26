@@ -1086,6 +1086,44 @@ pub struct Motif {
     pub chemin: String,
 }
 
+/// Deplace un onglet dans `session.onglets` : c'est CET ordre qui ordonne les onglets dans le
+/// rail (chacun filtre par fil), donc le deplacer suffit a le deplacer a l'ecran, et l'ordre
+/// survit au redemarrage.
+///
+/// `avant` : l'onglet devant lequel le poser ; `None` ou un identifiant inconnu = a la fin de son
+/// fil. `fil` : le fil d'arrivee (`None` = on garde le sien). Rend vrai si quelque chose a bouge.
+pub fn deplacer_onglet(
+    session: &mut Session,
+    id: TabId,
+    avant: Option<TabId>,
+    fil: Option<ThreadId>,
+) -> bool {
+    let Some(position) = session.onglets.iter().position(|o| o.id == id) else {
+        return false;
+    };
+    if avant == Some(id) {
+        return false; // deposer devant soi-meme ne fait rien
+    }
+    let mut onglet = session.onglets.remove(position);
+    if let Some(nouveau) = fil {
+        onglet.fil = nouveau;
+    }
+    let index = match avant.and_then(|a| session.onglets.iter().position(|o| o.id == a)) {
+        Some(i) => i,
+        // Pas de cible : a la fin de son fil. Un fil vide n'a pas de place : on retombe sur la
+        // fin de la liste.
+        None => session
+            .onglets
+            .iter()
+            .rposition(|o| o.fil == onglet.fil)
+            .map(|i| i + 1)
+            .unwrap_or(session.onglets.len()),
+    };
+    let index = index.min(session.onglets.len());
+    session.onglets.insert(index, onglet);
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1173,6 +1211,44 @@ mod tests {
         assert_eq!(r.sauvegarde_garder_bornees(), 1, "garder zero effacerait tout");
         r.sauvegarde_garder = 999;
         assert_eq!(r.sauvegarde_garder_bornees(), 50);
+    }
+
+    /// Deplacer un onglet DANS son fil change son ordre dans le rail, et rien d'autre.
+    #[test]
+    fn un_onglet_se_deplace_dans_son_fil() {
+        let mut s = Session::default();
+        for (id, fil) in [(1, 1), (2, 1), (3, 1)] {
+            let mut o = Onglet::neuf(id, "https://a.fr/".into(), fil, Declencheur::Saisie, 1_000);
+            o.fil = fil;
+            s.onglets.push(o);
+        }
+        // Le troisieme passe devant le premier.
+        assert!(deplacer_onglet(&mut s, 3, Some(1), None));
+        let ordre: Vec<TabId> = s.onglets.iter().map(|o| o.id).collect();
+        assert_eq!(ordre, vec![3, 1, 2]);
+        // Le premier va a la fin du fil (aucune cible).
+        assert!(deplacer_onglet(&mut s, 3, None, None));
+        let ordre: Vec<TabId> = s.onglets.iter().map(|o| o.id).collect();
+        assert_eq!(ordre, vec![1, 2, 3]);
+        // Deposer devant soi-meme ne fait rien.
+        assert!(!deplacer_onglet(&mut s, 2, Some(2), None));
+        // Un onglet inconnu ne fait rien non plus.
+        assert!(!deplacer_onglet(&mut s, 99, Some(1), None));
+    }
+
+    /// Et le deplacer dans un AUTRE fil le change de groupe a la position demandee.
+    #[test]
+    fn un_onglet_change_de_fil_a_la_position_demandee() {
+        let mut s = Session::default();
+        for (id, fil) in [(1, 1), (2, 1), (3, 2), (4, 2)] {
+            let mut o = Onglet::neuf(id, "https://a.fr/".into(), fil, Declencheur::Saisie, 1_000);
+            o.fil = fil;
+            s.onglets.push(o);
+        }
+        // Le 2 (fil 1) rejoint le fil 2, devant le 4.
+        assert!(deplacer_onglet(&mut s, 2, Some(4), Some(2)));
+        let ordre: Vec<(TabId, ThreadId)> = s.onglets.iter().map(|o| (o.id, o.fil)).collect();
+        assert_eq!(ordre, vec![(1, 1), (3, 2), (2, 2), (4, 2)]);
     }
 
     #[test]

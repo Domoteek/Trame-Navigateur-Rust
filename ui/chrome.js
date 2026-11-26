@@ -344,6 +344,7 @@ function rendreSuggestion(s) {
 function ligneOnglet(o) {
   const d = elem("div", "onglet" + (o.actif ? " actif" : "") + (o.eveille ? "" : " endormi"));
   d.dataset.palier = o.palier;
+  d.dataset.onglet = o.id;
   d.draggable = true;
   d.title = `${o.titre || o.urlCourte}\n${o.domaine || "page interne"}\n${o.eveille ? "éveillé" : "en veille — un clic le réveille"}\nvitalité ${arrondi(o.vitalite)} (${o.palier})`;
 
@@ -410,6 +411,46 @@ function ligneOnglet(o) {
   d.addEventListener("dragstart", (e) => {
     e.dataTransfer.setData("text/plain", String(o.id));
     e.dataTransfer.effectAllowed = "move";
+    const conteneur = document.getElementById("fils");
+    if (conteneur) conteneur.classList.add("rangement");
+  });
+  d.addEventListener("dragend", () => {
+    const conteneur = document.getElementById("fils");
+    if (conteneur) conteneur.classList.remove("rangement");
+    for (const n of document.querySelectorAll("#fils .onglet.avant, #fils .onglet.apres")) {
+      n.classList.remove("avant", "apres");
+    }
+    for (const n of document.querySelectorAll("#fils .survol-tissage")) {
+      n.classList.remove("survol-tissage");
+    }
+  });
+  /* Glisser un onglet ENTRE deux onglets : c'est la POSITION qu'on demande, pas le fil.
+     Sans cela, un onglet ne pouvait que changer de groupe (depot sur l'en-tete), jamais
+     s'ordonner a l'interieur d'un groupe (demande de Clement, 2026-11-26). Moitie haute d'un
+     onglet : devant lui. Moitie basse : devant le suivant (donc juste apres lui) ; apres le
+     dernier, « a la fin » (`avant: 0`). Le fil de l'onglet vise est envoye aussi, pour que le
+     depot sur un onglet d'un AUTRE groupe change de groupe ET de place, d'un seul geste. */
+  d.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    e.stopPropagation(); // le fil en dessous ne doit pas prendre ce depot
+    const r = d.getBoundingClientRect();
+    const dessus = e.clientY < r.top + r.height / 2;
+    d.classList.toggle("avant", dessus);
+    d.classList.toggle("apres", !dessus);
+  });
+  d.addEventListener("dragleave", () => d.classList.remove("avant", "apres"));
+  d.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    d.classList.remove("avant", "apres");
+    const source = Number(e.dataTransfer.getData("text/plain"));
+    if (!source || source === o.id) return;
+    const r = d.getBoundingClientRect();
+    const dessus = e.clientY < r.top + r.height / 2;
+    const liste = d.parentElement ? Array.from(d.parentElement.querySelectorAll(".onglet")) : [];
+    const suivant = liste[liste.indexOf(d) + 1];
+    const avant = dessus ? o.id : suivant ? Number(suivant.dataset.onglet) : 0;
+    ipc({ m: "ongletDeplacer", id: source, avant, fil: o.fil });
   });
   return d;
 }

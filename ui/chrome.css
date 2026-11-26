@@ -224,6 +224,23 @@ input {
 }
 .fil.avant::before { top: 0; }
 .fil.apres::after { bottom: 0; }
+/* Glisser un onglet entre deux onglets : un trait dit ou il tombera (demande de Clement,
+   2026-11-26). Meme forme que celui des groupes, pour que le geste se lise pareil. */
+.onglet.avant::before,
+.onglet.apres::after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  right: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--vif);
+  box-shadow: 0 0 8px rgba(94, 234, 212, 0.7);
+  pointer-events: none;
+  z-index: 2;
+}
+.onglet.avant::before { top: -1px; }
+.onglet.apres::after { bottom: -1px; }
 .rail .rangement .fil-tete { cursor: grabbing; }
 .fil-tete {
   display: flex;
