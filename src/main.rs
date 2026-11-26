@@ -26,6 +26,7 @@ mod mandataire;
 mod model;
 mod ombre;
 mod moteur_ext;
+mod ovpn;
 mod probe;
 mod profile;
 mod protocol;
