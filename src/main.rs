@@ -26,6 +26,7 @@ mod mandataire;
 mod model;
 mod ombre;
 mod moteur_ext;
+mod moteur;
 mod ovpn;
 mod probe;
 mod profile;
@@ -89,9 +90,13 @@ fn main() {
     // Sonde de mise au point du tunnel (jamais en usage normal) : `TRAME_TUNNEL_ESSAI=1` monte le
     // tunnel configure, tente la poignee de main avec le pair, ecrit le resultat et sort. Elle
     // existe pour pouvoir eprouver le moteur sans toucher au profil de tous les jours.
+    // `=2` eprouve la chaine entiere (pile, DNS, SOCKS5) ; `=3` eprouve un profil OpenVPN passe
+    // par `TRAME_OVPN_PROFIL` (et `TRAME_OVPN_USER` / `TRAME_OVPN_PASS` s'il en faut).
     if let Ok(mode) = std::env::var("TRAME_TUNNEL_ESSAI") {
         let resultat = if mode == "2" {
             mandataire::essai(profil.racine())
+        } else if mode == "3" {
+            ovpn::essai()
         } else {
             vpn::essai(profil.racine())
         };

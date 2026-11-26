@@ -21,9 +21,8 @@ use smoltcp::iface::{Config as ConfIface, Interface, SocketHandle, SocketSet};
 use smoltcp::phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken};
 use smoltcp::socket::{tcp, udp};
 use smoltcp::time::Instant as InstantSmol;
-use smoltcp::wire::{HardwareAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address, Ipv6Address};
+use smoltcp::wire::{HardwareAddress, IpAddress, IpCidr, IpEndpoint};
 
-use crate::vpn::Session;
 
 /// Le mandataire tourne tant que ce jeton n'est pas levé.
 pub struct Mandataire {
@@ -48,11 +47,29 @@ impl Drop for Mandataire {
     }
 }
 
-/// Démarre le mandataire : poignée de main du tunnel, pile, écoute SOCKS5.
+/// Démarre le mandataire avec une configuration **WireGuard** — le point d'entrée historique, qui
+/// reste tant que l'application ne choisit pas elle-même son moteur (OpenVPN passera par
+/// [`demarrer_tunnel`] avec sa propre préparation).
+pub fn demarrer(config: crate::tunnel::Config) -> Result<Mandataire, String> {
+    demarrer_tunnel(move || {
+        let session = crate::vpn::connecter(&config, std::time::Duration::from_secs(10))?;
+        let parametres = crate::moteur::Parametres::depuis_wireguard(&config);
+        Ok((Box::new(session) as Box<dyn crate::moteur::Tunnel>, parametres))
+    })
+}
+
+/// Démarre le mandataire : ouverture du tunnel (par `preparer`), pile, écoute SOCKS5.
 ///
 /// Rend la main **une fois le tunnel établi et l'écoute ouverte** : Trame peut alors donner son
 /// adresse à WebView2. Une erreur ici veut dire « pas de tunnel », et Trame refuse de naviguer.
-pub fn demarrer(config: crate::tunnel::Config) -> Result<Mandataire, String> {
+///
+/// `preparer` est appelé **dans le fil du mandataire** : il peut bloquer (poignée de main
+/// WireGuard, négociation TLS d'OpenVPN) sans figer la fenêtre. Il rend le moteur et ce qu'il faut
+/// à la pile — l'adresse dans le tunnel, le DNS du fournisseur, le MTU.
+pub fn demarrer_tunnel<F>(preparer: F) -> Result<Mandataire, String>
+where
+    F: FnOnce() -> Result<(Box<dyn crate::moteur::Tunnel>, crate::moteur::Parametres), String> + Send + 'static,
+{
     let ecoute = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("écoute SOCKS5 impossible : {e}"))?;
     let port = ecoute.local_addr().map_err(|e| e.to_string())?.port();
     ecoute.set_nonblocking(true).map_err(|e| e.to_string())?;
@@ -64,27 +81,27 @@ pub fn demarrer(config: crate::tunnel::Config) -> Result<Mandataire, String> {
     std::thread::Builder::new()
         .name("trame-mandataire".into())
         .spawn(move || {
-            // `connecter` essaie les adresses du nom l'une après l'autre et rend le détail de
-            // l'échec : c'est cette phrase que l'interface affichera quand rien ne monte.
-            let session = match crate::vpn::connecter(&config, std::time::Duration::from_secs(10)) {
-                Ok(s) => s,
+            // La préparation rend le détail de l'échec : c'est cette phrase que l'interface
+            // affichera quand rien ne monte (0.4.86).
+            let (tunnel, parametres) = match preparer() {
+                Ok(pret) => pret,
                 Err(e) => {
                     let _ = tx.send(Err(e));
                     return;
                 }
             };
-            crate::info!("mandataire : tunnel établi avec le pair {}", session.pair());
+            crate::info!("mandataire : tunnel établi avec {}", tunnel.etiquette());
             let _ = tx.send(Ok(()));
-            if let Err(e) = boucle(session, ecoute, &config, &jeton) {
+            if let Err(e) = boucle(tunnel, ecoute, parametres, &jeton) {
                 crate::alerte!("mandataire : {e}");
             }
         })
         .map_err(|e| format!("fil du mandataire impossible : {e}"))?;
 
-    match rx.recv_timeout(std::time::Duration::from_secs(30)) {
+    match rx.recv_timeout(std::time::Duration::from_secs(60)) {
         Ok(Ok(())) => Ok(Mandataire { port, arret }),
         Ok(Err(e)) => Err(e),
-        Err(_) => Err("le tunnel n'a pas répondu en 30 s".to_string()),
+        Err(_) => Err("le tunnel n'a pas répondu en 60 s".to_string()),
     }
 }
 
@@ -334,12 +351,12 @@ struct Client {
 }
 
 fn boucle(
-    mut session: Session,
+    mut tunnel: Box<dyn crate::moteur::Tunnel>,
     ecoute: TcpListener,
-    config: &crate::tunnel::Config,
+    parametres: crate::moteur::Parametres,
     arret: &AtomicBool,
 ) -> Result<(), String> {
-    let mtu = session.mtu().unwrap_or(1420);
+    let mtu = tunnel.mtu().or(parametres.mtu).unwrap_or(1420);
     let mut pile = Pile {
         entrants: VecDeque::new(),
         sortants: VecDeque::new(),
@@ -349,32 +366,38 @@ fn boucle(
     let mut conf = ConfIface::new(HardwareAddress::Ip);
     conf.random_seed = crate::log::maintenant_ms();
     let mut iface = Interface::new(conf, &mut pile, instant(0));
-    let v4 = config.adresses.iter().find_map(|a| a.split('/').next().and_then(|x| x.parse::<Ipv4Addr>().ok()));
-    let v6 = config.adresses.iter().find_map(|a| a.split('/').next().and_then(|x| x.parse::<Ipv6Addr>().ok()));
+    let v4 = parametres.adresses.iter().find_map(|(ip, prefixe)| match ip {
+        IpAddr::V4(a) => Some((*a, *prefixe)),
+        IpAddr::V6(_) => None,
+    });
+    let v6 = parametres.adresses.iter().find_map(|(ip, prefixe)| match ip {
+        IpAddr::V6(a) => Some((*a, *prefixe)),
+        IpAddr::V4(_) => None,
+    });
     iface.update_ip_addrs(|adresses| {
-        if let Some(ip) = v4 {
-            let _ = adresses.push(IpCidr::new(IpAddress::Ipv4(ip.into()), 32));
+        if let Some((ip, prefixe)) = v4 {
+            let _ = adresses.push(IpCidr::new(IpAddress::Ipv4(ip.into()), prefixe));
         }
-        if let Some(ip) = v6 {
-            let _ = adresses.push(IpCidr::new(IpAddress::Ipv6(ip.into()), 128));
+        if let Some((ip, prefixe)) = v6 {
+            let _ = adresses.push(IpCidr::new(IpAddress::Ipv6(ip.into()), prefixe));
         }
     });
-    // WireGuard achemine par `AllowedIPs` : une route par défaut vers le pair suffit.
-    if let Some(ip) = v4 {
+    // Les deux moteurs annoncent une route par défaut : c'est le pair qui achemine le reste.
+    if let Some((ip, _)) = v4 {
         let _ = iface.routes_mut().add_default_ipv4_route(ip.into());
     }
-    if let Some(ip) = v6 {
+    if let Some((ip, _)) = v6 {
         let _ = iface.routes_mut().add_default_ipv6_route(ip.into());
     }
 
     let mut sockets = SocketSet::new(Vec::new());
-    let dns: Option<IpAddr> = config.dns.first().and_then(|d| d.parse().ok());
+    let dns: Option<IpAddr> = parametres.dns;
 
     let mut clients: Vec<Client> = Vec::new();
     crate::info!(
         "mandataire : écoute SOCKS5 sur 127.0.0.1:{} (MTU {}, DNS {})",
         ecoute.local_addr().map(|a| a.port()).unwrap_or(0),
-        session.mtu().unwrap_or(1420),
+        mtu,
         dns.map(|d| d.to_string()).unwrap_or_else(|| "aucun".into())
     );
 
@@ -383,8 +406,8 @@ fn boucle(
         let temps = instant(maintenant);
 
         // 1. Le tunnel : ce qui arrive, ce qui part.
-        session.pomper()?;
-        while let Some(paquet) = session.prendre_paquet() {
+        tunnel.pomper()?;
+        while let Some(paquet) = tunnel.prendre_paquet() {
             pile.entrants.push_back(paquet);
         }
 
@@ -427,7 +450,7 @@ fn boucle(
         // 6. Ce que la pile et les clients ont produit part dans le tunnel.
         iface.poll(temps, &mut pile, &mut sockets);
         while let Some(paquet) = pile.sortants.pop_front() {
-            session.envoyer_paquet(&paquet)?;
+            tunnel.envoyer_paquet(&paquet)?;
         }
 
         std::thread::sleep(std::time::Duration::from_millis(3));

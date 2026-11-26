@@ -18,6 +18,7 @@
 
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -121,10 +122,7 @@ fn config_de_connexion(profil: &str, identifiants: Option<(String, String)>) -> 
 
 /// La file des paquets reçus du tunnel, remplie par le moteur (fil de Core) et vidée par la pile
 /// TCP/IP. C'est la seule chose partagée entre les deux.
-///
-/// Branchée au mandataire à l'étape suivante (celui-ci tire aujourd'hui ses paquets de
-/// [`crate::vpn::Session`], qui interroge son propre socket UDP).
-#[allow(dead_code)]
+#[derive(Clone)]
 pub struct Boite(Arc<Mutex<VecDeque<Vec<u8>>>>);
 
 impl Boite {
@@ -150,18 +148,238 @@ impl Default for Boite {
 }
 
 /// Une session OpenVPN ouverte : le moteur tourne sur son propre fil, les paquets passent par la
-/// boîte. Le MTU vient de ce que le serveur a poussé (`push`), sinon 1500.
-#[allow(dead_code)]
-pub struct SessionOuvrable {
-    pub moteur: Arc<Engine>,
-    pub boite: Boite,
-    pub mtu: Option<usize>,
-    pub resume: Resume,
+/// boîte. Le MTU et l'adresse viennent de ce que le serveur a poussé (`push`), pas d'un fichier.
+pub struct Session {
+    moteur: Arc<Engine>,
+    boite: Boite,
+    reglages: TunSettings,
+    resume: Resume,
+    /// Les derniers messages du moteur, gardés courts : c'est ce qu'on lit quand ça ne monte pas.
+    journal: Arc<Mutex<VecDeque<String>>>,
 }
 
-/// Attend qu'un tunnel soit monté, au plus `delai`.
-#[allow(dead_code)]
+/// Les événements du moteur pendant une vraie connexion : il pousse les paquets dans la boîte,
+/// signale le montage du tunnel, et garde les dernières lignes pour le diagnostic.
+struct Pont {
+    boite: Boite,
+    monte: Arc<Mutex<Option<Result<TunSettings, String>>>>,
+    journal: Arc<Mutex<VecDeque<String>>>,
+    arret: Arc<AtomicBool>,
+}
+
+impl Pont {
+    fn noter(&self, ligne: String) {
+        crate::info!("openvpn : {ligne}");
+        if let Ok(mut j) = self.journal.lock() {
+            if j.len() >= 40 {
+                j.pop_front();
+            }
+            j.push_back(ligne);
+        }
+    }
+}
+
+impl EngineEvents for Pont {
+    fn event(&self, event: CoreEvent) {
+        self.noter(format!("{} — {}", event.name, event.info));
+        // Le serveur a fermé, ou la session s'arrête d'elle-même : on le saura en attendant.
+        if event.name.to_ascii_uppercase().contains("DISCONNECT") {
+            self.arret.store(true, Ordering::Relaxed);
+        }
+    }
+    fn log(&self, ligne: &str) {
+        self.noter(ligne.to_string());
+    }
+    fn sign(&self, _demande: SignRequest) -> Result<String, String> {
+        Err("clé du client hors du profil : non géré par Trame".to_string())
+    }
+    fn tun_up(&self, reglages: Result<TunSettings, String>) {
+        if let Ok(mut emplacement) = self.monte.lock() {
+            *emplacement = Some(reglages);
+        }
+    }
+    fn packet(&self, paquet: &[u8]) -> bool {
+        self.boite.poser(paquet.to_vec());
+        true
+    }
+    fn tun_down(&self) {}
+}
+
+/// Attend qu'un tunnel soit monté, au plus cette durée.
 pub const DELAI_MONTAGE: Duration = Duration::from_secs(30);
+
+impl Session {
+    /// Ouvre une session OpenVPN : profil, identifiants éventuels, et **attente du montage**.
+    ///
+    /// Bloque jusqu'à ce que le serveur ait poussé l'adresse, les routes et le DNS (`tun_up`), ou
+    /// jusqu'au délai. C'est cette attente que le fil du mandataire absorbe — pas la fenêtre.
+    pub fn connecter(
+        profil: &str,
+        identifiants: Option<(String, String)>,
+        delai: Duration,
+    ) -> Result<Session, String> {
+        let resume = valider(profil)?;
+        let boite = Boite::nouvelle();
+        let monte = Arc::new(Mutex::new(None));
+        let journal = Arc::new(Mutex::new(VecDeque::new()));
+        let arret = Arc::new(AtomicBool::new(false));
+        let pont = Arc::new(Pont {
+            boite: boite.clone(),
+            monte: monte.clone(),
+            journal: journal.clone(),
+            arret: arret.clone(),
+        });
+        let moteur = Arc::new(Engine::new(pont).map_err(|e| format!("moteur OpenVPN indisponible : {e}"))?);
+        let (config, identifiants) = config_de_connexion(profil, identifiants);
+        moteur.eval(&config).map_err(|e| e.message)?;
+        if let Some(identifiants) = identifiants {
+            moteur
+                .provide_credentials(&identifiants)
+                .map_err(|e| format!("identifiants refusés : {}", e.message))?;
+        } else if !resume.autologin {
+            return Err("ce profil demande un utilisateur et un mot de passe".to_string());
+        }
+
+        // `connect` bloque jusqu'à la fin de la session : il vit sur son fil.
+        let pour_fil = moteur.clone();
+        std::thread::Builder::new()
+            .name("trame-openvpn".into())
+            .spawn(move || {
+                if let Err(e) = pour_fil.connect() {
+                    crate::alerte!("openvpn : session terminée ({})", e.message);
+                }
+            })
+            .map_err(|e| format!("fil OpenVPN impossible : {e}"))?;
+
+        // L'attente du montage : `tun_up` arrive du fil de Core.
+        let debut = std::time::Instant::now();
+        loop {
+            if let Ok(mut emplacement) = monte.lock() {
+                if let Some(resultat) = emplacement.take() {
+                    let reglages = resultat?;
+                    crate::info!(
+                        "openvpn : tunnel monté — {} {:?}, MTU {:?}, DNS {:?}",
+                        resume.resume(),
+                        reglages.addr4,
+                        reglages.mtu,
+                        reglages.dns
+                    );
+                    return Ok(Session {
+                        moteur,
+                        boite,
+                        reglages,
+                        resume,
+                        journal,
+                    });
+                }
+            }
+            if arret.load(Ordering::Relaxed) {
+                return Err(self::echec(&journal, "la session s'est arrêtée avant le montage"));
+            }
+            if debut.elapsed() >= delai {
+                return Err(self::echec(
+                    &journal,
+                    &format!("le tunnel n'a pas monté en {} s", delai.as_secs()),
+                ));
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// Ce qu'il faut à la pile : l'adresse poussée par le serveur, son DNS, son MTU.
+    pub fn parametres(&self) -> crate::moteur::Parametres {
+        let mut adresses = Vec::new();
+        if let Some((ip, prefixe)) = self.reglages.addr4 {
+            adresses.push((std::net::IpAddr::V4(ip), prefixe));
+        }
+        if let Some((ip, prefixe)) = self.reglages.addr6 {
+            adresses.push((std::net::IpAddr::V6(ip), prefixe));
+        }
+        crate::moteur::Parametres {
+            adresses,
+            dns: self.reglages.dns.first().map(|a| a.ip()),
+            mtu: self.reglages.mtu.map(|m| m as usize),
+        }
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        self.moteur.stop();
+    }
+}
+
+impl crate::moteur::Tunnel for Session {
+    fn etiquette(&self) -> String {
+        self.resume.resume()
+    }
+
+    fn mtu(&self) -> Option<usize> {
+        self.reglages.mtu.map(|m| m as usize)
+    }
+
+    /// Rien à faire : les paquets arrivent par le rappel `packet`, ils sont déjà dans la boîte.
+    fn pomper(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn prendre_paquet(&mut self) -> Option<Vec<u8>> {
+        self.boite.prendre()
+    }
+
+    fn envoyer_paquet(&mut self, paquet: &[u8]) -> Result<(), String> {
+        if self.moteur.send_packet(paquet) {
+            Ok(())
+        } else {
+            Err("le moteur OpenVPN n'accepte pas ce paquet (session terminée ?)".to_string())
+        }
+    }
+}
+
+/// Sonde de mise au point : ouvre une session OpenVPN avec un profil et des identifiants passés
+/// par l'environnement, et rend le détail de ce que le serveur a poussé.
+///
+/// Jamais appelée en usage normal : `main` ne la déclenche que sur `TRAME_TUNNEL_ESSAI=3`. Elle
+/// existe pour éprouver un vrai profil (`TRAME_OVPN_PROFIL`) sans toucher au profil de tous les
+/// jours ni au rangement des configurations.
+pub fn essai() -> Result<String, String> {
+    let chemin = std::env::var("TRAME_OVPN_PROFIL")
+        .map_err(|_| "TRAME_OVPN_PROFIL n'est pas posé (chemin du fichier .ovpn)".to_string())?;
+    let profil = std::fs::read_to_string(&chemin).map_err(|e| format!("lecture de {chemin} : {e}"))?;
+    let identifiants = match (std::env::var("TRAME_OVPN_USER"), std::env::var("TRAME_OVPN_PASS")) {
+        (Ok(u), Ok(p)) if !u.is_empty() && !p.is_empty() => Some((u, p)),
+        _ => None,
+    };
+    let session = Session::connecter(&profil, identifiants, DELAI_MONTAGE)?;
+    let p = session.parametres();
+    let etiquette = crate::moteur::Tunnel::etiquette(&session);
+    Ok(format!(
+        "openvpn : {etiquette} monté — adresse {} (préfixe {:?}), MTU {:?}, DNS {:?}, {} route(s)",
+        p.adresses
+            .iter()
+            .map(|(ip, _)| ip.to_string())
+            .collect::<Vec<_>>()
+            .join(" / "),
+        p.adresses.iter().map(|(_, x)| *x).collect::<Vec<_>>(),
+        p.mtu,
+        p.dns.map(|d| d.to_string()).unwrap_or_else(|| "aucun".into()),
+        session.reglages.routes4.len() + session.reglages.routes6.len()
+    ))
+}
+
+/// Une phrase d'échec qui emporte les dernières lignes du moteur : sans elles, « ça ne monte pas »
+/// ne dit rien.
+fn echec(journal: &Arc<Mutex<VecDeque<String>>>, quoi: &str) -> String {
+    let dernieres = journal
+        .lock()
+        .map(|j| j.iter().rev().take(4).cloned().collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>())
+        .unwrap_or_default();
+    if dernieres.is_empty() {
+        format!("{quoi} (le moteur n'a rien dit)")
+    } else {
+        format!("{quoi} — {}", dernieres.join(" | "))
+    }
+}
 
 #[cfg(test)]
 mod tests {

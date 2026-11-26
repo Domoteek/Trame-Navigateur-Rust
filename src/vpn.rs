@@ -254,6 +254,28 @@ fn ordonner(adresses: Vec<SocketAddr>) -> Vec<SocketAddr> {
     triees
 }
 
+impl crate::moteur::Tunnel for Session {
+    fn etiquette(&self) -> String {
+        self.pair.to_string()
+    }
+
+    fn mtu(&self) -> Option<usize> {
+        self.mtu
+    }
+
+    fn pomper(&mut self) -> Result<(), String> {
+        Session::pomper(self)
+    }
+
+    fn prendre_paquet(&mut self) -> Option<Vec<u8>> {
+        Session::prendre_paquet(self)
+    }
+
+    fn envoyer_paquet(&mut self, paquet: &[u8]) -> Result<(), String> {
+        Session::envoyer_paquet(self, paquet)
+    }
+}
+
 /// Ouvre la session et **attend la poignée de main**, en essayant les adresses du nom l'une après
 /// l'autre (trois au plus), avec un budget total inchangé : il est réparti entre elles.
 ///
@@ -317,11 +339,6 @@ pub fn essai(racine: &std::path::Path) -> Result<String, String> {
 }
 
 impl Session {
-    /// MTU à annoncer à la pile TCP/IP.
-    pub fn mtu(&self) -> Option<usize> {
-        self.mtu
-    }
-
     /// Le prochain paquet IP sorti du tunnel, pour la pile (`src/mandataire.rs`).
     pub fn prendre_paquet(&mut self) -> Option<Vec<u8>> {
         self.recueillis.pop_front()
