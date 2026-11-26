@@ -50,36 +50,34 @@ cargo build --release
 
 ## Où en est l'intégration
 
-Fait, et vérifié par `cargo test` (**256 tests** au 2026-11-28) :
+Fait, et vérifié par `cargo test` (**259 tests** au 2026-11-28) :
 
 - `src/moteur.rs` : le trait **`Tunnel`** (`etiquette`, `mtu`, `pomper`, `prendre_paquet`,
   `envoyer_paquet`) et **`Parametres`** (adresse dans le tunnel avec son préfixe, DNS du
   fournisseur, MTU). Le mandataire ne connaît plus qu'eux : il ne sait pas quel moteur il porte.
 - `src/ovpn.rs` : le moteur est **dans le binaire** ; `ovpn::valider(profil)` lit un `.ovpn` sans se
   connecter (serveur, port, protocole, identifiants nécessaires) ; `ovpn::Session::connecter` ouvre
-  la session, attend le montage (`tun_up`) et **rend les paramètres poussés par le serveur** ;
-  `ovpn::ressemble_a_un_profil` distingue un `.ovpn` d'une configuration WireGuard.
-- `src/vpn.rs` : la session WireGuard implémente le même trait, et le mandataire accepte désormais
-  n'importe quel moteur (`demarrer_tunnel(preparer)`) — la préparation tourne **dans son fil**, donc
-  ni la poignée de main ni la négociation TLS ne figent la fenêtre. `demarrer(config)` reste le
-  raccourci WireGuard, le temps que l'application choisisse elle-même son moteur.
-- Sonde `TRAME_TUNNEL_ESSAI=3` (profil par `TRAME_OVPN_PROFIL`, identifiants par
-  `TRAME_OVPN_USER`/`TRAME_OVPN_PASS`). Mesurée : profil sans identifiants →
+  la session, attend le montage (`tun_up`) et rend les paramètres poussés par le serveur.
+- `src/vpn.rs` : la session WireGuard implémente le même trait ; `demarrer_tunnel(preparer)` accepte
+  n'importe quel moteur, la préparation tournant **dans le fil du mandataire**.
+- **Rangement des deux genres** (`src/tunnel.rs`) : un profil OpenVPN se range **à côté** des
+  configurations WireGuard dans `tunnels/<id>/`, avec `openvpn.json` (résumé public), `profil.cle`
+  (le `.ovpn` **entier chiffré par DPAPI** — il peut porter la clé privée du client) et
+  `identifiants.cle` (utilisateur et mot de passe, chiffrés). `lister()` rend le genre et le bon
+  résumé, `charger_configuration(id)` et `charger_active()` rendent une `Configuration`
+  (`WireGuard(Config)` ou `OpenVpn { profil, identifiants }`) : c'est ce que l'application donnera au
+  bon moteur. Un fichier refusé par le moteur n'écrit **rien** sur le disque.
+- Sonde `TRAME_TUNNEL_ESSAI=3` : mesurée sur un profil sans identifiants →
   `ce profil demande un utilisateur et un mot de passe` ; avec identifiants factices →
-  `le tunnel n'a pas monté en 30 s — OpenVPN core 3.11.8 win x86_64 64-bit`, c'est-à-dire le vrai
-  moteur, qui tourne, et qui dit pourquoi il échoue.
+  `le tunnel n'a pas monté en 30 s — OpenVPN core 3.11.8 win x86_64 64-bit` (le vrai moteur tourne).
 
 Reste à faire, dans cet ordre :
 
-1. **Stockage** : un `.ovpn` peut contenir la **clé privée du client en clair** (`<key>`), donc le
-   profil entier est chiffré par DPAPI comme la clé WireGuard ; à côté, l'utilisateur et le mot de
-   passe du fournisseur, chiffrés aussi. Le rangement `tunnels/<id>/` de la 0.4.85 accueille les deux
-   sortes de configuration (un champ dit laquelle).
-2. **Interface** : accepter un `.ovpn` dans **Importer…**, demander identifiants et mot de passe quand
-   le profil les exige, afficher serveur et protocole, garder la raison d'échec visible (0.4.86).
-3. **Choix du moteur au démarrage** : l'application lit le genre de la configuration active et prépare
-   le bon moteur (`vpn` ou `ovpn`) — c'est le dernier fil à brancher dans `app.rs`.
-4. **Bancs** : un profil Nord réel, avec ses identifiants de service, et la mesure de sortie
+1. **Application** : lire `charger_active()`, préparer le bon moteur au démarrage (`vpn` ou `ovpn`),
+   et publier dans l'état les deux genres (pastille, liste des configurations).
+2. **Interface** : accepter un `.ovpn` dans **Importer…**, demander utilisateur et mot de passe quand
+   le profil les exige, afficher serveur et protocole, garder la raison d'échec visible.
+3. **Bancs** : un profil Nord réel, avec ses identifiants de service, et la mesure de sortie
    (`ipinfo.io`) comme pour Mullvad.
 
 ## Limites connues, dites d'avance

@@ -379,24 +379,72 @@ pub fn deproteger(secret: &[u8]) -> Result<Vec<u8>, String> {
 // L'ancien emplacement — deux fichiers à la racine du profil, une seule configuration possible —
 // est repris une fois par `migrer` : une mise à jour ne perd pas la configuration déjà importée.
 
+/// Le genre d'une configuration rangée : les deux moteurs de Trame ne lisent pas les mêmes fichiers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Genre {
+    WireGuard,
+    OpenVpn,
+}
+
+impl Genre {
+    pub fn json(&self) -> &'static str {
+        match self {
+            Genre::WireGuard => "wireguard",
+            Genre::OpenVpn => "openvpn",
+        }
+    }
+}
+
 /// Une configuration rangée dans le profil, telle que l'interface la liste (sans la clé).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Entree {
     pub id: String,
+    pub genre: Genre,
     pub nom: String,
     pub endpoint: String,
     pub adresses: Vec<String>,
+    /// Pour OpenVPN : le protocole (`udp`, `tcp`), vide pour WireGuard.
+    pub protocole: String,
 }
 
 impl Entree {
     /// Le résumé montré à l'écran : où l'on sort, et par où.
     pub fn resume(&self) -> String {
-        let adresses = if self.adresses.is_empty() {
-            "(adresse non précisée)".to_string()
-        } else {
-            self.adresses.join(", ")
-        };
-        format!("{adresses} → {}", self.endpoint)
+        match self.genre {
+            // WireGuard : l'adresse que la pile porte, puis le pair.
+            Genre::WireGuard => {
+                let adresses = if self.adresses.is_empty() {
+                    "(adresse non précisée)".to_string()
+                } else {
+                    self.adresses.join(", ")
+                };
+                format!("{adresses} → {}", self.endpoint)
+            }
+            // OpenVPN : le protocole, puis le serveur (l'adresse n'est connue qu'après le montage).
+            Genre::OpenVpn => format!("openvpn {} {}", self.protocole, self.endpoint),
+        }
+    }
+}
+
+/// Une configuration **chargée**, prête à donner au bon moteur.
+#[derive(Clone, Debug)]
+pub enum Configuration {
+    /// WireGuard : le `.conf` déjà analysé.
+    WireGuard(Config),
+    /// OpenVPN : le profil tel quel (il porte ses certificats), et les identifiants s'il en faut.
+    OpenVpn {
+        nom: String,
+        profil: String,
+        identifiants: Option<(String, String)>,
+    },
+}
+
+impl Configuration {
+    pub fn genre(&self) -> Genre {
+        match self {
+            Configuration::WireGuard(_) => Genre::WireGuard,
+            Configuration::OpenVpn { .. } => Genre::OpenVpn,
+        }
     }
 }
 
@@ -508,6 +556,19 @@ pub fn lister(racine: &Path) -> Vec<Entree> {
         .filter(|e| e.path().is_dir())
         .filter_map(|e| {
             let id = e.file_name().to_string_lossy().to_string();
+            // OpenVPN d'abord : son `openvpn.json` porte le genre. WireGuard n'en a pas besoin —
+            // son `tunnel.json` date de la 0.4.85 et se lit comme avant.
+            if let Ok(texte) = std::fs::read_to_string(e.path().join("openvpn.json")) {
+                let v: serde_json::Value = serde_json::from_str(&texte).ok()?;
+                return Some(Entree {
+                    nom: v["nom"].as_str().unwrap_or(&id).to_string(),
+                    endpoint: v["serveur"].as_str().unwrap_or("").to_string(),
+                    adresses: Vec::new(),
+                    protocole: v["protocole"].as_str().unwrap_or("").to_string(),
+                    genre: Genre::OpenVpn,
+                    id,
+                });
+            }
             let texte = std::fs::read_to_string(e.path().join("tunnel.json")).ok()?;
             let v: serde_json::Value = serde_json::from_str(&texte).ok()?;
             let adresses = v["adresses"]
@@ -518,6 +579,8 @@ pub fn lister(racine: &Path) -> Vec<Entree> {
                 nom: v["nom"].as_str().unwrap_or(&id).to_string(),
                 endpoint: v["endpoint"].as_str().unwrap_or("").to_string(),
                 adresses,
+                protocole: String::new(),
+                genre: Genre::WireGuard,
                 id,
             })
         })
@@ -526,12 +589,115 @@ pub fn lister(racine: &Path) -> Vec<Entree> {
     entrees
 }
 
+/// Le genre d'une configuration rangée (`None` : cet identifiant n'existe pas).
+pub fn genre(racine: &Path, id: &str) -> Option<Genre> {
+    let d = dossier(racine).join(id);
+    if d.join("openvpn.json").is_file() {
+        Some(Genre::OpenVpn)
+    } else if d.join("tunnel.json").is_file() {
+        Some(Genre::WireGuard)
+    } else {
+        None
+    }
+}
+
+/// Range un profil OpenVPN : le profil **entier chiffré** (il peut porter la clé privée du client),
+/// les identifiants s'il en faut, et un résumé public pour l'interface.
+///
+/// Le profil est validé par le moteur avant d'être écrit : un fichier qui n'est pas un `.ovpn`
+/// exploitable est refusé avant de toucher au disque.
+pub fn enregistrer_ovpn(
+    racine: &Path,
+    nom: &str,
+    profil: &str,
+    identifiants: Option<(String, String)>,
+) -> Result<String, String> {
+    let resume = crate::ovpn::valider(profil)?;
+    let base = identifiant(nom);
+    let mut id = base.clone();
+    let mut n = 2;
+    while dossier(racine).join(&id).exists() {
+        id = format!("{base}-{n}");
+        n += 1;
+    }
+    let d = dossier(racine).join(&id);
+    std::fs::create_dir_all(&d).map_err(|e| format!("dossier impossible : {e}"))?;
+
+    let public = serde_json::json!({
+        "nom": nom,
+        "genre": Genre::OpenVpn.json(),
+        "serveur": resume.serveur,
+        "port": resume.port,
+        "protocole": resume.protocole,
+        "autologin": resume.autologin,
+    });
+    std::fs::write(d.join("openvpn.json"), public.to_string())
+        .map_err(|e| format!("écriture impossible : {e}"))?;
+    let chiffre = proteger(profil.as_bytes())?;
+    std::fs::write(d.join("profil.cle"), chiffre).map_err(|e| format!("écriture impossible : {e}"))?;
+    if let Some((utilisateur, mot_de_passe)) = identifiants {
+        let paquet = format!("{utilisateur}\n{mot_de_passe}");
+        let chiffre = proteger(paquet.as_bytes())?;
+        std::fs::write(d.join("identifiants.cle"), chiffre).map_err(|e| format!("écriture impossible : {e}"))?;
+    }
+    definir_actif(racine, &id)?;
+    Ok(id)
+}
+
+/// Relit un profil OpenVPN rangé : le texte du `.ovpn`, et les identifiants s'ils ont été gardés.
+pub fn charger_ovpn(racine: &Path, id: &str) -> Option<(String, Option<(String, String)>)> {
+    let d = dossier(racine).join(id);
+    let chiffre = std::fs::read(d.join("profil.cle")).ok()?;
+    let profil = String::from_utf8(deproteger(&chiffre).ok()?).ok()?;
+    let identifiants = std::fs::read(d.join("identifiants.cle"))
+        .ok()
+        .and_then(|c| deproteger(&c).ok())
+        .and_then(|clair| String::from_utf8(clair).ok())
+        .and_then(|paquet| {
+            paquet
+                .split_once('\n')
+                .map(|(u, p)| (u.to_string(), p.to_string()))
+        });
+    Some((profil, identifiants))
+}
+
+/// Relit une configuration **quel que soit son genre** : c'est ce que l'application donne au bon
+/// moteur au démarrage.
+pub fn charger_configuration(racine: &Path, id: &str) -> Option<Configuration> {
+    match genre(racine, id)? {
+        Genre::WireGuard => charger_id(racine, id).map(Configuration::WireGuard),
+        Genre::OpenVpn => {
+            let (profil, identifiants) = charger_ovpn(racine, id)?;
+            let nom = lister(racine)
+                .into_iter()
+                .find(|e| e.id == id)
+                .map(|e| e.nom)
+                .unwrap_or_else(|| id.to_string());
+            Some(Configuration::OpenVpn {
+                nom,
+                profil,
+                identifiants,
+            })
+        }
+    }
+}
+
+/// La configuration **active**, quel que soit son genre.
+pub fn charger_active(racine: &Path) -> Option<Configuration> {
+    actif(racine).and_then(|id| charger_configuration(racine, &id))
+}
+
 /// Supprime une configuration — la clé d'abord. Si c'était l'active, une autre prend sa place.
 pub fn supprimer(racine: &Path, id: &str) -> Result<(), String> {
     let (public, cle) = fichiers_de(racine, id);
     let _ = std::fs::remove_file(&cle);
     let _ = std::fs::remove_file(&public);
-    std::fs::remove_dir_all(dossier(racine).join(id)).map_err(|e| format!("suppression impossible : {e}"))?;
+    // Les fichiers propres à OpenVPN : le profil chiffré et les identifiants.
+    let d = dossier(racine).join(id);
+    let _ = std::fs::remove_file(d.join("profil.cle"));
+    let _ = std::fs::remove_file(d.join("identifiants.cle"));
+    let _ = std::fs::remove_file(d.join("openvpn.json"));
+    std::fs::remove_dir_all(&d).map_err(|e| format!("suppression impossible : {e}"))?;
     if actif_note(racine).as_deref() == Some(id) {
         let _ = std::fs::remove_file(dossier(racine).join("actif.txt"));
         if let Some(premiere) = lister(racine).first() {
@@ -805,5 +971,109 @@ mod tests {
         assert_eq!(relu.cle_privee, config.cle_privee, "la clé survit à la reprise");
         assert_eq!(relu.endpoint, config.endpoint);
         assert_eq!(migrer(&racine), None, "il n'y a plus rien à reprendre");
+    }
+
+    // ------------------------------------------------------------- OpenVPN
+
+    const PROFIL_OVPN: &str = "client
+dev tun
+proto udp
+remote 193.32.126.68 1194
+auth-user-pass
+<ca>
+CERTIFICAT
+</ca>
+";
+
+    /// Un profil OpenVPN se range **à côté** des configurations WireGuard : même dossier, autre
+    /// genre. Le profil lui-même est chiffré (il peut porter la clé privée du client).
+    #[test]
+    fn un_profil_openvpn_se_range_a_cote_des_configurations_wireguard() {
+        let racine = racine_essai("ovpn");
+        let mut wg = lire(&conf()).unwrap();
+        wg.nom = "mullvad-fr".into();
+        enregistrer(&racine, &wg).unwrap();
+        let id = enregistrer_ovpn(
+            &racine,
+            "nord-fr",
+            PROFIL_OVPN,
+            Some(("utilisateur-distinctif".into(), "motdepasse-distinctif".into())),
+        )
+        .unwrap();
+        assert_eq!(id, "nord-fr");
+
+        let liste = lister(&racine);
+        assert_eq!(liste.len(), 2, "les deux genres cohabitent");
+        let nord = liste.iter().find(|e| e.id == "nord-fr").expect("nord listé");
+        assert_eq!(nord.genre, Genre::OpenVpn);
+        assert_eq!(nord.resume(), "openvpn udp 193.32.126.68");
+        let mullvad = liste.iter().find(|e| e.id == "mullvad-fr").expect("mullvad listé");
+        assert_eq!(mullvad.genre, Genre::WireGuard);
+
+        // Le profil se relit à l'identique, identifiants compris…
+        let (profil, identifiants) = charger_ovpn(&racine, "nord-fr").expect("profil relu");
+        assert_eq!(profil, PROFIL_OVPN);
+        assert_eq!(
+            identifiants,
+            Some(("utilisateur-distinctif".to_string(), "motdepasse-distinctif".to_string()))
+        );
+        // …et il n'est **pas** en clair sur le disque.
+        let brut = std::fs::read(racine.join("tunnels").join("nord-fr").join("profil.cle")).unwrap();
+        assert!(
+            !brut.windows(7).any(|f| f == b"remote "),
+            "le profil chiffré ne doit pas contenir le texte du .ovpn"
+        );
+        let identifiants_bruts = std::fs::read(racine.join("tunnels").join("nord-fr").join("identifiants.cle")).unwrap();
+        let secret = b"motdepasse-distinctif";
+        assert!(
+            !identifiants_bruts.windows(secret.len()).any(|f| f == secret),
+            "les identifiants ne doivent pas être en clair dans le fichier chiffré"
+        );
+
+        // Le chargeur rend le bon genre : c'est lui qui décidera du moteur au démarrage.
+        match charger_configuration(&racine, "nord-fr") {
+            Some(Configuration::OpenVpn { profil, identifiants, nom }) => {
+                assert_eq!(nom, "nord-fr");
+                assert_eq!(profil, PROFIL_OVPN);
+                assert!(identifiants.is_some());
+            }
+            autre => panic!("attendu une configuration OpenVPN, reçu {autre:?}"),
+        }
+        assert!(matches!(
+            charger_configuration(&racine, "mullvad-fr"),
+            Some(Configuration::WireGuard(_))
+        ));
+        // La dernière importée est active : ici le profil OpenVPN.
+        assert!(matches!(charger_active(&racine), Some(Configuration::OpenVpn { .. })));
+    }
+
+    /// Un fichier qui n'est pas un profil OpenVPN exploitable est refusé **avant** d'écrire quoi que
+    /// ce soit, et ne touche pas aux configurations déjà rangées.
+    #[test]
+    fn un_faux_profil_openvpn_est_refuse_sans_rien_ecrire() {
+        let racine = racine_essai("ovpn-refus");
+        let mut wg = lire(&conf()).unwrap();
+        wg.nom = "mullvad-fr".into();
+        enregistrer(&racine, &wg).unwrap();
+        assert!(enregistrer_ovpn(&racine, "casse", "bonjour\n", None).is_err());
+        let liste = lister(&racine);
+        assert_eq!(liste.len(), 1, "rien n'a été ajouté");
+        assert_eq!(liste[0].id, "mullvad-fr");
+    }
+
+    /// Supprimer un profil OpenVPN efface son profil chiffré, ses identifiants et sa fiche — et rien
+    /// d'autre.
+    #[test]
+    fn supprimer_un_profil_openvpn_n_efface_que_lui() {
+        let racine = racine_essai("ovpn-suppr");
+        let mut wg = lire(&conf()).unwrap();
+        wg.nom = "mullvad-fr".into();
+        enregistrer(&racine, &wg).unwrap();
+        let id = enregistrer_ovpn(&racine, "nord-fr", PROFIL_OVPN, None).unwrap();
+        supprimer(&racine, &id).unwrap();
+        assert!(!racine.join("tunnels").join("nord-fr").exists(), "son dossier a disparu");
+        assert_eq!(genre(&racine, &id), None);
+        assert_eq!(genre(&racine, "mullvad-fr"), Some(Genre::WireGuard));
+        assert!(charger_id(&racine, "mullvad-fr").is_some(), "l'autre configuration est intacte");
     }
 }
