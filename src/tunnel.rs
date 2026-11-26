@@ -368,34 +368,243 @@ pub fn deproteger(secret: &[u8]) -> Result<Vec<u8>, String> {
     Ok(secret.to_vec())
 }
 
-/// Enregistre la configuration : la partie publique dans `tunnel.json`, la clé privée chiffrée dans
-/// `tunnel.cle`. Un fichier de réglages ne contient donc **jamais** la clé.
-pub fn enregistrer(racine: &Path, config: &Config) -> Result<(), String> {
-    std::fs::write(racine.join("tunnel.json"), config.json_public()).map_err(|e| format!("écriture impossible : {e}"))?;
+// ------------------------------------------------------------------ plusieurs configurations
+//
+// Demande de Clément (2026-11-28) : « pouvoir intégrer plusieurs fichiers .conf en fonction du pays
+// où je veux me situer et switcher rapidement entre l'un et l'autre, même s'il faut redémarrer ».
+// Chaque configuration vit donc dans **son dossier** (`tunnels/<id>/`), et un fichier `actif.txt`
+// dit laquelle se monte au démarrage. Rien n'est partagé entre deux configurations : supprimer l'une
+// ne touche pas aux autres, et chacune garde sa clé chiffrée séparément.
+//
+// L'ancien emplacement — deux fichiers à la racine du profil, une seule configuration possible —
+// est repris une fois par `migrer` : une mise à jour ne perd pas la configuration déjà importée.
+
+/// Une configuration rangée dans le profil, telle que l'interface la liste (sans la clé).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Entree {
+    pub id: String,
+    pub nom: String,
+    pub endpoint: String,
+    pub adresses: Vec<String>,
+}
+
+impl Entree {
+    /// Le résumé montré à l'écran : où l'on sort, et par où.
+    pub fn resume(&self) -> String {
+        let adresses = if self.adresses.is_empty() {
+            "(adresse non précisée)".to_string()
+        } else {
+            self.adresses.join(", ")
+        };
+        format!("{adresses} → {}", self.endpoint)
+    }
+}
+
+/// Dossier qui range toutes les configurations.
+pub fn dossier(racine: &Path) -> PathBuf {
+    racine.join("tunnels")
+}
+
+/// Identifiant lisible tiré du nom : `NordVPN_France_1130` → `nordvpn-france-1130`.
+pub fn identifiant(nom: &str) -> String {
+    let mut sortie = String::new();
+    let mut tiret = true;
+    for c in nom.chars() {
+        if c.is_ascii_alphanumeric() {
+            sortie.push(c.to_ascii_lowercase());
+            tiret = false;
+        } else if !tiret {
+            sortie.push('-');
+            tiret = true;
+        }
+    }
+    let propre = sortie.trim_matches('-').to_string();
+    if propre.is_empty() {
+        "tunnel".to_string()
+    } else {
+        propre
+    }
+}
+
+fn fichiers_de(racine: &Path, id: &str) -> (PathBuf, PathBuf) {
+    let d = dossier(racine).join(id);
+    (d.join("tunnel.json"), d.join("tunnel.cle"))
+}
+
+/// Écrit (ou réécrit) une configuration sous un identifiant donné.
+pub fn ecrire(racine: &Path, id: &str, config: &Config) -> Result<(), String> {
+    let (public, cle) = fichiers_de(racine, id);
+    if let Some(d) = public.parent() {
+        std::fs::create_dir_all(d).map_err(|e| format!("dossier impossible : {e}"))?;
+    }
+    std::fs::write(&public, config.json_public()).map_err(|e| format!("écriture impossible : {e}"))?;
     let chiffre = proteger(config.cle_privee.as_bytes())?;
-    std::fs::write(racine.join("tunnel.cle"), chiffre).map_err(|e| format!("écriture impossible : {e}"))?;
+    std::fs::write(&cle, chiffre).map_err(|e| format!("écriture impossible : {e}"))?;
     Ok(())
 }
 
-/// Relit la configuration enregistrée (`None` : aucune).
-pub fn charger(racine: &Path) -> Option<Config> {
-    let public = std::fs::read_to_string(racine.join("tunnel.json")).ok()?;
-    let chiffre = std::fs::read(racine.join("tunnel.cle")).ok()?;
+/// Range une configuration **de plus** sous un identifiant unique, et la rend active.
+pub fn enregistrer(racine: &Path, config: &Config) -> Result<String, String> {
+    let base = identifiant(&config.nom);
+    let mut id = base.clone();
+    let mut n = 2;
+    while dossier(racine).join(&id).exists() {
+        id = format!("{base}-{n}");
+        n += 1;
+    }
+    ecrire(racine, &id, config)?;
+    definir_actif(racine, &id)?;
+    Ok(id)
+}
+
+/// Relit une configuration précise (`None` : identifiant inconnu, clé illisible).
+pub fn charger_id(racine: &Path, id: &str) -> Option<Config> {
+    let (public, cle) = fichiers_de(racine, id);
+    let texte = std::fs::read_to_string(&public).ok()?;
+    let chiffre = std::fs::read(&cle).ok()?;
     let clair = deproteger(&chiffre).ok()?;
     let cle_privee = String::from_utf8(clair).ok()?;
-    Config::depuis_json(&public, cle_privee).ok()
+    Config::depuis_json(&texte, cle_privee).ok()
 }
 
-/// Oublie la configuration : les deux fichiers disparaissent (la clé d'abord).
-pub fn oublier(racine: &Path) {
-    let _ = std::fs::remove_file(racine.join("tunnel.cle"));
-    let _ = std::fs::remove_file(racine.join("tunnel.json"));
+/// L'identifiant de la configuration active. Si `actif.txt` désigne une configuration disparue, on
+/// retombe sur la première rangée : mieux vaut un tunnel choisi qu'aucun tunnel.
+pub fn actif(racine: &Path) -> Option<String> {
+    let liste = lister(racine);
+    if liste.is_empty() {
+        return None;
+    }
+    let note = std::fs::read_to_string(dossier(racine).join("actif.txt"))
+        .ok()
+        .map(|t| t.trim().to_string())
+        .unwrap_or_default();
+    if !note.is_empty() && liste.iter().any(|e| e.id == note) {
+        return Some(note);
+    }
+    liste.first().map(|e| e.id.clone())
 }
 
-/// Les fichiers d'une configuration, pour les sauvegardes et les messages.
-pub fn fichiers(racine: &Path) -> (PathBuf, PathBuf) {
-    (racine.join("tunnel.json"), racine.join("tunnel.cle"))
+/// Rend une configuration active (c'est elle qui se montera au prochain démarrage).
+pub fn definir_actif(racine: &Path, id: &str) -> Result<(), String> {
+    if !dossier(racine).join(id).is_dir() {
+        return Err(format!("configuration inconnue : {id}"));
+    }
+    std::fs::write(dossier(racine).join("actif.txt"), id)
+        .map_err(|e| format!("écriture impossible : {e}"))
 }
+
+/// Relit la configuration **active** (`None` : aucune).
+pub fn charger(racine: &Path) -> Option<Config> {
+    actif(racine).and_then(|id| charger_id(racine, &id))
+}
+
+/// Toutes les configurations rangées, triées par identifiant.
+pub fn lister(racine: &Path) -> Vec<Entree> {
+    let Ok(lecture) = std::fs::read_dir(dossier(racine)) else {
+        return Vec::new();
+    };
+    let mut entrees: Vec<Entree> = lecture
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| {
+            let id = e.file_name().to_string_lossy().to_string();
+            let texte = std::fs::read_to_string(e.path().join("tunnel.json")).ok()?;
+            let v: serde_json::Value = serde_json::from_str(&texte).ok()?;
+            let adresses = v["adresses"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+                .unwrap_or_default();
+            Some(Entree {
+                nom: v["nom"].as_str().unwrap_or(&id).to_string(),
+                endpoint: v["endpoint"].as_str().unwrap_or("").to_string(),
+                adresses,
+                id,
+            })
+        })
+        .collect();
+    entrees.sort_by(|a, b| a.id.cmp(&b.id));
+    entrees
+}
+
+/// Supprime une configuration — la clé d'abord. Si c'était l'active, une autre prend sa place.
+pub fn supprimer(racine: &Path, id: &str) -> Result<(), String> {
+    let (public, cle) = fichiers_de(racine, id);
+    let _ = std::fs::remove_file(&cle);
+    let _ = std::fs::remove_file(&public);
+    std::fs::remove_dir_all(dossier(racine).join(id)).map_err(|e| format!("suppression impossible : {e}"))?;
+    if actif_note(racine).as_deref() == Some(id) {
+        let _ = std::fs::remove_file(dossier(racine).join("actif.txt"));
+        if let Some(premiere) = lister(racine).first() {
+            let _ = definir_actif(racine, &premiere.id.clone());
+        }
+    }
+    Ok(())
+}
+
+/// Ce que `actif.txt` dit, sans repli (sert à savoir si l'entrée supprimée était l'active).
+fn actif_note(racine: &Path) -> Option<String> {
+    std::fs::read_to_string(dossier(racine).join("actif.txt"))
+        .ok()
+        .map(|t| t.trim().to_string())
+}
+
+/// Oublie **toutes** les configurations (la clé d'abord, puis le dossier). L'interface supprime
+/// une configuration à la fois (`supprimer`) ; celle-ci reste le geste de remise à zéro, éprouvé
+/// par les tests et prêt pour un futur « tout oublier ».
+#[cfg(test)]
+pub fn oublier(racine: &Path) -> usize {
+    let mut n = 0;
+    for e in lister(racine) {
+        let (public, cle) = fichiers_de(racine, &e.id);
+        let _ = std::fs::remove_file(&cle);
+        let _ = std::fs::remove_file(&public);
+        if std::fs::remove_dir_all(dossier(racine).join(&e.id)).is_ok() {
+            n += 1;
+        }
+    }
+    let _ = std::fs::remove_file(dossier(racine).join("actif.txt"));
+    n
+}
+
+/// Reprend l'ancien emplacement (deux fichiers à la racine du profil) dans le nouveau rangement.
+/// Rend l'identifiant créé, ou `None` s'il n'y avait rien à reprendre. **Copie puis vérifie avant
+/// de supprimer** : une panne au milieu ne doit jamais coûter la clé.
+pub fn migrer(racine: &Path) -> Option<String> {
+    let ancien_public = racine.join("tunnel.json");
+    let ancienne_cle = racine.join("tunnel.cle");
+    if !ancien_public.is_file() || !ancienne_cle.is_file() {
+        return None;
+    }
+    let texte = std::fs::read_to_string(&ancien_public).ok()?;
+    let nom = serde_json::from_str::<serde_json::Value>(&texte)
+        .ok()
+        .and_then(|v| v["nom"].as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "tunnel".to_string());
+    let base = identifiant(&nom);
+    let mut id = base.clone();
+    let mut n = 2;
+    while dossier(racine).join(&id).exists() {
+        id = format!("{base}-{n}");
+        n += 1;
+    }
+    let (public, cle) = fichiers_de(racine, &id);
+    let dossier_cible = dossier(racine).join(&id);
+    std::fs::create_dir_all(&dossier_cible).ok()?;
+    std::fs::copy(&ancien_public, &public).ok()?;
+    std::fs::copy(&ancienne_cle, &cle).ok()?;
+    // La relecture est la preuve que la copie est complète : sans elle, on ne supprime rien.
+    let publique_ok = std::fs::read_to_string(&public).ok()? == texte;
+    let cle_ok = std::fs::read(&cle).map(|a| !a.is_empty()).unwrap_or(false);
+    if !publique_ok || !cle_ok {
+        let _ = std::fs::remove_dir_all(&dossier_cible);
+        return None;
+    }
+    let _ = definir_actif(racine, &id);
+    let _ = std::fs::remove_file(&ancien_public);
+    let _ = std::fs::remove_file(&ancienne_cle);
+    Some(id)
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -526,5 +735,75 @@ mod tests {
         let resume = c.resume();
         assert!(resume.contains("193.32.126.5:51820"));
         assert!(!resume.contains(CLE_PRIVEE));
+    }
+
+    // ------------------------------------------------------- plusieurs configurations
+
+    fn racine_essai(nom: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("trame-tunnel-test-{nom}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).expect("dossier d'essai");
+        d
+    }
+
+    #[test]
+    fn les_identifiants_sont_lisibles_et_uniques() {
+        assert_eq!(identifiant("NordVPN_France_1130"), "nordvpn-france-1130");
+        assert_eq!(identifiant("fr-par-wg-003.conf"), "fr-par-wg-003-conf");
+        assert_eq!(identifiant("   "), "tunnel");
+        assert_eq!(identifiant("____"), "tunnel");
+    }
+
+    /// La demande de Clément : plusieurs configurations rangées côte à côte, et une active.
+    #[test]
+    fn plusieurs_configurations_se_rangent_et_se_choisissent() {
+        let racine = racine_essai("multi");
+        let mut mullvad = lire(&conf()).unwrap();
+        mullvad.nom = "mullvad-fr".into();
+        let mut nord = lire(&conf()).unwrap();
+        nord.nom = "nord-fr".into();
+        nord.endpoint = "185.61.156.20:51820".into();
+
+        assert_eq!(enregistrer(&racine, &mullvad).unwrap(), "mullvad-fr");
+        assert_eq!(enregistrer(&racine, &nord).unwrap(), "nord-fr");
+        assert_eq!(lister(&racine).len(), 2, "les deux sont rangées");
+        assert_eq!(actif(&racine).as_deref(), Some("nord-fr"), "la dernière importée devient active");
+        assert_eq!(charger(&racine).unwrap().endpoint, "185.61.156.20:51820");
+
+        // Basculer d'une configuration à l'autre, c'est ce que fait « Utiliser ».
+        definir_actif(&racine, "mullvad-fr").unwrap();
+        assert_eq!(charger(&racine).unwrap().endpoint, "193.32.126.5:51820");
+
+        // Deux fichiers peuvent porter le même nom : le second ne doit pas écraser le premier.
+        let mut doublon = mullvad.clone();
+        doublon.nom = "mullvad-fr".into();
+        assert_eq!(enregistrer(&racine, &doublon).unwrap(), "mullvad-fr-2");
+        assert_eq!(lister(&racine).len(), 3);
+
+        // Supprimer l'active laisse une autre prendre sa place.
+        supprimer(&racine, "mullvad-fr-2").unwrap();
+        assert_eq!(lister(&racine).len(), 2);
+        assert!(charger(&racine).is_some(), "une configuration reste active");
+        assert_eq!(oublier(&racine), 2, "oublier tout rend le nombre effacé");
+        assert!(lister(&racine).is_empty());
+    }
+
+    /// L'ancien rangement (deux fichiers à la racine) est repris sans perdre la clé : c'est ce qui
+    /// protège une mise à jour depuis la 0.4.84.
+    #[test]
+    fn l_ancien_emplacement_est_repris_sans_perdre_la_cle() {
+        let racine = racine_essai("migre");
+        let mut config = lire(&conf()).unwrap();
+        config.nom = "mullvad-fr-par".into();
+        std::fs::write(racine.join("tunnel.json"), config.json_public()).unwrap();
+        std::fs::write(racine.join("tunnel.cle"), proteger(config.cle_privee.as_bytes()).unwrap()).unwrap();
+
+        assert_eq!(migrer(&racine).as_deref(), Some("mullvad-fr-par"));
+        assert!(!racine.join("tunnel.json").exists(), "l'ancien fichier disparaît");
+        assert!(!racine.join("tunnel.cle").exists(), "l'ancienne clé aussi");
+        let relu = charger(&racine).expect("configuration rechargée après reprise");
+        assert_eq!(relu.cle_privee, config.cle_privee, "la clé survit à la reprise");
+        assert_eq!(relu.endpoint, config.endpoint);
+        assert_eq!(migrer(&racine), None, "il n'y a plus rien à reprendre");
     }
 }

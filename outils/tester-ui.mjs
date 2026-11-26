@@ -3264,6 +3264,79 @@ async function suite() {
     await p.close();
   });
 
+  await cas("reglages : plusieurs configurations de tunnel — on bascule et on en supprime une", async () => {
+    const p = await page("reglages.html");
+    const questions = [];
+    p.on("dialog", async (d) => {
+      questions.push(d.message());
+      await d.accept();
+    });
+    const tunnels = {
+      actif: "mullvad-fr",
+      liste: [
+        { id: "mullvad-fr", nom: "mullvad-fr", resume: "10.66.0.2/32 → 193.32.126.68:51820", endpoint: "193.32.126.68:51820", actif: true },
+        { id: "nord-fr", nom: "nord-fr", resume: "10.5.0.2/16 → 185.61.156.20:51820", endpoint: "185.61.156.20:51820", actif: false },
+      ],
+    };
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: {
+        astuces: true,
+        tunnelOblige: true,
+        tunnel: "Tunnel intégré (WireGuard)",
+        tunnelImporte: { nom: "mullvad-fr", resume: "10.66.0.2/32 → 193.32.126.68:51820" },
+        tunnels,
+      },
+    });
+    await rubrique(p, "confidentialite");
+
+    // Une rangée par configuration ; seule l'active porte la marque et n'a pas « Utiliser ».
+    egal(
+      await p.$$eval("#liste-tunnels .tunnel-rangee", (n) => n.length),
+      2,
+      "les deux configurations sont listées"
+    );
+    egal(
+      (await p.$eval("#liste-tunnels .tunnel-rangee.actif b", (n) => n.textContent)).includes("mullvad-fr"),
+      true,
+      "l'active est marquée"
+    );
+    egal(
+      await p.$$eval("#liste-tunnels [data-utiliser]", (n) => n.map((b) => b.dataset.utiliser)),
+      ["nord-fr"],
+      "seule la configuration inactive propose « Utiliser »"
+    );
+    egal(await p.$eval("#txt-tunnel-conf", (n) => n.hidden), true, "le texte d'aide disparaît");
+
+    // « Utiliser » : le choix part, et le redémarrage est proposé (le portier est armé).
+    await vider(p);
+    await p.click('[data-utiliser="nord-fr"]');
+    await p.waitForTimeout(150);
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelChoisir"),
+      [{ m: "tunnelChoisir", id: "nord-fr" }],
+      "« Utiliser » demande cette configuration"
+    );
+    egal(
+      (await messages(p)).filter((m) => m.m === "redemarrerTrame"),
+      [{ m: "redemarrerTrame" }],
+      "portier armé : le redémarrage est proposé"
+    );
+    egal(questions.length, 1, "une question de redémarrage, une seule");
+
+    // « Supprimer » : la confirmation nomme la configuration, puis la commande porte son id.
+    await vider(p);
+    await p.click('[data-supprimer="nord-fr"]');
+    await p.waitForTimeout(150);
+    verifier(questions[1].includes("nord-fr"), "la confirmation nomme la configuration");
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelSupprimer"),
+      [{ m: "tunnelSupprimer", id: "nord-fr" }],
+      "« Supprimer » vise cette configuration"
+    );
+    await p.close();
+  });
+
   await cas("page du tunnel : elle dit l'adresse visée, et « Réessayer » la redemande", async () => {
     const p = await page("tunnel.html", { query: "?url=https%3A%2F%2Fexample.com%2Fx", sansEtat: true });
     verifier(

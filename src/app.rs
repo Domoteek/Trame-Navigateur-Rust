@@ -734,6 +734,11 @@ impl App {
         // Etat de la sauvegarde automatique, relu avant que le champ `profil` ne bouge.
         let racine_auto = profil.racine().to_path_buf();
         // La configuration du tunnel integre, relue elle aussi avant le deplacement du profil.
+        // L'ancien rangement (une seule configuration, deux fichiers a la racine) est repris au
+        // passage : une mise a jour ne doit pas faire perdre la configuration deja importee.
+        if let Some(id) = crate::tunnel::migrer(profil.racine()) {
+            info!("tunnel : ancienne configuration reprise dans tunnels/{id}");
+        }
         let tunnel_conf = crate::tunnel::charger(profil.racine());
 
         let mut app = App {
@@ -3375,6 +3380,8 @@ impl App {
                     "allowedIps": c.allowed_ips,
                     "keepalive": c.keepalive,
                 })),
+                // Toutes les configurations rangees (plusieurs pays) et celle qui est active.
+                "tunnels": Self::etat_tunnels(self.profil.racine()),
             },
             "profil": self.profil.racine().display().to_string(),
             "dossierExtensions": self.profil.dossier_extensions().display().to_string(),
@@ -4068,6 +4075,25 @@ impl App {
         self.pousser_etat();
     }
 
+/// Les configurations de tunnel rangées dans le profil, telles que l'interface les liste.
+/// Une seule est active : c'est elle qui se monte au démarrage.
+fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
+    let actif = crate::tunnel::actif(racine);
+    let liste: Vec<serde_json::Value> = crate::tunnel::lister(racine)
+        .iter()
+        .map(|e| {
+            json!({
+                "id": e.id,
+                "nom": e.nom,
+                "resume": e.resume(),
+                "endpoint": e.endpoint,
+                "actif": actif.as_deref() == Some(e.id.as_str()),
+            })
+        })
+        .collect();
+    json!({ "actif": actif, "liste": liste })
+}
+
     fn traiter_ipc(&mut self, source: Source, corps: &str) {
         let Ok(v) = serde_json::from_str::<Value>(corps) else {
             return;
@@ -4729,9 +4755,9 @@ impl App {
                 if let Some(chemin) = choisi {
                     match crate::tunnel::lire_fichier(std::path::Path::new(&chemin)) {
                         Ok(config) => match crate::tunnel::enregistrer(self.profil.racine(), &config) {
-                            Ok(()) => {
+                            Ok(id) => {
                                 let resume = config.resume();
-                                info!("tunnel : configuration importee ({resume})");
+                                info!("tunnel : configuration importee dans tunnels/{id} ({resume})");
                                 self.tunnel_conf = Some(config);
                                 self.signaler(&format!("Tunnel importé : {resume}"));
                             }
@@ -4748,11 +4774,62 @@ impl App {
                 }
                 self.pousser_etat();
             }
+            // « Utiliser » : une autre configuration devient celle qui se monte au demarrage.
+            // Rien ne change a chaud (le mandataire est pose a la creation de la webview) :
+            // l'interface propose le redemarrage, comme pour l'armement du portier.
+            "tunnelChoisir" => {
+                let id = v["id"].as_str().unwrap_or("").trim().to_string();
+                match crate::tunnel::definir_actif(self.profil.racine(), &id) {
+                    Ok(()) => match crate::tunnel::charger_id(self.profil.racine(), &id) {
+                        Some(config) => {
+                            info!("tunnel : configuration active -> {id} ({})", config.resume());
+                            self.tunnel_conf = Some(config);
+                            self.signaler("Tunnel choisi : il sera monté au prochain démarrage.");
+                        }
+                        None => {
+                            alerte!("tunnel : configuration {id} illisible");
+                            self.signaler("Tunnel : cette configuration est illisible (clé ?).");
+                        }
+                    },
+                    Err(e) => {
+                        alerte!("tunnel : choix impossible ({e})");
+                        self.signaler(&format!("Tunnel : choix impossible ({e})"));
+                    }
+                }
+                self.pousser_etat();
+            }
+            // « Supprimer » une configuration precise : sa cle disparait, les autres restent.
+            "tunnelSupprimer" => {
+                let id = v["id"].as_str().unwrap_or("").trim().to_string();
+                match crate::tunnel::supprimer(self.profil.racine(), &id) {
+                    Ok(()) => {
+                        info!("tunnel : configuration {id} supprimee");
+                        self.tunnel_conf = crate::tunnel::charger(self.profil.racine());
+                        self.signaler("Configuration supprimée : sa clé a été effacée.");
+                    }
+                    Err(e) => {
+                        alerte!("tunnel : suppression impossible ({e})");
+                        self.signaler(&format!("Tunnel : suppression impossible ({e})"));
+                    }
+                }
+                self.pousser_etat();
+            }
+            // Ancien nom du meme geste : « Oublier » ne visait qu'une configuration, il vise
+            // maintenant celle qui est active. Garde pour les interfaces deja ouvertes.
             "tunnelOublier" => {
-                crate::tunnel::oublier(self.profil.racine());
-                self.tunnel_conf = None;
-                info!("tunnel : configuration oubliee");
-                self.signaler("Tunnel oublié : la clé a été effacée.");
+                let id = v["id"].as_str().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+                let cible = id.or_else(|| crate::tunnel::actif(self.profil.racine()));
+                match cible {
+                    Some(id) => match crate::tunnel::supprimer(self.profil.racine(), &id) {
+                        Ok(()) => {
+                            info!("tunnel : configuration {id} oubliee");
+                            self.tunnel_conf = crate::tunnel::charger(self.profil.racine());
+                            self.signaler("Tunnel oublié : la clé a été effacée.");
+                        }
+                        Err(e) => self.signaler(&format!("Tunnel : suppression impossible ({e})")),
+                    },
+                    None => self.signaler("Aucune configuration de tunnel à oublier."),
+                }
                 self.pousser_etat();
             }
             // « Réessayer » depuis la page du tunnel : on relit l'état du réseau, et on ouvre la

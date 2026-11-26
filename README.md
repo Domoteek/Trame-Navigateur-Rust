@@ -249,6 +249,19 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.85, publiée et installée le 2026-11-28.** « Il me faudra la possibilité d'intégrer plusieurs
+> fichiers .conf en fonction du pays où je veux me situer, et switcher rapidement entre l'un et l'autre. »
+> Les configurations WireGuard ne s'écrasent plus : chacune vit dans **son dossier**
+> (`tunnels/<id>/`), la liste s'affiche dans **Réglages → Confidentialité → Tunnel intégré**, et chaque
+> rangée porte **Utiliser** (elle se monte au démarrage suivant, Trame propose le redémarrage) ou
+> **Supprimer** (sa clé, et elle seule). Une seule est active à la fois ; la dernière importée le
+> devient. La clé de chacune reste **chiffrée par DPAPI**, et l'ancien rangement (deux fichiers à la
+> racine du profil) est **repris au premier démarrage** — vérifié, la clé survit à la reprise. Preuves :
+> `cargo test` **248/248** (+3), `tester-ui` **110/110** (+1), et le banc
+> `outils/eprouver-tunnel-conf.mjs` réécrit : **26 contrôles** sur le vrai binaire (deux configurations
+> rangées, bascule, redémarrage, fichier invalide refusé sans rien écraser, suppression ciblée, reprise
+> de l'ancien emplacement). Notice utilisateur : `docs/BRANCHER-UN-VPN.md`.
+>
 > **0.4.84, publiée et installée le 2026-11-28.** « Dès que j'active le VPN et que la configuration
 > est validée, propose-moi de redémarrer le navigateur ; et pareil quand je le coupe. » Le mandataire
 > du tunnel est posé sur la webview **à sa création** : rien ne peut changer à chaud. Trame **propose
@@ -499,7 +512,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.84-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.85-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >
@@ -778,6 +791,7 @@ explicitement plutôt que silencieusement ignoré.
 - [`docs/CONCEPT.md`](docs/CONCEPT.md) — la thèse, les mécanismes, et **ce qui existe déjà chez les autres** (état de l'art sourcé, 2025-2026).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — modules, protocole `trame:`, IPC, cycle de vie des webviews, sécurité, et les pièges qui ont coûté du temps.
 - [`docs/FORMAT-EXTENSION.md`](docs/FORMAT-EXTENSION.md) — le manifeste et l'API `chrome` réellement disponible.
+- [`docs/BRANCHER-UN-VPN.md`](docs/BRANCHER-UN-VPN.md) — notice pas à pas pour faire passer les pages de Trame dans un VPN d'un fournisseur (exemple NordVPN) : télécharger un `.conf` WireGuard, l'importer, vérifier la sortie réelle, et ce que le tunnel ne couvre pas.
 
 ## Structure
 

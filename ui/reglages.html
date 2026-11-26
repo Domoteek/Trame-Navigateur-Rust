@@ -264,6 +264,15 @@
       button.danger:hover { background: rgba(248, 113, 113, 0.14); }
       button[hidden] { display: none; }
       .boutons { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 0; }
+      /* Les configurations de tunnel rangees : une ligne par pays, celle qui est active marquee. */
+      .tunnels { display: flex; flex-direction: column; }
+      .tunnel-rangee { display: flex; align-items: center; gap: 14px; padding: 10px 2px; border-bottom: 1px solid var(--bord); }
+      .tunnel-rangee .libelle { flex: 1; min-width: 0; }
+      .tunnel-rangee .libelle b { display: block; font-weight: 600; font-size: 12.5px; }
+      .tunnel-rangee .libelle span { color: var(--texte-3); font-size: 11px; line-height: 1.45; }
+      .tunnel-rangee .boutons { margin: 0; }
+      .tunnel-rangee.actif { background: rgba(var(--accent-rgb), 0.06); }
+      .tunnel-rangee .marque-actif { color: var(--vif); font-weight: 600; }
       .vide { color: var(--texte-3); font-size: 12px; padding: 12px 0; }
       .exclus { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 12px; }
       .exclus:empty { display: none; }
@@ -661,19 +670,19 @@
             </div>
           </div>
 
-          <div class="groupe" data-mots="tunnel vpn wireguard configuration importer conf clé pair">
+          <div class="groupe" data-mots="tunnel vpn wireguard configuration importer conf clé pair pays serveur basculer">
             <h3>Tunnel intégré (WireGuard)</h3>
             <div class="carte">
               <div class="ligne">
                 <div class="libelle">
-                  <b>Configuration du tunnel</b>
-                  <span id="txt-tunnel-conf">Aucune configuration importée. Trame lit un fichier <code>.conf</code> de WireGuard et garde la clé privée chiffrée par Windows (DPAPI) — jamais dans les réglages.</span>
+                  <b>Configurations du tunnel</b>
+                  <span id="txt-tunnel-conf">Aucune configuration importée. Trame lit un fichier <code>.conf</code> de WireGuard et garde la clé privée chiffrée par Windows (DPAPI) — jamais dans les réglages. On peut en garder plusieurs (un pays par fichier) et choisir celle qui se monte.</span>
                 </div>
                 <div class="boutons" style="margin: 0">
                   <button class="bouton" id="btn-tunnel-importer">Importer…</button>
-                  <button class="bouton" id="btn-tunnel-oublier" hidden>Oublier</button>
                 </div>
               </div>
+              <div id="liste-tunnels" class="tunnels"></div>
               <div class="ligne sous">
                 <div class="libelle">
                   <b>Le tunnel lui-même</b>
@@ -961,6 +970,8 @@
         let attenteImport = false;
         let confAvantImport = "";
         const identiteTunnel = (r) => {
+          const actif = (r && r.tunnels && r.tunnels.actif) || "";
+          if (actif) return actif;
           const t = (r && r.tunnelImporte) || null;
           return t ? `${t.nom}|${t.resume}` : "";
         };
@@ -1264,6 +1275,51 @@
           },
           focusCouture() {},
         };
+
+        /* Les configurations de tunnel : une rangée par fichier importé (un pays par fichier).
+           « Utiliser » rend une configuration active — elle se monte au démarrage suivant, donc on
+           propose le redémarrage comme pour le portier. « Supprimer » efface sa clé, et seulement
+           la sienne : les autres configurations ne sont pas touchées. */
+        function rendreTunnels(r) {
+          const zone = $("liste-tunnels");
+          if (!zone) return;
+          zone.textContent = "";
+          const tunnels = (r && r.tunnels) || {};
+          const liste = tunnels.liste || [];
+          // Le texte d'aide ne sert que tant qu'il n'y a rien à montrer.
+          $("txt-tunnel-conf").hidden = liste.length > 0;
+          for (const t of liste) {
+            const rangee = elem("div", "tunnel-rangee" + (t.actif ? " actif" : ""));
+            const libelle = elem("div", "libelle");
+            const nom = elem("b", null, t.nom);
+            if (t.actif) nom.appendChild(elem("span", "marque-actif", " — active, montée au démarrage"));
+            libelle.appendChild(nom);
+            libelle.appendChild(elem("span", null, t.resume));
+            const boutons = elem("div", "boutons");
+            if (!t.actif) {
+              const utiliser = elem("button", "bouton", "Utiliser");
+              utiliser.title = "Monter cette configuration au prochain démarrage";
+              utiliser.dataset.utiliser = t.id;
+              utiliser.onclick = () => {
+                ipc({ m: "tunnelChoisir", id: t.id });
+                if (r.tunnelOblige) proposerRedemarrage(true);
+              };
+              boutons.appendChild(utiliser);
+            }
+            const supprimer = elem("button", "bouton danger", "Supprimer");
+            supprimer.title = "Effacer cette configuration et sa clé";
+            supprimer.dataset.supprimer = t.id;
+            supprimer.onclick = () => {
+              if (confirm(`Supprimer « ${t.nom} » ? Sa clé privée sera effacée.`)) {
+                ipc({ m: "tunnelSupprimer", id: t.id });
+              }
+            };
+            boutons.appendChild(supprimer);
+            rangee.appendChild(libelle);
+            rangee.appendChild(boutons);
+            zone.appendChild(rangee);
+          }
+        }
 
         function rendreMoteurs(s) {
           const zone = $("moteurs");
@@ -1599,12 +1655,10 @@
           $("txt-tunnel").textContent = r.tunnel
             ? `Oui — ${r.tunnel}`
             : "Aucun tunnel monté (WireGuard, Wintun, TAP, OpenVPN, VPN Windows…).";
-          // Le tunnel integre : ce qui est importe (resume sans la cle privee).
+          // Le tunnel integre : la liste des configurations rangees (un pays par fichier), et celle
+          // qui est active. Le resume ne montre jamais la cle privee.
           const tunnelConf = r.tunnelImporte || null;
-          $("txt-tunnel-conf").textContent = tunnelConf
-            ? `${tunnelConf.nom} — ${tunnelConf.resume}`
-            : "Aucune configuration importée. Trame lit un fichier .conf de WireGuard et garde la clé privée chiffrée par Windows (DPAPI) — jamais dans les réglages.";
-          $("btn-tunnel-oublier").hidden = !tunnelConf;
+          rendreTunnels(r);
           // Une configuration vient d'être importée alors que le portier est armé : le tunnel ne
           // se montera qu'au démarrage, on propose donc de redémarrer tout de suite. La question
           // est posée après le rendu : une boîte bloquante au milieu d'un rafraîchissement
@@ -1773,11 +1827,6 @@
           confAvantImport = identiteTunnel(etat && etat.reglages);
           attenteImport = true;
           ipc({ m: "tunnelImporter" });
-        };
-        $("btn-tunnel-oublier").onclick = () => {
-          if (confirm("Oublier cette configuration de tunnel ? La clé privée sera effacée.")) {
-            ipc({ m: "tunnelOublier" });
-          }
         };
         $("plein-ecran").addEventListener("change", (e) => ipc({ m: "pleinEcran", mode: e.target.value }));
         $("barre-fenetre").addEventListener("change", (e) => ipc({ m: "barreFenetre", mode: e.target.value }));
