@@ -249,6 +249,18 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.76, publiée et installée le 2026-11-27.** **Tunnel intégré, étape 1** : la configuration.
+> Réglages → Confidentialité → **Tunnel intégré (WireGuard)** → « Importer… » lit un fichier `.conf`
+> de n'importe quel fournisseur, le **valide** (clés 32 octets en base64 — une clé nulle est refusée,
+> `Endpoint` en `hote:port`, adresses CIDR, `AllowedIPs` par défaut `0.0.0.0/0, ::/0`) et garde la
+> **clé privée chiffrée par Windows** (DPAPI) dans `tunnel.cle` — `tunnel.json` ne contient que le
+> public, jamais la clé. L'interface affiche le résumé (`10.66.0.2/32 → 193.32.126.5:51820`, clé
+> abrégée), permet d'**oublier** (les deux fichiers disparaissent) et survit au redémarrage.
+> Preuves : `cargo test` **239/239**, `tester-ui` **107/107**, `outils/eprouver-tunnel-conf.mjs` sur le
+> vrai binaire (import → fichiers écrits sans la clé → redémarrage → oubli → effacement, et une
+> configuration invalide n'écrase rien). **Reste** : le tunnel lui-même (WireGuard en espace
+> utilisateur, sans pilote ni droits admin) — étape suivante.
+>
 > **0.4.75, publiée et installée le 2026-11-27.** Premier morceau du **VPN** : le **portier**.
 > Réglages → Confidentialité → **Tunnel (VPN)** : « Exiger un tunnel avant de naviguer ». Allumé et
 > sans tunnel monté, Trame **refuse** d'ouvrir un site — il affiche une page qui explique, avec
@@ -406,7 +418,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.75-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.76-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

@@ -1534,6 +1534,33 @@ par la **vraie bascule** → l'adresse s'ouvre. **Reste à faire**, dit franchem
 lui-même (import de configuration, `boringtun`, Wintun, routes/DNS, kill switch) et son service
 compagnon — c'est le gros chantier suivant, pas un réglage.
 
+**0.4.76 — tunnel intégré, étape 1 : la configuration (et la clé chiffrée).** Clément : « il faut que
+ce soit intégré donc vas y ». Constat d'architecture, décisif : un tunnel WireGuard « classique » sur
+Windows demande un **pilote** (Wintun), des routes, un DNS et un kill switch — donc des droits
+administrateur, alors que Trame s'installe par utilisateur. Pour un **navigateur**, il existe une
+voie sans pilote : WireGuard **en espace utilisateur** + un **proxy local** que Trame traverse
+(`--proxy-server`, mesuré fonctionnel le 27/11 : le moteur passe par le SOCKS5 et lui donne le **nom**
+d'hôte). C'est cette architecture qui est retenue ; elle se fait en deux étapes, et voici la première.
+`src/tunnel.rs` : lecture d'un fichier `.conf` de n'importe quel fournisseur, avec des règles strictes
+et des messages qui disent quoi corriger — **clés 32 octets en base64** (et une clé **nulle** est
+refusée : c'est un refus explicite de chiffrer, pas une clé), `Endpoint` en `hote:port`,
+`Address`/`DNS`/`AllowedIPs` en CIDR, commentaires et options inconnues tolérées comme le fait
+WireGuard, `AllowedIPs` par défaut `0.0.0.0/0, ::/0` (sinon la configuration ne servirait à rien).
+La **clé privée n'est jamais écrite en clair** : elle part chiffrée par **DPAPI** (compte Windows de
+l'utilisateur, donc inutilisable sur une autre machine) dans `tunnel.cle`, et `tunnel.json` ne garde
+que le public. Réglages → Confidentialité → **Tunnel intégré (WireGuard)** : « Importer… » (sélecteur
+de Windows, ou un chemin imposé), le résumé (`10.66.0.2/32 → 193.32.126.5:51820`, clé **abrégée**),
+et « Oublier » qui efface les deux fichiers. La configuration se relit au démarrage (déchiffrement
+DPAPI). Preuves : `cargo test` **239/239** (8 nouveaux tests, dont l'aller-retour DPAPI et « le JSON
+public ne contient pas la clé privée »), `tester-ui` **107/107**, et le banc
+`outils/eprouver-tunnel-conf.mjs` sur le vrai binaire : import → `tunnel.json` **sans** la clé,
+`tunnel.cle` de 262 octets **sans** la clé lisible, **redémarrage** → la configuration revient,
+configuration cassée → **rien n'est écrasé**, « Oublier » → **les deux fichiers disparaissent**.
+**Reste** : le tunnel lui-même (boringtun + pile TCP/IP en espace utilisateur + proxy local + DNS dans
+le tunnel) — c'est l'étape suivante, et elle se mesurera avec deux pairs locaux, puis avec une vraie
+configuration de fournisseur. Note : `tunnel.cle` n'est **pas** dans les sauvegardes, volontairement
+(une clé DPAPI ne se déchiffre pas sur une autre machine : on réimporte le `.conf` après restauration).
+
 ## 11. L'état aujourd'hui
 
 ```

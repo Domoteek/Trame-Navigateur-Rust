@@ -661,6 +661,28 @@
             </div>
           </div>
 
+          <div class="groupe" data-mots="tunnel vpn wireguard configuration importer conf clé pair">
+            <h3>Tunnel intégré (WireGuard)</h3>
+            <div class="carte">
+              <div class="ligne">
+                <div class="libelle">
+                  <b>Configuration du tunnel</b>
+                  <span id="txt-tunnel-conf">Aucune configuration importée. Trame lit un fichier <code>.conf</code> de WireGuard et garde la clé privée chiffrée par Windows (DPAPI) — jamais dans les réglages.</span>
+                </div>
+                <div class="boutons" style="margin: 0">
+                  <button class="bouton" id="btn-tunnel-importer">Importer…</button>
+                  <button class="bouton" id="btn-tunnel-oublier" hidden>Oublier</button>
+                </div>
+              </div>
+              <div class="ligne sous">
+                <div class="libelle">
+                  <b>Le tunnel lui-même</b>
+                  <span>Trame peut déjà lire et protéger la configuration. Le tunnel (WireGuard en espace utilisateur, sans pilote ni droits administrateur) arrive à l'étape suivante : c'est lui qui fera passer les pages dedans.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="groupe" data-mots="mémoire de lecture texte pages lues sites jamais gardés exclus">
             <h3>Ce que Trame retient</h3>
             <div class="carte">
@@ -1554,6 +1576,12 @@
           $("txt-tunnel").textContent = r.tunnel
             ? `Oui — ${r.tunnel}`
             : "Aucun tunnel monté (WireGuard, Wintun, TAP, OpenVPN, VPN Windows…).";
+          // Le tunnel integre : ce qui est importe (resume sans la cle privee).
+          const tunnelConf = r.tunnelImporte || null;
+          $("txt-tunnel-conf").textContent = tunnelConf
+            ? `${tunnelConf.nom} — ${tunnelConf.resume}`
+            : "Aucune configuration importée. Trame lit un fichier .conf de WireGuard et garde la clé privée chiffrée par Windows (DPAPI) — jamais dans les réglages.";
+          $("btn-tunnel-oublier").hidden = !tunnelConf;
           // L'affiliation n'a de sens que si l'on nettoie : grisee, mais toujours reglable.
           $("ligne-affiliation").classList.toggle("gris", !r.nettoyerAdresses);
           $("bascule-pause").className = "bascule" + (r.pauseOnglets ? " on" : "");
@@ -1703,6 +1731,12 @@
         $("bascule-tunnel").onclick = () =>
           ipc({ m: "tunnelOblige", actif: !((etat && etat.reglages && etat.reglages.tunnelOblige) || false) });
         $("btn-tunnel-relire").onclick = () => ipc({ m: "tunnelReessayer", url: "" });
+        $("btn-tunnel-importer").onclick = () => ipc({ m: "tunnelImporter" });
+        $("btn-tunnel-oublier").onclick = () => {
+          if (confirm("Oublier cette configuration de tunnel ? La clé privée sera effacée.")) {
+            ipc({ m: "tunnelOublier" });
+          }
+        };
         $("plein-ecran").addEventListener("change", (e) => ipc({ m: "pleinEcran", mode: e.target.value }));
         $("barre-fenetre").addEventListener("change", (e) => ipc({ m: "barreFenetre", mode: e.target.value }));
         $("rail-acces").addEventListener("change", (e) => ipc({ m: "railStyle", acces: e.target.value }));

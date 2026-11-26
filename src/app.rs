@@ -323,6 +323,9 @@ pub struct App {
     /// Le tunnel monte, s'il y en a un (sa description), et l'instant de la derniere verification.
     tunnel: Option<String>,
     tunnel_verifie: u64,
+    /// La configuration WireGuard importee (VPN integre) : sans la cle privee, qui vit chiffree
+    /// dans `tunnel.cle` et ne sert qu'au tunnel lui-meme.
+    tunnel_conf: Option<crate::tunnel::Config>,
     /// Adresses refusees au reseau (`bloquer` des extensions allumees), partagees avec le
     /// gestionnaire `WebResourceRequested` de chaque onglet.
     blocage: crate::moteur_ext::Blocage,
@@ -725,6 +728,8 @@ impl App {
         info!("profil WebView2 : {}", webview2.display());
         // Etat de la sauvegarde automatique, relu avant que le champ `profil` ne bouge.
         let racine_auto = profil.racine().to_path_buf();
+        // La configuration du tunnel integre, relue elle aussi avant le deplacement du profil.
+        let tunnel_conf = crate::tunnel::charger(profil.racine());
 
         let mut app = App {
             window,
@@ -809,6 +814,7 @@ impl App {
             tunnel_bloque: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             tunnel: None,
             tunnel_verifie: 0,
+            tunnel_conf,
             blocage: crate::moteur_ext::Blocage::default(),
             adresses_nettoyees: 0,
             adresses_bloquees: 0,
@@ -3267,6 +3273,17 @@ impl App {
                 // Portier « tunnel obligatoire » : le reglage, et le tunnel reellement monte.
                 "tunnelOblige": self.reglages.tunnel_oblige,
                 "tunnel": self.tunnel.clone(),
+                // Le tunnel INTEGRE (VPN de Trame) : ce qui est importe, et son resume lisible.
+                "tunnelImporte": self.tunnel_conf.as_ref().map(|c| json!({
+                    "nom": c.nom,
+                    "resume": c.resume(),
+                    "endpoint": c.endpoint,
+                    "adresses": c.adresses,
+                    "dns": c.dns,
+                    "clePaire": c.cle_paire,
+                    "allowedIps": c.allowed_ips,
+                    "keepalive": c.keepalive,
+                })),
             },
             "profil": self.profil.racine().display().to_string(),
             "dossierExtensions": self.profil.dossier_extensions().display().to_string(),
@@ -4593,6 +4610,53 @@ impl App {
                     "Tunnel exigé : aucun tunnel détecté, la navigation vers les sites est bloquée.".to_string()
                 };
                 self.signaler(&message);
+                self.pousser_etat();
+            }
+            // Import d'une configuration WireGuard : c'est la seule partie du VPN integre qui ne
+            // demande aucun droit administrateur (lire, valider, garder la cle chiffree).
+            // `chemin` est fourni par l'interface quand un test l'impose ; sinon on ouvre le
+            // selecteur de Windows.
+            "tunnelImporter" => {
+                let choisi = match v["chemin"].as_str().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+                    Some(chemin) => Some(chemin),
+                    None => match crate::systeme::choisir_fichier(
+                        "Configuration WireGuard (.conf)",
+                        "WireGuard (*.conf)|*.conf|Tous les fichiers|*.*",
+                    ) {
+                        Ok(choix) => choix,
+                        Err(e) => {
+                            alerte!("tunnel : selecteur de fichier indisponible ({e})");
+                            None
+                        }
+                    },
+                };
+                if let Some(chemin) = choisi {
+                    match crate::tunnel::lire_fichier(std::path::Path::new(&chemin)) {
+                        Ok(config) => match crate::tunnel::enregistrer(self.profil.racine(), &config) {
+                            Ok(()) => {
+                                let resume = config.resume();
+                                info!("tunnel : configuration importee ({resume})");
+                                self.tunnel_conf = Some(config);
+                                self.signaler(&format!("Tunnel importé : {resume}"));
+                            }
+                            Err(e) => {
+                                alerte!("tunnel : enregistrement impossible ({e})");
+                                self.signaler(&format!("Tunnel : enregistrement impossible ({e})"));
+                            }
+                        },
+                        Err(e) => {
+                            alerte!("tunnel : configuration refusee ({e})");
+                            self.signaler(&format!("Tunnel refusé : {e}"));
+                        }
+                    }
+                }
+                self.pousser_etat();
+            }
+            "tunnelOublier" => {
+                crate::tunnel::oublier(self.profil.racine());
+                self.tunnel_conf = None;
+                info!("tunnel : configuration oubliee");
+                self.signaler("Tunnel oublié : la clé a été effacée.");
                 self.pousser_etat();
             }
             // « Réessayer » depuis la page du tunnel : on relit l'état du réseau, et on ouvre la

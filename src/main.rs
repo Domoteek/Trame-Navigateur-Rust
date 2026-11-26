@@ -38,6 +38,7 @@ mod shell;
 mod systeme;
 mod teinte;
 mod telechargements;
+mod tunnel;
 mod urls;
 mod vitality;
 mod weave;
