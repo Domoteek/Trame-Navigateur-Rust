@@ -327,6 +327,10 @@ pub struct App {
     /// La configuration WireGuard importee (VPN integre) : sans la cle privee, qui vit chiffree
     /// dans `tunnel.cle` et ne sert qu'au tunnel lui-meme.
     tunnel_conf: Option<crate::tunnel::Config>,
+    /// Le mandataire SOCKS5 qui fait passer les pages dans le tunnel, quand il tourne. Il doit
+    /// demarrer AVANT la premiere webview : le proxy de WebView2 est fixe a la creation de
+    /// l'environnement, et ne se change plus ensuite.
+    mandataire: Option<crate::mandataire::Mandataire>,
     /// Adresses refusees au reseau (`bloquer` des extensions allumees), partagees avec le
     /// gestionnaire `WebResourceRequested` de chaque onglet.
     blocage: crate::moteur_ext::Blocage,
@@ -816,6 +820,7 @@ impl App {
             tunnel: None,
             tunnel_verifie: 0,
             tunnel_conf,
+            mandataire: None,
             blocage: crate::moteur_ext::Blocage::default(),
             adresses_nettoyees: 0,
             adresses_bloquees: 0,
@@ -1138,12 +1143,39 @@ impl App {
     }
 
     fn creer_surfaces(&mut self) {
+        // Le tunnel integre doit etre en place AVANT la premiere webview : son adresse devient le
+        // proxy de tout l'environnement WebView2, et ca ne se change plus apres.
+        self.demarrer_tunnel_integre();
         self.rail = self.creer_surface("rail", Source::Rail);
         self.barre = self.creer_surface("barre", Source::Barre);
         self.appliquer_anti_pistage(None);
         self.appliquer_geometrie();
         if self.rail.is_none() || self.barre.is_none() {
             alerte!("interface : une surface n'a pas pu etre creee, l'application sera muette");
+        }
+    }
+
+    /// Démarre le tunnel intégré si le portier l'exige et qu'une configuration est importée.
+    ///
+    /// Échec (pas de réseau, clé refusée, pair muet) : on le dit, on ne démarre rien, et le
+    /// portier fait son travail — aucune page ne s'ouvre plutôt qu'une page hors tunnel.
+    fn demarrer_tunnel_integre(&mut self) {
+        if !self.reglages.tunnel_oblige {
+            return;
+        }
+        let Some(config) = self.tunnel_conf.clone() else { return };
+        let nom = config.endpoint.clone();
+        match crate::mandataire::demarrer(config) {
+            Ok(mandataire) => {
+                info!("tunnel intégré : mandataire sur {} (pair {nom})", mandataire.adresse());
+                self.mandataire = Some(mandataire);
+                self.tunnel_verifie = 0;
+                self.verifier_tunnel(true);
+            }
+            Err(e) => {
+                alerte!("tunnel intégré : démarrage impossible ({e})");
+                self.signaler(&format!("Tunnel : démarrage impossible ({e})"));
+            }
         }
     }
 
@@ -1178,7 +1210,20 @@ impl App {
         // (`aligner_extensions_au_demarrage`).
         let _ = sans_ext;
         self.extensions_chrome_amorcees = true;
-        builder
+        // Le tunnel intégré, quand il tourne : WebView2 traverse notre SOCKS5 local. Le réglage
+        // vaut pour l'ENVIRONNEMENT, donc il doit être posé dès la première webview — d'où le
+        // démarrage du mandataire dans `creer_surfaces`, avant le rail et la barre.
+        match &self.mandataire {
+            Some(mandataire) => {
+                use wry::ProxyConfig;
+                info!("tunnel : proxy {} posé sur la webview", mandataire.adresse());
+                builder.with_proxy_config(ProxyConfig::Socks5(wry::ProxyEndpoint {
+                    host: "127.0.0.1".to_string(),
+                    port: mandataire.port().to_string(),
+                }))
+            }
+            None => builder,
+        }
     }
 
     /// Au demarrage, une fois la liste du moteur connue : ajoute les extensions du dossier que
@@ -1286,7 +1331,11 @@ impl App {
             return;
         }
         self.tunnel_verifie = now;
-        let tunnel = crate::reseau::tunnel_actif();
+        // Le tunnel de Trame d'abord : s'il tourne, il n'y a rien d'autre a chercher.
+        let tunnel = match self.mandataire.as_ref() {
+            Some(_) => Some("Tunnel intégré (WireGuard)".to_string()),
+            None => crate::reseau::tunnel_actif(),
+        };
         let bloque = self.reglages.tunnel_oblige && tunnel.is_none();
         let change = tunnel != self.tunnel || bloque != self.tunnel_bloque.load(Relaxed);
         if tunnel != self.tunnel {

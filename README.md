@@ -249,6 +249,20 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.81, publiée et installée le 2026-11-28.** **Le VPN intégré fonctionne : les pages sortent par
+> Mullvad.** Une **pile TCP/IP en espace utilisateur** (`smoltcp`) est branchée sur les paquets du
+> tunnel, un **résolveur DNS dans le tunnel** (le DNS du fournisseur, jamais celui de la box) et un
+> **mandataire SOCKS5 local** (`src/mandataire.rs`) relient chaque connexion du navigateur. WebView2
+> traverse ce mandataire (`--proxy-server`), donc **tout** Trame passe dedans. Mesure du 28/11 sur la
+> vraie configuration : la page de contrôle de Mullvad, ouverte **dans Trame**, répond
+> `ip=193.32.126.145`, `mullvad=true`, `serveur=fr-par-wg-003` — l'IP de la maison (`82.64.170.27`)
+> n'apparaît plus. **Sans pilote, sans droits administrateur, rien à installer en plus du setup.**
+> Deux réglages à connaître : le tunnel monte **au démarrage** (le proxy de WebView2 est fixé à
+> l'ouverture), et il se monte **quand « Exiger un tunnel » est coché** avec une configuration
+> importée. Preuves : `cargo test` **245/245**, `tester-ui` **107/107**, `outils/eprouver-vpn-bout-en-bout.mjs`
+> (IP de sortie, serveur Mullvad) ; et si le tunnel ne monte pas, le portier refuse de naviguer au
+> lieu de laisser fuir.
+>
 > **0.4.80, publiée et installée le 2026-11-27.** Le portier couvre enfin **le réveil d'un onglet** :
 > `app.clem-informatique.com` réveillé sous portier donnait une **page vide** — la navigation partait
 > se faire refuser par la garde, qui n'affiche rien. Un onglet réveillé passe désormais par le même
@@ -453,7 +467,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.80-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.81-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

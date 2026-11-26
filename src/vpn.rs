@@ -32,6 +32,10 @@ pub struct Session {
     /// ou d'un réseau qui bloque l'UDP.
     pub envoyes: u64,
     pub recus: u64,
+    /// Paquets IP sortis du tunnel, en attente de la pile TCP/IP (`src/mandataire.rs`).
+    recueillis: std::collections::VecDeque<Vec<u8>>,
+    /// MTU annoncée par la configuration (`None` : 1420, la valeur de WireGuard).
+    mtu: Option<usize>,
 }
 
 impl Session {
@@ -74,6 +78,8 @@ impl Session {
             travail: vec![0u8; MAX_PAQUET],
             envoyes: 0,
             recus: 0,
+            recueillis: std::collections::VecDeque::new(),
+            mtu: config.mtu.map(|m| m as usize),
         })
     }
 
@@ -168,8 +174,10 @@ impl Session {
                         }
                         resultat = self.tunnel.decapsulate(None, &[], &mut courant);
                     }
-                    // Les paquets venus du pair : la pile TCP/IP les prendra ici (étape suivante).
-                    TunnResult::WriteToTunnelV4(_, _) | TunnResult::WriteToTunnelV6(_, _) => {
+                    // Les paquets venus du pair : ils partent à la pile TCP/IP, qui les rend en
+                    // connexions locales (voir `prendre_paquet`).
+                    TunnResult::WriteToTunnelV4(paquet, _) | TunnResult::WriteToTunnelV6(paquet, _) => {
+                        self.recueillis.push_back(paquet.to_vec());
                         resultat = self.tunnel.decapsulate(None, &[], &mut courant);
                     }
                     TunnResult::Done => break,
@@ -239,6 +247,38 @@ pub fn essai(racine: &std::path::Path) -> Result<String, String> {
 }
 
 impl Session {
+    /// MTU à annoncer à la pile TCP/IP.
+    pub fn mtu(&self) -> Option<usize> {
+        self.mtu
+    }
+
+    /// Le prochain paquet IP sorti du tunnel, pour la pile (`src/mandataire.rs`).
+    pub fn prendre_paquet(&mut self) -> Option<Vec<u8>> {
+        self.recueillis.pop_front()
+    }
+
+    /// Chiffre un paquet IP de la pile et l'envoie au pair.
+    pub fn envoyer_paquet(&mut self, paquet: &[u8]) -> Result<(), String> {
+        let mut copie = std::mem::take(&mut self.sortie);
+        let resultat = self.tunnel.encapsulate(paquet, &mut copie);
+        let a_envoyer = match resultat {
+            TunnResult::WriteToNetwork(sortant) => Some(sortant.to_vec()),
+            TunnResult::Done => None,
+            TunnResult::Err(e) => {
+                self.sortie = copie;
+                return Err(format!("chiffrement impossible : {e:?}"));
+            }
+            _ => None,
+        };
+        self.sortie = copie;
+        if let Some(sortant) = a_envoyer {
+            if self.udp.send(&sortant).is_ok() {
+                self.envoyes += 1;
+            }
+        }
+        Ok(())
+    }
+
     /// Les compteurs du tunnel (secondes depuis la poignée, octets, perte, rtt).
     pub fn stats(&self) -> (Option<std::time::Duration>, usize, usize, f32, Option<u32>) {
         self.tunnel.stats()

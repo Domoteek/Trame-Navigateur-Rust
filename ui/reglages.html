@@ -647,7 +647,7 @@
               <div class="ligne">
                 <div class="libelle">
                   <b>Exiger un tunnel avant de naviguer</b>
-                  <span>Sans tunnel monté, Trame refuse d'ouvrir un site et affiche une page qui explique. Les réglages et les pages internes restent accessibles — sinon on ne pourrait plus éteindre cette exigence.</span>
+                  <span>Avec une configuration importée, Trame <b>monte le tunnel au démarrage</b> et fait passer <b>toutes</b> ses pages dedans (mandataire local, sans pilote ni droits administrateur). Sans tunnel monté, il refuse d'ouvrir un site et affiche une page qui explique. Changement pris en compte <b>au prochain démarrage</b> : le mandataire de WebView2 est fixé une fois pour toutes à l'ouverture. Les réglages et les pages internes restent toujours accessibles — sinon on ne pourrait plus éteindre cette exigence.</span>
                 </div>
                 <div class="bascule" id="bascule-tunnel"></div>
               </div>

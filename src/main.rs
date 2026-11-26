@@ -22,6 +22,7 @@ mod fenetres;
 mod installation;
 mod log;
 mod maj;
+mod mandataire;
 mod model;
 mod ombre;
 mod moteur_ext;
@@ -83,8 +84,13 @@ fn main() {
     // Sonde de mise au point du tunnel (jamais en usage normal) : `TRAME_TUNNEL_ESSAI=1` monte le
     // tunnel configure, tente la poignee de main avec le pair, ecrit le resultat et sort. Elle
     // existe pour pouvoir eprouver le moteur sans toucher au profil de tous les jours.
-    if std::env::var("TRAME_TUNNEL_ESSAI").is_ok() {
-        let ligne = match vpn::essai(profil.racine()) {
+    if let Ok(mode) = std::env::var("TRAME_TUNNEL_ESSAI") {
+        let resultat = if mode == "2" {
+            mandataire::essai(profil.racine())
+        } else {
+            vpn::essai(profil.racine())
+        };
+        let ligne = match resultat {
             Ok(detail) => format!("tunnel : {detail}"),
             Err(e) => format!("tunnel : ECHEC ({e})"),
         };
