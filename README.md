@@ -249,6 +249,14 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.70, publiée et installée le 2026-11-26.** « J'ouvre un raccourci YouTube, la flèche de retour
+> est déjà active ; retour, retour → `about:blank` ». Mesuré : l'historique de l'onglet était
+> `["about:blank", <la page>]`, parce que la webview naît sur une page blanche (c'est ce qui évite la
+> page inerte) et que le premier chargement **ajoutait** une entrée au lieu de la remplacer. La
+> première navigation passe désormais par `location.replace` : l'historique commence à la vraie page,
+> « Retour » reste inactif tant qu'il n'y a rien de vrai derrière. Preuves : `cargo test` **226/226**,
+> `tester-ui` **105/105**, `outils/eprouver-retour-onglet.mjs` (CDP `Page.getNavigationHistory`).
+>
 > **0.4.69, publiée et installée le 2026-11-26.** « Dès que je mets un côte à côte ça la met à
 > droite, et celle de gauche ne se remplace jamais » — mesuré : la paire était recalculée à chaque
 > fois comme `(page active, page neuve)`, donc « gauche » n'était pas un endroit mais « la page où
@@ -348,7 +356,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.69-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.70-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

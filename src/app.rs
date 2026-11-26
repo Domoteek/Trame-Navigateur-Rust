@@ -2403,10 +2403,17 @@ impl App {
             let geo = self.geometrie_courante();
             self.superposer(&geo);
             // L'onglet est en place : maintenant seulement, sa page (voir `creer_onglet_webview`).
+            // Elle REMPLACE la page blanche de la création : sinon le bouton Retour serait actif
+            // dès l'ouverture, et ramènerait sur `about:blank` (constat du 2026-11-26).
             if let Some(url) = self.navigation_differee.remove(&id) {
                 if let Some(w) = self.webviews.get(&id) {
-                    if let Err(e) = charger(w, &url) {
-                        alerte!("onglet {id} : chargement de {url} impossible ({e})");
+                    if let Err(e) = remplacer_entree(w, &url) {
+                        // Document pas encore prêt : on retombe sur un chargement ordinaire, et
+                        // l'entrée blanche reste — c'est l'état d'avant, pas une régression.
+                        info!("onglet {id} : remplacement de l'entrée blanche impossible ({e})");
+                        if let Err(e) = charger(w, &url) {
+                            alerte!("onglet {id} : chargement de {url} impossible ({e})");
+                        }
                     }
                 }
             }
@@ -7195,6 +7202,19 @@ const APERCU: &str = include_str!("../ui/apercu.js");
 /// le schema `trame:` (l'onglet prenait le nom « Reglages » mais gardait la page d'accueil).
 fn charger(w: &WebView, url: &str) -> wry::Result<()> {
     w.load_url(&adresse_moteur(url))
+}
+
+/// Première navigation d'une page fraîchement créée : elle **remplace** l'entrée `about:blank`
+/// de la création au lieu de s'y ajouter.
+///
+/// Sans cela, l'onglet garde une page blanche derrière lui : le bouton Retour est actif dès
+/// l'ouverture, et un retour y ramène (constat de Clément, 2026-11-26 : ouvrir un raccourci
+/// YouTube, revenir sur l'accueil, revenir encore → `about:blank`). `location.replace` ne laisse
+/// aucune entrée derrière lui, donc l'historique commence à la vraie page.
+fn remplacer_entree(w: &WebView, url: &str) -> wry::Result<()> {
+    // `serde_json` produit une chaîne JavaScript valide (guillemets et échappements compris).
+    let cible = serde_json::to_string(&adresse_moteur(url)).unwrap_or_else(|_| "\"about:blank\"".to_string());
+    w.evaluate_script(&format!("location.replace({cible});"))
 }
 
 /// Forme que WebView2 comprend pour une page interne : `http://trame.localhost/...`.

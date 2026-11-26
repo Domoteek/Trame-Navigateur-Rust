@@ -286,6 +286,23 @@ Trois garde-fous, chacun à un étage différent :
 Preuve mesurée : `TRAME_NAV=chrome-search://local-ntp/local-ntp.html` →
 `navigation refusee (adresse interne de Chromium)`, et l'onglet garde sa page.
 
+## 9 bis. Piège n° 4 : la page blanche laissée dans l'historique
+
+Un onglet ne naît pas sur son adresse : sa webview est créée sur `about:blank`, mise en place, et
+seulement ensuite chargée (c'est ce qui évite la page **inerte** constatée sur Amazon et YouTube —
+voir `creer_onglet_webview`). Mais un `navigate` **ajoute** une entrée : l'historique devenait donc
+`["about:blank", <la page>]`, ce qui (1) active le bouton Retour dès l'ouverture d'un onglet et
+(2) y ramène sur une page blanche. Constat de Clément le 2026-11-26 : ouvrir un raccourci YouTube,
+revenir sur l'accueil, revenir encore → `about:blank`.
+
+La première navigation se fait donc par **`location.replace(<adresse>)`** (`remplacer_entree`) :
+elle *remplace* l'entrée blanche, l'historique commence à la vraie page, et « Retour » reste inactif
+tant qu'il n'y a rien de vrai derrière. Mesure qui le prouve (`outils/eprouver-retour-onglet.mjs`,
+CDP `Page.getNavigationHistory`) : `["https://example.com/"]`, position 0, bouton inactif ; puis
+`["https://example.com/", "https://example.com/?deux"]`, et un Retour ramène sur la première.
+Si `evaluate_script` échoue (document pas prêt), on retombe sur un `load_url` ordinaire : c'est
+l'état d'avant, pas une régression.
+
 ## 10. L'icône
 
 Trois pièces, et les trois sont nécessaires :

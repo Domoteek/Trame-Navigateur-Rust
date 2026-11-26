@@ -1414,6 +1414,22 @@ dit déjà. Preuves : `cargo test` **226/226** (+4), `tester-ui` **105/105** (+3
 droite → `(3, 1)` ; la session écrite garde `cote: [3,1]`. Limite : deux pages au plus, et les deux
 doivent être éveillées (le côte à côte réveille l'autre).
 
+**0.4.70 — plus de page blanche derrière un onglet.** « J'ouvre un raccourci YouTube, je vois déjà la
+flèche de retour active ; je lis une vidéo, retour → l'accueil YouTube, encore retour → about:blank »
+(Clément, 26/11). **Mesuré avant de toucher** (`outils/eprouver-retour-onglet.mjs`, CDP
+`Page.getNavigationHistory` sur le vrai binaire) : l'historique de l'onglet était
+`["about:blank", "https://example.com/"]`, position 1, bouton actif — exactement le constat. La cause
+n'est pas un oubli mais la **conséquence de l'ordre voulu** : la webview naît sur `about:blank` et
+n'est chargée qu'ensuite (c'est ce qui évite la page inerte d'Amazon et de YouTube), or un `navigate`
+**ajoute** une entrée au lieu de la remplacer. Correctif : la **première** navigation passe par
+`location.replace(<adresse>)` (`remplacer_entree`) — elle remplace l'entrée blanche, donc
+l'historique commence à la vraie page et « Retour » reste inactif tant qu'il n'y a rien de vrai
+derrière. Repli : si le document n'est pas prêt, `load_url` ordinaire (l'état d'avant). Preuves :
+`cargo test` **226/226**, `tester-ui` **105/105**, et le banc sur le vrai binaire :
+`["https://example.com/"]`, position 0, bouton **inactif**, document `complete` (titre « Example
+Domain » — donc pas de page inerte) ; puis `["…/", "…/?deux"]` et le Retour ramène sur la première,
+bouton de nouveau inactif. Piège écrit dans `docs/ARCHITECTURE.md` (« Piège n° 4 »).
+
 ## 11. L'état aujourd'hui
 
 ```
