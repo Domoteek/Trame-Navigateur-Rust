@@ -1,47 +1,47 @@
-﻿//! Le tunnel WireGuard de Trame â€” **la configuration**, et la clÃ© privÃ©e protÃ©gÃ©e.
+//! Le tunnel WireGuard de Trame — **la configuration**, et la clé privée protégée.
 //!
-//! DÃ©cision de ClÃ©ment (2026-11-27) : le VPN doit Ãªtre **intÃ©grÃ© Ã  Trame**, et Trame s'installe
-//! **par utilisateur** (aucun droit administrateur). D'oÃ¹ l'architecture retenue, en deux temps :
+//! Décision de Clément (2026-11-27) : le VPN doit être **intégré à Trame**, et Trame s'installe
+//! **par utilisateur** (aucun droit administrateur). D'où l'architecture retenue, en deux temps :
 //!
-//!   1. **ce module** : lire une configuration WireGuard (`.conf`), la valider, et garder la **clÃ©
-//!      privÃ©e chiffrÃ©e par Windows** (DPAPI, compte de l'utilisateur) â€” jamais en clair dans un
-//!      fichier de rÃ©glages ;
-//!   2. le tunnel lui-mÃªme (WireGuard en espace utilisateur, puis un proxy local que Trame
-//!      traverse) : il viendra ensuite, et c'est ce qui Ã©vite d'installer un pilote.
+//!   1. **ce module** : lire une configuration WireGuard (`.conf`), la valider, et garder la **clé
+//!      privée chiffrée par Windows** (DPAPI, compte de l'utilisateur) — jamais en clair dans un
+//!      fichier de réglages ;
+//!   2. le tunnel lui-même (WireGuard en espace utilisateur, puis un proxy local que Trame
+//!      traverse) : il viendra ensuite, et c'est ce qui évite d'installer un pilote.
 //!
-//! Rien ici ne touche au rÃ©seau : ce module ne fait que lire et vÃ©rifier.
+//! Rien ici ne touche au réseau : ce module ne fait que lire et vérifier.
 
 use std::path::{Path, PathBuf};
 
 /// Une configuration WireGuard (`[Interface]` + un `[Peer]`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Config {
-    /// Nom donnÃ© par l'utilisateur (le nom du fichier importÃ©, par dÃ©faut).
+    /// Nom donné par l'utilisateur (le nom du fichier importé, par défaut).
     pub nom: String,
-    /// Adresses de l'interface, avec leur longueur de prÃ©fixe (`10.2.0.2/32`).
+    /// Adresses de l'interface, avec leur longueur de préfixe (`10.2.0.2/32`).
     pub adresses: Vec<String>,
     /// Serveurs DNS du tunnel.
     pub dns: Vec<String>,
     /// MTU (`None` : la valeur de WireGuard, 1420).
     pub mtu: Option<u16>,
-    /// Port d'Ã©coute local (`ListenPort`), facultatif.
+    /// Port d'écoute local (`ListenPort`), facultatif.
     pub port_ecoute: Option<u16>,
     /// `hote:port` du pair.
     pub endpoint: String,
-    /// ClÃ© publique du pair (base64).
+    /// Clé publique du pair (base64).
     pub cle_paire: String,
-    /// ClÃ© partagÃ©e (`PresharedKey`), facultative.
+    /// Clé partagée (`PresharedKey`), facultative.
     pub cle_partagee: Option<String>,
     /// Ce qui passe dans le tunnel (`AllowedIPs`).
     pub allowed_ips: Vec<String>,
     /// `PersistentKeepalive`, en secondes.
     pub keepalive: Option<u16>,
-    /// La clÃ© privÃ©e, **gardÃ©e en mÃ©moire seulement** (elle part dans `tunnel.cle`, chiffrÃ©e).
+    /// La clé privée, **gardée en mémoire seulement** (elle part dans `tunnel.cle`, chiffrée).
     pub cle_privee: String,
 }
 
 impl Config {
-    /// Ce qu'on montre sans jamais dÃ©voiler la clÃ© privÃ©e : l'essentiel pour reconnaÃ®tre la
+    /// Ce qu'on montre sans jamais dévoiler la clé privée : l'essentiel pour reconnaître la
     /// configuration.
     pub fn resume(&self) -> String {
         let adresses = if self.adresses.is_empty() {
@@ -49,10 +49,10 @@ impl Config {
         } else {
             self.adresses.join(", ")
         };
-        format!("{adresses} â†’ {} (clÃ© {}â€¦)", self.endpoint, empreinte(&self.cle_paire))
+        format!("{adresses} → {} (clé {}…)", self.endpoint, empreinte(&self.cle_paire))
     }
 
-    /// Le JSON public (tout sauf la clÃ© privÃ©e).
+    /// Le JSON public (tout sauf la clé privée).
     pub fn json_public(&self) -> String {
         serde_json::json!({
             "nom": self.nom,
@@ -69,7 +69,7 @@ impl Config {
         .to_string()
     }
 
-    /// Relit un JSON Ã©crit par `json_public` (la clÃ© privÃ©e vient d'ailleurs).
+    /// Relit un JSON écrit par `json_public` (la clé privée vient d'ailleurs).
     pub fn depuis_json(texte: &str, cle_privee: String) -> Result<Config, String> {
         let v: serde_json::Value = serde_json::from_str(texte).map_err(|e| format!("JSON illisible : {e}"))?;
         let chaines = |cle: &str| -> Vec<String> {
@@ -94,7 +94,7 @@ impl Config {
     }
 }
 
-/// Les 32 octets d'une clÃ© WireGuard (base64), pour le moteur du tunnel.
+/// Les 32 octets d'une clé WireGuard (base64), pour le moteur du tunnel.
 pub fn octets_32(cle: &str) -> Option<[u8; 32]> {
     let octets = decoder_base64(cle.trim())?;
     if octets.len() != 32 {
@@ -105,13 +105,13 @@ pub fn octets_32(cle: &str) -> Option<[u8; 32]> {
     Some(sortie)
 }
 
-/// Les 8 premiers caractÃ¨res d'une clÃ©, pour la reconnaÃ®tre Ã  l'Ã©cran sans la dÃ©voiler.
+/// Les 8 premiers caractères d'une clé, pour la reconnaître à l'écran sans la dévoiler.
 pub fn empreinte(cle: &str) -> String {
     cle.chars().take(8).collect()
 }
 
-/// Une clÃ© WireGuard : 32 octets en base64, et pas 32 zÃ©ros (une clÃ© nulle est un refus explicite
-/// de chiffrer, pas une clÃ©).
+/// Une clé WireGuard : 32 octets en base64, et pas 32 zéros (une clé nulle est un refus explicite
+/// de chiffrer, pas une clé).
 fn cle_valide(valeur: &str) -> bool {
     match decoder_base64(valeur.trim()) {
         Some(octets) => octets.len() == 32 && octets.iter().any(|o| *o != 0),
@@ -119,7 +119,7 @@ fn cle_valide(valeur: &str) -> bool {
     }
 }
 
-/// DÃ©code du base64 standard (avec ou sans remplissage `=`).
+/// Décode du base64 standard (avec ou sans remplissage `=`).
 fn decoder_base64(texte: &str) -> Option<Vec<u8>> {
     let mut sortie = Vec::new();
     let mut quartet = [0u8; 4];
@@ -153,13 +153,13 @@ fn decoder_base64(texte: &str) -> Option<Vec<u8>> {
             sortie.push((quartet[0] << 2) | (quartet[1] >> 4));
             sortie.push((quartet[1] << 4) | (quartet[2] >> 2));
         }
-        // Un reste de 1 caractÃ¨re n'est pas du base64.
+        // Un reste de 1 caractère n'est pas du base64.
         _ => return None,
     }
     Some(sortie)
 }
 
-/// `hote:port` (l'hÃ´te peut Ãªtre un nom ou une IP ; un `[v6]:port` est acceptÃ©).
+/// `hote:port` (l'hôte peut être un nom ou une IP ; un `[v6]:port` est accepté).
 fn endpoint_valide(valeur: &str) -> bool {
     let (hote, port) = match valeur.rsplit_once(':') {
         Some(p) => p,
@@ -171,7 +171,7 @@ fn endpoint_valide(valeur: &str) -> bool {
     matches!(port.trim().parse::<u16>(), Ok(p) if p > 0)
 }
 
-/// `10.2.0.2/32`, `fd00::2/128`, ou une adresse seule (prÃ©fixe complet supposÃ©).
+/// `10.2.0.2/32`, `fd00::2/128`, ou une adresse seule (préfixe complet supposé).
 fn adresse_plausible(valeur: &str) -> bool {
     let (adresse, prefixe) = match valeur.split_once('/') {
         Some((a, p)) => (a, Some(p)),
@@ -188,7 +188,7 @@ fn adresse_plausible(valeur: &str) -> bool {
 }
 
 /// Lit une configuration WireGuard. Rend une erreur **lisible** : c'est elle que l'interface
-/// affichera, et elle ne contient jamais la clÃ© privÃ©e.
+/// affichera, et elle ne contient jamais la clé privée.
 pub fn lire(texte: &str) -> Result<Config, String> {
     let mut section = String::new();
     let mut cle_privee: Option<String> = None;
@@ -212,7 +212,7 @@ pub fn lire(texte: &str) -> Result<Config, String> {
             continue;
         }
         let Some((nom, valeur)) = ligne.split_once('=') else {
-            return Err(format!("ligne {} : Â« {ligne} Â» n'est pas une affectation", numero + 1));
+            return Err(format!("ligne {} : « {ligne} » n'est pas une affectation", numero + 1));
         };
         let nom = nom.trim().to_ascii_lowercase();
         let valeur = valeur.trim();
@@ -228,10 +228,10 @@ pub fn lire(texte: &str) -> Result<Config, String> {
             ("interface", "address") => adresses.extend(liste()),
             ("interface", "dns") => dns.extend(liste()),
             ("interface", "mtu") => {
-                mtu = Some(valeur.parse::<u16>().map_err(|_| format!("MTU invalide : Â« {valeur} Â»"))?)
+                mtu = Some(valeur.parse::<u16>().map_err(|_| format!("MTU invalide : « {valeur} »"))?)
             }
             ("interface", "listenport") => {
-                port_ecoute = Some(valeur.parse::<u16>().map_err(|_| format!("ListenPort invalide : Â« {valeur} Â»"))?)
+                port_ecoute = Some(valeur.parse::<u16>().map_err(|_| format!("ListenPort invalide : « {valeur} »"))?)
             }
             ("peer", "publickey") => cle_paire = Some(valeur.to_string()),
             ("peer", "presharedkey") => cle_partagee = Some(valeur.to_string()),
@@ -241,10 +241,10 @@ pub fn lire(texte: &str) -> Result<Config, String> {
                 keepalive = Some(
                     valeur
                         .parse::<u16>()
-                        .map_err(|_| format!("PersistentKeepalive invalide : Â« {valeur} Â»"))?,
+                        .map_err(|_| format!("PersistentKeepalive invalide : « {valeur} »"))?,
                 )
             }
-            // Tout le reste est ignorÃ©, comme le fait WireGuard (options futures).
+            // Tout le reste est ignoré, comme le fait WireGuard (options futures).
             _ => {
                 if section != "interface" && section != "peer" {
                     return Err(format!(
@@ -256,35 +256,35 @@ pub fn lire(texte: &str) -> Result<Config, String> {
         }
     }
 
-    let cle_privee = cle_privee.ok_or("il manque Â« PrivateKey Â» dans [Interface]")?;
+    let cle_privee = cle_privee.ok_or("il manque « PrivateKey » dans [Interface]")?;
     if !cle_valide(&cle_privee) {
-        return Err("la clÃ© privÃ©e n'est pas une clÃ© WireGuard (32 octets en base64)".into());
+        return Err("la clé privée n'est pas une clé WireGuard (32 octets en base64)".into());
     }
-    let cle_paire = cle_paire.ok_or("il manque Â« PublicKey Â» dans [Peer]")?;
+    let cle_paire = cle_paire.ok_or("il manque « PublicKey » dans [Peer]")?;
     if !cle_valide(&cle_paire) {
-        return Err("la clÃ© publique du pair n'est pas une clÃ© WireGuard (32 octets en base64)".into());
+        return Err("la clé publique du pair n'est pas une clé WireGuard (32 octets en base64)".into());
     }
     if let Some(partagee) = &cle_partagee {
         if !cle_valide(partagee) {
-            return Err("la clÃ© partagÃ©e n'est pas une clÃ© WireGuard (32 octets en base64)".into());
+            return Err("la clé partagée n'est pas une clé WireGuard (32 octets en base64)".into());
         }
     }
-    let endpoint = endpoint.ok_or("il manque Â« Endpoint Â» dans [Peer]")?;
+    let endpoint = endpoint.ok_or("il manque « Endpoint » dans [Peer]")?;
     if !endpoint_valide(&endpoint) {
-        return Err(format!("Â« {endpoint} Â» n'est pas un endpoint Â« hote:port Â»"));
+        return Err(format!("« {endpoint} » n'est pas un endpoint « hote:port »"));
     }
     for a in &adresses {
         if !adresse_plausible(a) {
-            return Err(format!("adresse d'interface invalide : Â« {a} Â»"));
+            return Err(format!("adresse d'interface invalide : « {a} »"));
         }
     }
     for a in &allowed {
         if !adresse_plausible(a) {
-            return Err(format!("AllowedIPs invalide : Â« {a} Â»"));
+            return Err(format!("AllowedIPs invalide : « {a} »"));
         }
     }
     // Sans AllowedIPs, un client WireGuard ne route rien : on prend tout, c'est ce que veulent les
-    // configurations de fournisseur (Mullvad, ProtonVPNâ€¦).
+    // configurations de fournisseur (Mullvad, ProtonVPN…).
     if allowed.is_empty() {
         allowed.push("0.0.0.0/0".into());
         allowed.push("::/0".into());
@@ -305,7 +305,7 @@ pub fn lire(texte: &str) -> Result<Config, String> {
     })
 }
 
-/// Lit un fichier `.conf` et rend la configuration, nommÃ©e d'aprÃ¨s le fichier.
+/// Lit un fichier `.conf` et rend la configuration, nommée d'après le fichier.
 pub fn lire_fichier(chemin: &Path) -> Result<Config, String> {
     // Un fichier de configuration WireGuard est en UTF-8 ; on refuse le binaire franc.
     let octets = std::fs::read(chemin).map_err(|e| format!("lecture impossible : {e}"))?;
@@ -319,10 +319,10 @@ pub fn lire_fichier(chemin: &Path) -> Result<Config, String> {
     Ok(config)
 }
 
-// ------------------------------------------------------------------ stockage de la clÃ© privÃ©e
+// ------------------------------------------------------------------ stockage de la clé privée
 
-/// Chiffre la clÃ© privÃ©e avec **DPAPI**, au compte de l'utilisateur : le fichier n'est lisible que
-/// par lui, sur cette machine. (Le mÃªme mÃ©canisme que le coffre de secrets du hub, cÃ´tÃ© outillage.)
+/// Chiffre la clé privée avec **DPAPI**, au compte de l'utilisateur : le fichier n'est lisible que
+/// par lui, sur cette machine. (Le même mécanisme que le coffre de secrets du hub, côté outillage.)
 #[cfg(windows)]
 pub fn proteger(secret: &[u8]) -> Result<Vec<u8>, String> {
     use windows::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
@@ -340,7 +340,7 @@ pub fn proteger(secret: &[u8]) -> Result<Vec<u8>, String> {
     }
 }
 
-/// DÃ©chiffre ce que `proteger` a Ã©crit.
+/// Déchiffre ce que `proteger` a écrit.
 #[cfg(windows)]
 pub fn deproteger(secret: &[u8]) -> Result<Vec<u8>, String> {
     use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
@@ -368,16 +368,16 @@ pub fn deproteger(secret: &[u8]) -> Result<Vec<u8>, String> {
     Ok(secret.to_vec())
 }
 
-/// Enregistre la configuration : la partie publique dans `tunnel.json`, la clÃ© privÃ©e chiffrÃ©e dans
-/// `tunnel.cle`. Un fichier de rÃ©glages ne contient donc **jamais** la clÃ©.
+/// Enregistre la configuration : la partie publique dans `tunnel.json`, la clé privée chiffrée dans
+/// `tunnel.cle`. Un fichier de réglages ne contient donc **jamais** la clé.
 pub fn enregistrer(racine: &Path, config: &Config) -> Result<(), String> {
-    std::fs::write(racine.join("tunnel.json"), config.json_public()).map_err(|e| format!("Ã©criture impossible : {e}"))?;
+    std::fs::write(racine.join("tunnel.json"), config.json_public()).map_err(|e| format!("écriture impossible : {e}"))?;
     let chiffre = proteger(config.cle_privee.as_bytes())?;
-    std::fs::write(racine.join("tunnel.cle"), chiffre).map_err(|e| format!("Ã©criture impossible : {e}"))?;
+    std::fs::write(racine.join("tunnel.cle"), chiffre).map_err(|e| format!("écriture impossible : {e}"))?;
     Ok(())
 }
 
-/// Relit la configuration enregistrÃ©e (`None` : aucune).
+/// Relit la configuration enregistrée (`None` : aucune).
 pub fn charger(racine: &Path) -> Option<Config> {
     let public = std::fs::read_to_string(racine.join("tunnel.json")).ok()?;
     let chiffre = std::fs::read(racine.join("tunnel.cle")).ok()?;
@@ -386,7 +386,7 @@ pub fn charger(racine: &Path) -> Option<Config> {
     Config::depuis_json(&public, cle_privee).ok()
 }
 
-/// Oublie la configuration : les deux fichiers disparaissent (la clÃ© d'abord).
+/// Oublie la configuration : les deux fichiers disparaissent (la clé d'abord).
 pub fn oublier(racine: &Path) {
     let _ = std::fs::remove_file(racine.join("tunnel.cle"));
     let _ = std::fs::remove_file(racine.join("tunnel.json"));
@@ -401,7 +401,7 @@ pub fn fichiers(racine: &Path) -> (PathBuf, PathBuf) {
 mod tests {
     use super::*;
 
-    // Deux clÃ©s de test (32 octets en base64, aucune valeur rÃ©elle).
+    // Deux clés de test (32 octets en base64, aucune valeur réelle).
     const CLE_PRIVEE: &str = "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=";
     const CLE_PAIRE: &str = "xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=";
 
@@ -424,7 +424,7 @@ mod tests {
     }
 
     /// Sans `AllowedIPs`, un client route tout : c'est ce que font les configurations de
-    /// fournisseur, et sans cette rÃ¨gle la configuration importÃ©e ne servirait Ã  rien.
+    /// fournisseur, et sans cette règle la configuration importée ne servirait à rien.
     #[test]
     fn sans_allowed_ips_tout_passe_dans_le_tunnel() {
         let c = lire(&format!(
@@ -442,7 +442,7 @@ mod tests {
         assert!(lire(&texte).is_ok());
     }
 
-    /// Ce qui doit Ãªtre refusÃ©, avec un message qui dit quoi corriger (et jamais la clÃ© privÃ©e).
+    /// Ce qui doit être refusé, avec un message qui dit quoi corriger (et jamais la clé privée).
     #[test]
     fn les_configurations_invalides_sont_refusees_avec_un_message_clair() {
         let cas: Vec<(String, &str)> = vec![
@@ -460,7 +460,7 @@ mod tests {
             ),
             (
                 format!("[Interface]\nPrivateKey = trop-court\n\n[Peer]\nPublicKey = {CLE_PAIRE}\nEndpoint = 1.2.3.4:5\n"),
-                "clÃ© privÃ©e",
+                "clé privée",
             ),
             (
                 format!("[Interface]\nPrivateKey = {CLE_PRIVEE}\n\n[Peer]\nPublicKey = {CLE_PAIRE}\nEndpoint = sans-port\n"),
@@ -477,16 +477,16 @@ mod tests {
         ];
         for (texte, attendu) in cas {
             match lire(&texte) {
-                Ok(_) => panic!("cette configuration aurait dÃ» Ãªtre refusÃ©e : {texte}"),
+                Ok(_) => panic!("cette configuration aurait dû être refusée : {texte}"),
                 Err(e) => {
-                    assert!(e.contains(attendu), "message Â« {e} Â» ne parle pas de Â« {attendu} Â»");
-                    assert!(!e.contains(CLE_PRIVEE), "le message ne doit jamais contenir la clÃ© privÃ©e");
+                    assert!(e.contains(attendu), "message « {e} » ne parle pas de « {attendu} »");
+                    assert!(!e.contains(CLE_PRIVEE), "le message ne doit jamais contenir la clé privée");
                 }
             }
         }
     }
 
-    /// Une clÃ© nulle (32 zÃ©ros) est un refus explicite de chiffrer, pas une clÃ©.
+    /// Une clé nulle (32 zéros) est un refus explicite de chiffrer, pas une clé.
     #[test]
     fn une_cle_nulle_est_refusee() {
         let nulle = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -498,28 +498,28 @@ mod tests {
     fn le_json_public_ne_contient_pas_la_cle_privee() {
         let c = lire(&conf()).unwrap();
         let json = c.json_public();
-        assert!(!json.contains(CLE_PRIVEE), "la clÃ© privÃ©e ne doit jamais Ãªtre Ã©crite");
+        assert!(!json.contains(CLE_PRIVEE), "la clé privée ne doit jamais être écrite");
         let relu = Config::depuis_json(&json, c.cle_privee.clone()).unwrap();
         assert_eq!(relu.endpoint, c.endpoint);
         assert_eq!(relu.adresses, c.adresses);
         assert_eq!(relu.cle_privee, c.cle_privee);
     }
 
-    /// DPAPI : ce qui est chiffrÃ© se relit, et le chiffrÃ© ne contient pas le clair.
+    /// DPAPI : ce qui est chiffré se relit, et le chiffré ne contient pas le clair.
     #[test]
     fn la_cle_privee_est_chiffree_et_se_relit() {
         let clair = CLE_PRIVEE.as_bytes();
         let chiffre = proteger(clair).expect("DPAPI disponible");
-        assert_ne!(chiffre, clair, "le chiffrÃ© ne doit pas Ãªtre le clair");
+        assert_ne!(chiffre, clair, "le chiffré ne doit pas être le clair");
         assert!(
             !chiffre.windows(clair.len()).any(|f| f == clair),
-            "la clÃ© ne doit pas apparaÃ®tre telle quelle dans le fichier"
+            "la clé ne doit pas apparaître telle quelle dans le fichier"
         );
-        let relu = deproteger(&chiffre).expect("dÃ©chiffrement");
+        let relu = deproteger(&chiffre).expect("déchiffrement");
         assert_eq!(relu, clair);
     }
 
-    /// Le rÃ©sumÃ© ne dÃ©voile rien : il sert Ã  reconnaÃ®tre la configuration Ã  l'Ã©cran.
+    /// Le résumé ne dévoile rien : il sert à reconnaître la configuration à l'écran.
     #[test]
     fn le_resume_ne_devoile_pas_la_cle_privee() {
         let c = lire(&conf()).unwrap();

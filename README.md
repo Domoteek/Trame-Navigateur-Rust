@@ -249,6 +249,13 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.80, publiée et installée le 2026-11-27.** Le portier couvre enfin **le réveil d'un onglet** :
+> `app.clem-informatique.com` réveillé sous portier donnait une **page vide** — la navigation partait
+> se faire refuser par la garde, qui n'affiche rien. Un onglet réveillé passe désormais par le même
+> contrôle que les autres et montre la **page du tunnel** avec son adresse visée, celle qui repart
+> toute seule dès que le portier se lève. Preuves : `cargo test` **241/241**, les deux bancs du tunnel
+> verts (`eprouver-tunnel.mjs` : rechargement bloqué → page du tunnel, puis reprise automatique).
+>
 > **0.4.79, publiée et installée le 2026-11-27.** Le portier ne laisse plus d'onglet **noir** et sait
 > se **défaire** tout seul. Trois corrections : (1) une navigation refusée (F5 sur un onglet déjà
 > chargé) n'abandonne plus la page — l'onglet est envoyé sur la page du tunnel, qui porte l'adresse
@@ -446,7 +453,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.79-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.80-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

@@ -2602,6 +2602,16 @@ impl App {
             // Elle REMPLACE la page blanche de la création : sinon le bouton Retour serait actif
             // dès l'ouverture, et ramènerait sur `about:blank` (constat du 2026-11-26).
             if let Some(url) = self.navigation_differee.remove(&id) {
+                // Portier « tunnel obligatoire » : un onglet RÉVEILLÉ ne charge pas un site sans
+                // tunnel. Sans ce contrôle, la navigation partait se faire refuser par la garde et
+                // l'onglet restait noir (constat de Clément, 2026-11-27 : `app.clem-informatique.com`
+                // réveillé, page vide).
+                let url = if self.tunnel_bloque(&url) {
+                    info!("portier tunnel : onglet {id} reveille, page du tunnel a la place de {url}");
+                    self.page_tunnel(&url)
+                } else {
+                    url
+                };
                 if let Some(w) = self.webviews.get(&id) {
                     if let Err(e) = remplacer_entree(w, &url) {
                         // Document pas encore prêt : on retombe sur un chargement ordinaire, et
