@@ -3391,6 +3391,60 @@ async function suite() {
     await p.close();
   });
 
+  await cas("reglages : importer un profil OpenVPN envoie aussi les identifiants", async () => {
+    const p = await page("reglages.html");
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: { astuces: true, tunnelOblige: false, tunnel: null },
+    });
+    await rubrique(p, "confidentialite");
+    // Sans identifiants : le message reste nu (un `.conf` WireGuard n'en veut pas).
+    await vider(p);
+    await p.click("#btn-tunnel-importer");
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelImporter"),
+      [{ m: "tunnelImporter" }],
+      "sans identifiants, l'import ne les envoie pas"
+    );
+    // Avec identifiants (profil .ovpn Nord) : ils partent avec l'import, jamais affichés ailleurs.
+    await vider(p);
+    await p.fill("#tunnel-utilisateur", "service-nord");
+    await p.fill("#tunnel-motdepasse", "secret-de-test");
+    await p.click("#btn-tunnel-importer");
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelImporter"),
+      [{ m: "tunnelImporter", utilisateur: "service-nord", motdepasse: "secret-de-test" }],
+      "les identifiants accompagnent l'import"
+    );
+    // La liste distingue les deux genres : « openvpn udp serveur ».
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: {
+        astuces: true,
+        tunnelOblige: true,
+        tunnel: null,
+        tunnels: {
+          actif: "nord-fr",
+          liste: [
+            { id: "nord-fr", nom: "nord-fr", resume: "openvpn udp 193.32.126.68", endpoint: "193.32.126.68", actif: true },
+            { id: "mullvad-fr", nom: "mullvad-fr", resume: "10.66.0.2/32 → 193.32.126.68:51820", endpoint: "193.32.126.68:51820", actif: false },
+          ],
+        },
+      },
+    });
+    egal(
+      (await p.$$eval("#liste-tunnels .tunnel-rangee", (n) => n.length)),
+      2,
+      "les deux genres sont listés ensemble"
+    );
+    egal(
+      (await p.$eval("#liste-tunnels .tunnel-rangee.actif", (n) => n.textContent)).includes("openvpn udp"),
+      true,
+      "l'actif dit son protocole"
+    );
+    await p.close();
+  });
+
   await cas("page du tunnel : elle dit l'adresse visée, et « Réessayer » la redemande", async () => {
     const p = await page("tunnel.html", { query: "?url=https%3A%2F%2Fexample.com%2Fx", sansEtat: true });
     verifier(

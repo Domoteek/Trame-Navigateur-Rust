@@ -264,6 +264,13 @@
       button.danger:hover { background: rgba(248, 113, 113, 0.14); }
       button[hidden] { display: none; }
       .boutons { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 0; }
+      /* Un champ de saisie dans une ligne de réglage : mêmes teintes que les boutons. */
+      .saisie {
+        font: inherit; font-size: 12px; color: var(--texte);
+        background: rgba(255, 255, 255, 0.05); border: 1px solid var(--bord);
+        border-radius: 8px; padding: 6px 10px;
+      }
+      .saisie:focus { outline: none; border-color: var(--bord-fort); background: rgba(255, 255, 255, 0.09); }
       /* Les configurations de tunnel rangees : une ligne par pays, celle qui est active marquee. */
       .tunnels { display: flex; flex-direction: column; }
       .tunnel-rangee { display: flex; align-items: center; gap: 14px; padding: 10px 2px; border-bottom: 1px solid var(--bord); }
@@ -676,10 +683,20 @@
               <div class="ligne">
                 <div class="libelle">
                   <b>Configurations du tunnel</b>
-                  <span id="txt-tunnel-conf">Aucune configuration importée. Trame lit un fichier <code>.conf</code> de WireGuard et garde la clé privée chiffrée par Windows (DPAPI) — jamais dans les réglages. On peut en garder plusieurs (un pays par fichier) et choisir celle qui se monte.</span>
+                  <span id="txt-tunnel-conf">Aucune configuration importée. Trame lit un fichier <code>.conf</code> de WireGuard <b>ou</b> un profil <code>.ovpn</code> d'OpenVPN, et garde ce qu'il faut chiffré par Windows (DPAPI) — jamais dans les réglages. On peut en garder plusieurs (un pays par fichier) et choisir celle qui se monte.</span>
                 </div>
                 <div class="boutons" style="margin: 0">
                   <button class="bouton" id="btn-tunnel-importer">Importer…</button>
+                </div>
+              </div>
+              <div class="ligne" id="ligne-tunnel-identifiants">
+                <div class="libelle">
+                  <b>Identifiants du fournisseur <span style="font-weight: 400; opacity: 0.7">(profils OpenVPN)</span></b>
+                  <span>Un profil <code>.ovpn</code> demande souvent un utilisateur et un mot de passe (NordVPN les appelle « identifiants de service »). Ils sont chiffrés comme le reste et ne servent qu'au tunnel. Laisser vide si le profil n'en demande pas.</span>
+                </div>
+                <div class="boutons" style="margin: 0">
+                  <input class="saisie" id="tunnel-utilisateur" type="text" placeholder="utilisateur" autocomplete="off" spellcheck="false" style="width: 140px" />
+                  <input class="saisie" id="tunnel-motdepasse" type="password" placeholder="mot de passe" autocomplete="off" style="width: 140px" />
                 </div>
               </div>
               <div id="liste-tunnels" class="tunnels"></div>
@@ -1837,7 +1854,16 @@
         $("btn-tunnel-importer").onclick = () => {
           confAvantImport = identiteTunnel(etat && etat.reglages);
           attenteImport = true;
-          ipc({ m: "tunnelImporter" });
+          // Les identifiants ne servent qu'aux profils OpenVPN qui les demandent ; ils partent avec
+          // l'import et sont chiffrés côté hôte. Vides, ils sont simplement omis.
+          const utilisateur = ($("tunnel-utilisateur").value || "").trim();
+          const motdepasse = $("tunnel-motdepasse").value || "";
+          const message = { m: "tunnelImporter" };
+          if (utilisateur) {
+            message.utilisateur = utilisateur;
+            message.motdepasse = motdepasse;
+          }
+          ipc(message);
         };
         $("plein-ecran").addEventListener("change", (e) => ipc({ m: "pleinEcran", mode: e.target.value }));
         $("barre-fenetre").addEventListener("change", (e) => ipc({ m: "barreFenetre", mode: e.target.value }));

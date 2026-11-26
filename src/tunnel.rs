@@ -305,20 +305,6 @@ pub fn lire(texte: &str) -> Result<Config, String> {
     })
 }
 
-/// Lit un fichier `.conf` et rend la configuration, nommée d'après le fichier.
-pub fn lire_fichier(chemin: &Path) -> Result<Config, String> {
-    // Un fichier de configuration WireGuard est en UTF-8 ; on refuse le binaire franc.
-    let octets = std::fs::read(chemin).map_err(|e| format!("lecture impossible : {e}"))?;
-    let texte = String::from_utf8(octets).map_err(|_| "le fichier n'est pas du texte UTF-8".to_string())?;
-    let mut config = lire(&texte)?;
-    config.nom = chemin
-        .file_stem()
-        .map(|n| n.to_string_lossy().to_string())
-        .filter(|n| !n.trim().is_empty())
-        .unwrap_or_else(|| "Tunnel".to_string());
-    Ok(config)
-}
-
 // ------------------------------------------------------------------ stockage de la clé privée
 
 /// Chiffre la clé privée avec **DPAPI**, au compte de l'utilisateur : le fichier n'est lisible que
@@ -437,15 +423,6 @@ pub enum Configuration {
         profil: String,
         identifiants: Option<(String, String)>,
     },
-}
-
-impl Configuration {
-    pub fn genre(&self) -> Genre {
-        match self {
-            Configuration::WireGuard(_) => Genre::WireGuard,
-            Configuration::OpenVpn { .. } => Genre::OpenVpn,
-        }
-    }
 }
 
 /// Dossier qui range toutes les configurations.
