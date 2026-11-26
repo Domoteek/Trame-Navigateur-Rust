@@ -1466,6 +1466,26 @@ possible. Preuves : `cargo test` **226/226**, `tester-ui` **105/105**, et le ban
 `docs/ARCHITECTURE.md` (« Piège n° 5 ») : un lien `target="_blank"` remplace la page courante (le
 Retour y ramène) au lieu d'ouvrir un onglet.
 
+**0.4.73 — un onglet de téléchargement ne reste pas noir.** Deux captures de Clément (26/11, vidéo
+YouTube en plein écran puis bascule vers Discord) : lancer un téléchargement (Trame est le navigateur
+par défaut) donnait une **fenêtre noire** et un navigateur à fermer de force ; au redémarrage, le même
+onglet **retéléchargeait** le fichier. Le journal du profil réel a donné la chaîne exacte :
+`lien externe : cdn.discordapp.com/…/Trame-0.4.39-setup.exe` → `onglet 415 reveille` →
+`telechargement : … -> Downloads\Trame-0.4.39-setup (1).exe` → `!! onglet 415 : premier chargement
+sans fin apres 12 s (jamais commence)`, puis au démarrage suivant la même séquence. **Cause** : la
+navigation vers un fichier **est** le téléchargement, donc aucune page n'arrive jamais ; l'onglet
+reste vide (noir) et la session le restaure, ce qui relance le fichier. **Mesures avant de choisir le
+remède** (`outils/sonder-telechargement-onglet.mjs`, serveur local lent) : refermer l'onglet **en plein
+téléchargement** laisse le fichier se terminer (24 Mo complets) ; le refermer **dès
+`DownloadStarting`** l'annule (0 octet). D'où la règle : un onglet **sans page** dont l'adresse est
+**celle du fichier** (comparaison hôte + chemin, `urls::meme_fichier`, les CDN changeant leurs jetons)
+est noté, puis **refermé dès que des octets coulent** (`suivre_telechargements`, ou au premier état du
+moteur) ; s'il a un historique derrière lui (une page qui a navigué vers le fichier), il **revient en
+arrière** et la page reste. Preuves : `cargo test` **227/227**, `tester-ui` **105/105**, et le banc
+`outils/eprouver-telechargement-onglet.mjs` : l'onglet du fichier apparaît puis **se referme seul**,
+le fichier de **16 Mo arrive entier**, la **session écrite ne le garde pas** (plus de
+re-téléchargement), et le clic sur un lien de fichier **depuis une page** laisse la page en place.
+
 ## 11. L'état aujourd'hui
 
 ```

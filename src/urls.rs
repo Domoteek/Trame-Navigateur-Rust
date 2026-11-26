@@ -167,6 +167,23 @@ pub fn normaliser(saisie: &str) -> String {
     normaliser_avec(saisie, MOTEUR_DEFAUT)
 }
 
+/// Deux adresses désignent-elles le **même fichier** ? On compare l'hôte et le chemin, pas la
+/// requête : les CDN y mettent des jetons signés qui changent d'un appel à l'autre (Discord :
+/// `ex=`, `is=`, `hm=`), et une redirection peut en ajouter.
+///
+/// Sert à reconnaître l'onglet dont la navigation **est** un téléchargement (voir
+/// `App::telechargement_debut`) : cet onglet n'a aucune page à montrer.
+pub fn meme_fichier(a: &str, b: &str) -> bool {
+    let cle = |s: &str| -> Option<(String, String)> {
+        let u = url::Url::parse(s).ok()?;
+        Some((u.host_str()?.to_ascii_lowercase(), u.path().to_string()))
+    };
+    match (cle(a), cle(b)) {
+        (Some(x), Some(y)) => x == y,
+        _ => a == b,
+    }
+}
+
 fn ressemble_a_un_hote(s: &str) -> bool {
     if s.contains(char::is_whitespace) {
         return false;
@@ -355,5 +372,24 @@ mod tests {
         assert!(!super::interne_chromium("https://fr.aliexpress.com/item/1.html"));
         assert!(!super::interne_chromium("trame://localhost/newtab.html"));
         assert!(!super::interne_chromium("about:blank"));
+    }
+
+    /// Deux adresses du même fichier se reconnaissent malgré le jeton signé du CDN : c'est ce qui
+    /// permet de refermer l'onglet ouvert pour un téléchargement (0.4.73).
+    #[test]
+    fn deux_adresses_du_meme_fichier_se_reconnaissent() {
+        let a = "https://cdn.discordapp.com/attachments/772/157/Trame-setup.exe?ex=1&is=2&hm=3";
+        let b = "https://cdn.discordapp.com/attachments/772/157/Trame-setup.exe?ex=9&is=8&hm=7";
+        assert!(super::meme_fichier(a, b), "même hôte, même chemin : même fichier");
+        assert!(
+            super::meme_fichier("https://cdn.exemple.fr/gros.exe", "https://CDN.EXEMPLE.fr/gros.exe"),
+            "la casse de l'hôte ne compte pas"
+        );
+        // Deux fichiers differents du meme hote ne se confondent pas.
+        assert!(!super::meme_fichier("https://cdn.exemple.fr/a.exe", "https://cdn.exemple.fr/b.exe"));
+        assert!(!super::meme_fichier("https://a.fr/x.exe", "https://b.fr/x.exe"));
+        // Ce qui n'est pas une adresse se compare tel quel (jamais d'egalite abusive).
+        assert!(super::meme_fichier("pas une adresse", "pas une adresse"));
+        assert!(!super::meme_fichier("pas une adresse", "autre chose"));
     }
 }

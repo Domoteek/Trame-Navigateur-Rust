@@ -101,7 +101,10 @@ pub enum UserEvent {
     /// Une navigation vers une adresse interne de Chromium a ete refusee.
     NavigationRefusee(String),
     /// Un telechargement commence (destination choisie, suivi branche).
-    TelechargementDebut(crate::telechargements::Telechargement),
+    TelechargementDebut {
+        onglet: TabId,
+        telechargement: crate::telechargements::Telechargement,
+    },
     /// Le moteur signale un changement d'etat d'un telechargement.
     TelechargementEtat {
         id: u64,
@@ -223,6 +226,10 @@ pub struct App {
     telechargements: Vec<crate::telechargements::Telechargement>,
     /// Dossier ou vont les telechargements, partage avec les gestionnaires du moteur.
     dossier_dl: std::rc::Rc<std::cell::RefCell<PathBuf>>,
+    /// Telechargements dont l'onglet n'avait aucune page : l'onglet se referme des que le fichier
+    /// coule (id du telechargement -> onglet). Le refermer des le `DownloadStarting` annulait le
+    /// telechargement (mesure du 2026-11-26 : 0 octet recu).
+    onglets_du_telechargement: std::collections::HashMap<u64, TabId>,
     /// Couleur annoncee par la page visible (`<meta name="theme-color">`), en mode dynamique.
     teinte_site: Option<String>,
     /// Un etat attend d'etre envoye aux surfaces (voir pousser_etat / ider_etat).
@@ -737,6 +744,7 @@ impl App {
             muets: std::collections::HashSet::new(),
             telechargements: Vec::new(),
             dossier_dl: std::rc::Rc::new(std::cell::RefCell::new(PathBuf::new())),
+    onglets_du_telechargement: std::collections::HashMap::new(),
             teinte_site: None,
             etat_a_envoyer: false,
             dernier_envoi_etat: std::time::Instant::now(),
@@ -1443,7 +1451,7 @@ impl App {
                 if let Err(e) = crate::moteur_ext::suivre_plein_ecran(&w, self.proxy.clone(), id) {
                     alerte!("onglet {id} : suivi du plein ecran impossible ({e})");
                 }
-                if let Err(e) = crate::telechargements::brancher(&w, self.proxy.clone(), site, self.dossier_dl.clone()) {
+                if let Err(e) = crate::telechargements::brancher(&w, self.proxy.clone(), id, site, self.dossier_dl.clone()) {
                     alerte!("onglet {id} : suivi des telechargements impossible ({e})");
                 }
                 // Adresses nettoyees au niveau reseau (liens suivis par la page, redirections).
@@ -3637,7 +3645,7 @@ impl App {
                     urls::affichage_court(&url)
                 ));
             }
-            UserEvent::TelechargementDebut(t) => self.telechargement_debut(t),
+            UserEvent::TelechargementDebut { onglet, telechargement } => self.telechargement_debut(onglet, telechargement),
             UserEvent::TelechargementEtat { id, termine, interrompu, reprenable, raison, recu } => {
                 self.telechargement_etat(id, termine, interrompu, reprenable, raison, recu)
             }
@@ -5473,7 +5481,7 @@ impl App {
     }
 
     /// Un telechargement commence : il entre en tete de liste, et l'interface le montre.
-    fn telechargement_debut(&mut self, mut t: crate::telechargements::Telechargement) {
+    fn telechargement_debut(&mut self, onglet: TabId, mut t: crate::telechargements::Telechargement) {
         // Le site du fichier lui-meme : celui de l'onglet a sa creation peut etre la page
         // d'accueil interne (« localhost ») ou un site quitte depuis.
         if let Ok(u) = url::Url::parse(&t.url) {
@@ -5483,13 +5491,75 @@ impl App {
         }
         info!("telechargement : {} -> {}", t.url, t.chemin);
         self.signaler(&format!("Téléchargement : {}", t.fichier));
-        self.telechargements.push(t);
+        self.telechargements.push(t.clone());
         self.profil.sauver_telechargements(&self.telechargements);
+        self.pousser_etat();
+
+        // Un onglet dont la navigation EST le telechargement n'a aucune page a montrer : il reste
+        // noir, son premier chargement ne finit jamais (journal : « premier chargement sans fin »)
+        // et la session le restaure au demarrage suivant, donc il RETELE charge le fichier —
+        // constat de Clement le 2026-11-26 (lien de telechargement Discord : fenetre noire, puis
+        // un fichier de plus a chaque demarrage).
+        //
+        // Le fichier, lui, survit a la fermeture de l'onglet (mesure du 2026-11-26 : 24 Mo servis
+        // en 12 s, complets malgre la fermeture). Donc : si l'onglet n'a pas d'historique derriere
+        // lui (ouvert POUR le fichier), on le referme ; s'il vient d'une page (la page a navigue
+        // vers le fichier), on revient en arriere et la page reste.
+        // Un onglet SANS titre n'a pas de document : la navigation est consommée par le
+        // téléchargement. `chargement` ne suffit pas ici — la navigation différée d'un onglet neuf
+        // ne le passe pas à vrai (mesuré : il valait faux au moment du téléchargement).
+        let pour_le_fichier = self
+            .trouver(onglet)
+            .map(|o| o.titre.is_empty() && urls::meme_fichier(&o.url, &t.url))
+            .unwrap_or(false);
+        info!(
+            "onglet {onglet} : téléchargement de {} — onglet {} ({})",
+            t.url,
+            self.trouver(onglet).map(|o| o.url.clone()).unwrap_or_default(),
+            if pour_le_fichier { "sans page : refermer ou revenir" } else { "gardé" }
+        );
+        if pour_le_fichier {
+            let revient = self
+                .webviews
+                .get(&onglet)
+                .and_then(|w| w.can_go_back().ok())
+                .unwrap_or(false);
+            if revient {
+                info!("onglet {onglet} : navigation vers un fichier — retour a la page precedente");
+                if let Some(w) = self.webviews.get(&onglet) {
+                    let _ = w.go_back();
+                }
+            } else {
+                // Pas d'historique : cet onglet n'existait que pour le fichier. On le referme des
+                // que des octets arrivent (`suivre_telechargements`) — le refermer tout de suite
+                // annule le téléchargement.
+                self.onglets_du_telechargement.insert(t.id, onglet);
+            }
+            self.marquer_modifie();
+            self.pousser_etat();
+        }
+    }
+
+    /// Referme l'onglet qui n'existait que pour un fichier, une fois que ce fichier coule.
+    fn refermer_onglet_du_telechargement(&mut self, id: u64) {
+        let Some(onglet) = self.onglets_du_telechargement.remove(&id) else { return };
+        if self.trouver(onglet).is_none() {
+            return; // deja ferme par l'utilisateur
+        }
+        info!("onglet {onglet} : ouvert pour un fichier — referme (le fichier coule)");
+        self.premier_chargement.remove(&onglet);
+        self.fermer_onglet(onglet);
+        self.marquer_modifie();
         self.pousser_etat();
     }
 
     /// Le moteur signale un changement d'etat (fin, echec, annulation, pause).
     fn telechargement_etat(&mut self, id: u64, termine: bool, interrompu: bool, reprenable: bool, raison: i32, recu: u64) {
+        // Avant de toucher à la liste : l'onglet qui n'existait que pour ce fichier peut partir
+        // maintenant que des octets sont arrivés (ou que c'est fini).
+        if recu > 0 || termine || interrompu {
+            self.refermer_onglet_du_telechargement(id);
+        }
         let Some(t) = self.telechargements.iter_mut().find(|t| t.id == id) else { return };
         // Deja clos : le moteur emet parfois un second evenement apres notre propre deduction
         // (voir `suivre_telechargements`). Il ne doit ni rejouer le toast, ni reinstaller un
@@ -5727,8 +5797,7 @@ impl App {
                     }
                     change = true;
                 }
-            }
-            // Le moteur oublie parfois de dire qu'il a fini (WebView2 #5638) : l'operation reste
+            }            // Le moteur oublie parfois de dire qu'il a fini (WebView2 #5638) : l'operation reste
             // « en cours » alors que tous les octets sont arrives. L'interroger n'aide pas, son
             // `State` reste bloque — mais le fichier, lui, porte la taille annoncee. Cela vaut
             // preuve : `BytesReceived` compte les octets ecrits, pas ceux en vol.
@@ -5740,6 +5809,24 @@ impl App {
         }
         if change {
             self.pousser_etat();
+        }
+        // Un onglet qui n'existait que pour un fichier se referme des que des octets coulent : le
+        // fermer avant annulait le téléchargement (mesure du 2026-11-26), le garder laissait une
+        // page noire qui se rechargeait à chaque démarrage.
+        if !self.onglets_du_telechargement.is_empty() {
+            let prets: Vec<u64> = self
+                .onglets_du_telechargement
+                .keys()
+                .copied()
+                .filter(|id| {
+                    self.telechargements
+                        .iter()
+                        .any(|t| t.id == *id && (t.recu > 0 || t.etat != "en_cours"))
+                })
+                .collect();
+            for id in prets {
+                self.refermer_onglet_du_telechargement(id);
+            }
         }
         for (id, recu) in clos {
             info!("telechargement {id} : fin deduite du fichier (le moteur n'a rien signale)");

@@ -154,6 +154,7 @@ pub fn fichier_complet(chemin: &str, total: Option<u64>) -> bool {
 pub fn brancher(
     webview: &WebView,
     proxy: EventLoopProxy<UserEvent>,
+    onglet: crate::model::TabId,
     site: String,
     dossier: std::rc::Rc<RefCell<PathBuf>>,
 ) -> Result<(), String> {
@@ -212,22 +213,25 @@ pub fn brancher(
             let mut jeton = 0i64;
             operation.add_StateChanged(&changement, &mut jeton)?;
 
-            let _ = proxy.send_event(UserEvent::TelechargementDebut(Telechargement {
-                id,
-                url,
-                fichier: chemin
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or(nom),
-                chemin: chemin_txt,
-                site: site.clone(),
-                total: (total > 0).then_some(total as u64),
-                recu: 0,
-                etat: "en_cours".into(),
-                raison: String::new(),
-                debut: crate::log::maintenant_ms(),
-                fin: 0,
-            }));
+            let _ = proxy.send_event(UserEvent::TelechargementDebut {
+                onglet,
+                telechargement: Telechargement {
+                    id,
+                    url,
+                    fichier: chemin
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or(nom),
+                    chemin: chemin_txt,
+                    site: site.clone(),
+                    total: (total > 0).then_some(total as u64),
+                    recu: 0,
+                    etat: "en_cours".into(),
+                    raison: String::new(),
+                    debut: crate::log::maintenant_ms(),
+                    fin: 0,
+                },
+            });
         }
         Ok(())
     }));

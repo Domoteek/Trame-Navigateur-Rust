@@ -25,6 +25,15 @@ façon dont un site demande une fenêtre. Le banc les clique pour de vrai (CDP) 
 
 <button id="popup-repli">4. window.open(adresse) refusée, puis repli sur la page courante (le cas Google / boutique)</button>
 
+<a id="lien-fichier" href="about:blank">5. Lien vers un FICHIER (téléchargement) — la page doit rester</a>
+
+<script>
+  // Le fichier est servi par le banc (`outils/eprouver-telechargement-onglet.mjs`), qui passe son
+  // adresse en paramètre : la page de mesure reste locale et ne connaît aucun port.
+  const fichier = new URLSearchParams(location.search).get("fichier");
+  if (fichier) document.getElementById("lien-fichier").href = fichier;
+</script>
+
 <script>
   // Cas 2 : la page demande une fenêtre VIDE, y écrit si elle l'a obtenue, et retombe sur la
   // navigation de la page courante. C'est ce que fait un site quand son popup est refusé — et

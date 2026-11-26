@@ -249,6 +249,15 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.73, publiée et installée le 2026-11-27.** Un lien de **téléchargement** (fichier `.exe` sur
+> Discord) ouvert par Trame laissait un onglet **noir** : la navigation *est* le téléchargement, donc
+> aucune page n'arrivait jamais — et l'onglet restauré au démarrage **retéléchargeait** le fichier à
+> chaque fois. Mesuré : le fichier survit à la fermeture de l'onglet (24 Mo complets), mais pas si on
+> ferme trop tôt (0 octet reçu). L'onglet ouvert **pour** un fichier se referme donc **dès que des
+> octets coulent** ; une **page** qui navigue vers un fichier, elle, reste et revient en arrière.
+> Preuves : `cargo test` **227/227**, `tester-ui` **105/105**, `outils/eprouver-telechargement-onglet.mjs`
+> (16 Mo entiers, onglet refermé, aucun onglet de fichier en session).
+>
 > **0.4.72, publiée et installée le 2026-11-26.** Depuis une recherche Google, le même article
 > s'ouvrait dans **deux** onglets (celui d'origine ayant même le bon historique). Mesuré : le motif
 > des moteurs et des boutiques est `window.open(url)` puis, la fenêtre étant refusée, `location.href =
@@ -374,7 +383,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.72-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.73-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >
