@@ -28,6 +28,7 @@ mod moteur_ext;
 mod probe;
 mod profile;
 mod protocol;
+mod reseau;
 mod ressources;
 mod sauvegarde;
 mod sauvegarde_auto;

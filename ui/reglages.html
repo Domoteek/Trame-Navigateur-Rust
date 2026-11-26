@@ -641,6 +641,26 @@
             </div>
           </div>
 
+          <div class="groupe" data-mots="tunnel vpn wireguard wintun tap openvpn réseau portier bloquer navigation">
+            <h3>Tunnel (VPN)</h3>
+            <div class="carte">
+              <div class="ligne">
+                <div class="libelle">
+                  <b>Exiger un tunnel avant de naviguer</b>
+                  <span>Sans tunnel monté, Trame refuse d'ouvrir un site et affiche une page qui explique. Les réglages et les pages internes restent accessibles — sinon on ne pourrait plus éteindre cette exigence.</span>
+                </div>
+                <div class="bascule" id="bascule-tunnel"></div>
+              </div>
+              <div class="ligne sous">
+                <div class="libelle">
+                  <b>Tunnel détecté</b>
+                  <span id="txt-tunnel">—</span>
+                </div>
+                <button class="bouton" id="btn-tunnel-relire">Relire</button>
+              </div>
+            </div>
+          </div>
+
           <div class="groupe" data-mots="mémoire de lecture texte pages lues sites jamais gardés exclus">
             <h3>Ce que Trame retient</h3>
             <div class="carte">
@@ -1529,6 +1549,11 @@
           $("bascule-budget-auto").className = "bascule" + (r.budgetAuto ? " on" : "");
           $("bascule-nettoyer").className = "bascule" + (r.nettoyerAdresses ? " on" : "");
           $("bascule-affiliation").className = "bascule" + (r.garderAffiliation ? " on" : "");
+          // Portier « tunnel obligatoire » : le reglage, et le tunnel que Windows voit vraiment.
+          $("bascule-tunnel").className = "bascule" + (r.tunnelOblige ? " on" : "");
+          $("txt-tunnel").textContent = r.tunnel
+            ? `Oui — ${r.tunnel}`
+            : "Aucun tunnel monté (WireGuard, Wintun, TAP, OpenVPN, VPN Windows…).";
           // L'affiliation n'a de sens que si l'on nettoie : grisee, mais toujours reglable.
           $("ligne-affiliation").classList.toggle("gris", !r.nettoyerAdresses);
           $("bascule-pause").className = "bascule" + (r.pauseOnglets ? " on" : "");
@@ -1674,6 +1699,10 @@
           ipc({ m: "memoireBasse", actif: !((etat && etat.reglages && etat.reglages.memoireBasse) || false) });
         $("bascule-barre-ext").onclick = () =>
           ipc({ m: "barreExtensions", visible: !((etat && etat.reglages && etat.reglages.barreExtensions) || false) });
+        // Portier « tunnel obligatoire » : le reglage, et la relecture de l'etat du reseau.
+        $("bascule-tunnel").onclick = () =>
+          ipc({ m: "tunnelOblige", actif: !((etat && etat.reglages && etat.reglages.tunnelOblige) || false) });
+        $("btn-tunnel-relire").onclick = () => ipc({ m: "tunnelReessayer", url: "" });
         $("plein-ecran").addEventListener("change", (e) => ipc({ m: "pleinEcran", mode: e.target.value }));
         $("barre-fenetre").addEventListener("change", (e) => ipc({ m: "barreFenetre", mode: e.target.value }));
         $("rail-acces").addEventListener("change", (e) => ipc({ m: "railStyle", acces: e.target.value }));

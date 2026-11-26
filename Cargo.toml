@@ -1,6 +1,6 @@
 [package]
 name = "trame"
-version = "0.4.74"
+version = "0.4.75"
 edition = "2021"
 description = "Trame — navigateur a onglets tisses (Rust + WebView2)"
 license = "MIT"
@@ -23,7 +23,7 @@ webview2-com = "=0.39.1"
 # locale (et non en UTC, ce qui ferait lire 20 h a 21 h — cf. AGENTS.md, § 4 ter).
 # Win32_Security_WinTrust + Win32_Security_Cryptography : `WinVerifyTrust`, pour refuser un
 # installeur de mise a jour non signe (src/signature.rs).
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Security_Cryptography", "Win32_Security_WinTrust", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_System_SystemInformation", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_Security_Cryptography", "Win32_Security_WinTrust", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_System_SystemInformation", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 # Verification des signatures d'extensions (CRX3) : RSA-SHA256, en Rust pur.
 # `sha2` avec la fonctionnalite `oid` : c'est elle qui declare l'OID de SHA-256, sans laquelle
 # une signature PKCS#1 v1.5 ne peut pas etre verifiee (l'OID fait partie des octets signes).

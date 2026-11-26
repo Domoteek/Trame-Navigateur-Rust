@@ -410,6 +410,11 @@ pub struct Reglages {
     /// Protection anti-pistage de WebView2 : "aucune", "equilibree" ou "stricte".
     #[serde(default = "pistage_defaut")]
     pub anti_pistage: String,
+    /// Portier « tunnel obligatoire » : quand il est allume et qu'aucun tunnel (VPN) n'est monte,
+    /// Trame refuse d'ouvrir un site et affiche une page qui explique. Choix de Clement (2026-11-27)
+    /// pour ne jamais laisser passer du trafic en clair a son insu.
+    #[serde(default)]
+    pub tunnel_oblige: bool,
     /// Mettre en pause (scripts, minuteries) un onglet cache depuis `pause_apres_s`, sauf s'il
     /// joue du son.
     #[serde(default = "vrai")]
@@ -647,6 +652,7 @@ impl Default for Reglages {
             nettoyer_adresses: true,
             garder_affiliation: true,
             anti_pistage: pistage_defaut(),
+        tunnel_oblige: false,
             pause_onglets: true,
             memoire_lecture: true,
             lecture_exclus: Vec::new(),

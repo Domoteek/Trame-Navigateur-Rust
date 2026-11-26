@@ -201,7 +201,11 @@ async function page(fichier, options = {}) {
     window.ipc = { postMessage: (brut) => window.__ipc.push(JSON.parse(brut)) };
   });
   await ongletPage.goto(`${base}/${fichier}${options.query || ""}`);
-  await ongletPage.waitForFunction(() => window.trame && typeof window.trame.etat === "function");
+  // Certaines pages internes ne reçoivent aucun état (la page du tunnel lit son adresse dans
+  // l'URL) : elles n'ont pas de `window.trame`, et l'attendre ferait echouer le cas.
+  if (!options.sansEtat) {
+    await ongletPage.waitForFunction(() => window.trame && typeof window.trame.etat === "function");
+  }
   await ongletPage.evaluate(() => {
     window.__ipc = [];
   });
@@ -3076,6 +3080,64 @@ async function suite() {
     await p.click("#btn-page");
     await pousser(p, { ...etat, hauteurFenetre: 600, largeurFenetre: 1000 });
     verifier(await p.$eval("#menu-page", (n) => !n.hidden), "un état sans changement de taille laisse le menu ouvert");
+    await p.close();
+  });
+
+  await cas("reglages : le portier tunnel s'allume, et son état se relit", async () => {
+    const p = await page("reglages.html");
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: { astuces: true, tunnelOblige: false, tunnel: null },
+    });
+    await rubrique(p, "confidentialite");
+    egal(await p.$eval("#bascule-tunnel", (n) => n.className.includes("on")), false, "portier éteint au départ");
+    verifier(
+      (await p.$eval("#txt-tunnel", (n) => n.textContent)).includes("Aucun tunnel"),
+      "l'état du tunnel est dit quand il n'y en a pas"
+    );
+    await vider(p);
+    await p.click("#bascule-tunnel");
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelOblige"),
+      [{ m: "tunnelOblige", actif: true }],
+      "la bascule demande le portier"
+    );
+    await vider(p);
+    await p.click("#btn-tunnel-relire");
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelReessayer"),
+      [{ m: "tunnelReessayer", url: "" }],
+      "Relire redemande l'état du réseau"
+    );
+    // Tunnel monté : le nom est affiché.
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: { astuces: true, tunnelOblige: true, tunnel: "WireGuard Tunnel: wg0" },
+    });
+    egal(await p.$eval("#bascule-tunnel", (n) => n.className.includes("on")), true, "portier allumé");
+    verifier(
+      (await p.$eval("#txt-tunnel", (n) => n.textContent)).includes("WireGuard"),
+      "le nom du tunnel détecté est affiché"
+    );
+    await p.close();
+  });
+
+  await cas("page du tunnel : elle dit l'adresse visée, et « Réessayer » la redemande", async () => {
+    const p = await page("tunnel.html", { query: "?url=https%3A%2F%2Fexample.com%2Fx", sansEtat: true });
+    verifier(
+      (await p.$eval("#cible", (n) => n.textContent)).includes("https://example.com/x"),
+      "l'adresse bloquée est affichée"
+    );
+    await vider(p);
+    await p.click("#btn-reessayer");
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelReessayer"),
+      [{ m: "tunnelReessayer", url: "https://example.com/x" }],
+      "« Réessayer » redemande l'adresse bloquée"
+    );
+    await vider(p);
+    await p.click("#btn-reglages");
+    verifier((await messages(p)).some((m) => m.m === "ouvrirReglages"), "le bouton mène aux réglages");
     await p.close();
   });
 

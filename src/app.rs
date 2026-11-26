@@ -32,6 +32,8 @@ pub const HAUTEUR_PANNEAU: f64 = 420.0;
 /// Page de reglages interne.
 pub const PAGE_REGLAGES: &str = "trame://localhost/reglages.html";
 pub const PAGE_TELECHARGEMENTS: &str = "trame://localhost/telechargements.html";
+/// Page qui explique qu'aucun tunnel (VPN) n'est monté alors qu'il est exigé.
+pub const PAGE_TUNNEL: &str = "trame://localhost/tunnel.html";
 
 /// Quelle surface a envoye un message.
 #[derive(Clone, Copy, Debug)]
@@ -100,6 +102,9 @@ pub enum UserEvent {
     AdresseBloquee { onglet: TabId, adresse: String },
     /// Une navigation vers une adresse interne de Chromium a ete refusee.
     NavigationRefusee(String),
+    /// Une navigation vers un site a été refusée parce qu'aucun tunnel n'est monté alors que le
+    /// portier l'exige (voir `App::verifier_tunnel`).
+    TunnelBloque(String),
     /// Un telechargement commence (destination choisie, suivi branche).
     TelechargementDebut {
         onglet: TabId,
@@ -312,6 +317,12 @@ pub struct App {
     /// Nettoyage des adresses : (actif, garder l'affiliation), partage avec les gardes de
     /// navigation (qui vivent dans les webviews, hors de la boucle).
     nettoyage: std::sync::Arc<(std::sync::atomic::AtomicBool, std::sync::atomic::AtomicBool)>,
+    /// Portier « tunnel obligatoire » : `true` quand le reglage est allume ET qu'aucun tunnel n'est
+    /// monte. Partage avec les gardes de navigation, qui refusent alors tout site.
+    tunnel_bloque: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Le tunnel monte, s'il y en a un (sa description), et l'instant de la derniere verification.
+    tunnel: Option<String>,
+    tunnel_verifie: u64,
     /// Adresses refusees au reseau (`bloquer` des extensions allumees), partagees avec le
     /// gestionnaire `WebResourceRequested` de chaque onglet.
     blocage: crate::moteur_ext::Blocage,
@@ -795,6 +806,9 @@ impl App {
                 std::sync::atomic::AtomicBool::new(true),
                 std::sync::atomic::AtomicBool::new(true),
             )),
+            tunnel_bloque: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            tunnel: None,
+            tunnel_verifie: 0,
             blocage: crate::moteur_ext::Blocage::default(),
             adresses_nettoyees: 0,
             adresses_bloquees: 0,
@@ -1209,13 +1223,21 @@ impl App {
     /// en place et rend le refus visible.
     fn garde_navigation(&self) -> impl Fn(String) -> bool + 'static {
         let proxy = self.proxy.clone();
+        let tunnel = self.tunnel_bloque.clone();
         move |url: String| {
             if urls::interne_chromium(&url) {
                 let _ = proxy.send_event(UserEvent::NavigationRefusee(url));
-                false
-            } else {
-                true
+                return false;
             }
+            // Portier « tunnel obligatoire » : aucun site ne s'ouvre tant qu'aucun tunnel n'est
+            // monte. Les pages internes (reglages, tunnel, nouvel onglet) restent joignables,
+            // sinon on ne pourrait meme pas eteindre le reglage — et une adresse locale ne sort
+            // pas de la machine, donc elle ne fuit rien.
+            if tunnel.load(std::sync::atomic::Ordering::Relaxed) && !urls::interne_ou_locale(&url) {
+                let _ = proxy.send_event(UserEvent::TunnelBloque(url));
+                return false;
+            }
+            true
         }
     }
 
@@ -1240,6 +1262,52 @@ impl App {
         use std::sync::atomic::Ordering::Relaxed;
         self.nettoyage.0.store(self.reglages.nettoyer_adresses, Relaxed);
         self.nettoyage.1.store(self.reglages.garder_affiliation, Relaxed);
+    }
+
+    /// Relit l'état du réseau et met à jour le portier « tunnel obligatoire ».
+    ///
+    /// Au plus une lecture toutes les 5 s (une enumeration de cartes n'est pas gratuite et rien ne
+    /// change a cette echelle), sauf `force` : au demarrage, quand le reglage bouge, et quand on
+    /// demande « Réessayer ».
+    fn verifier_tunnel(&mut self, force: bool) {
+        use std::sync::atomic::Ordering::Relaxed;
+        let now = maintenant_ms();
+        if !force && now.saturating_sub(self.tunnel_verifie) < 5_000 {
+            return;
+        }
+        self.tunnel_verifie = now;
+        let tunnel = crate::reseau::tunnel_actif();
+        let bloque = self.reglages.tunnel_oblige && tunnel.is_none();
+        let change = tunnel != self.tunnel || bloque != self.tunnel_bloque.load(Relaxed);
+        if tunnel != self.tunnel {
+            match &tunnel {
+                Some(nom) => info!("tunnel : {nom}"),
+                None => info!("tunnel : aucun"),
+            }
+            self.tunnel = tunnel;
+        }
+        self.tunnel_bloque.store(bloque, Relaxed);
+        if change {
+            self.pousser_etat();
+        }
+    }
+
+    /// Ce portier refuse-t-il cette adresse ? (reglage allume, aucun tunnel, et l'adresse sort de
+    /// la machine).
+    fn tunnel_bloque(&self, url: &str) -> bool {
+        self.reglages.tunnel_oblige && self.tunnel.is_none() && !urls::interne_ou_locale(url)
+    }
+
+    /// L'adresse de la page qui explique le portier, avec l'adresse visée en paramètre : le bouton
+    /// « Réessayer » la reprend pour ouvrir la page quand le tunnel est monté.
+    fn page_tunnel(&self, cible: &str) -> String {
+        match url::Url::parse(PAGE_TUNNEL) {
+            Ok(mut u) => {
+                u.query_pairs_mut().append_pair("url", cible);
+                u.to_string()
+            }
+            Err(_) => PAGE_TUNNEL.to_string(),
+        }
     }
 
     /// La teinte courante, pour ce qui ne lit pas les variables CSS (voir src/teinte.rs).
@@ -1923,6 +1991,14 @@ impl App {
         premier_plan: bool,
     ) -> TabId {
         let url = self.adresse_propre(url);
+        // Portier « tunnel obligatoire » : un site ne s'ouvre pas sans tunnel. On montre la page
+        // qui explique, plutot que d'ouvrir un onglet sur une adresse qui ne chargera jamais.
+        let url = if self.tunnel_bloque(&url) {
+            info!("portier tunnel : {url} remplace par la page du tunnel");
+            self.page_tunnel(&url)
+        } else {
+            url
+        };
         // Une adresse interne de Chromium ne mene nulle part ici : WebView2 la refuse et la
         // webview reste bloquee sur « ERR_INVALID_URL ». Mieux vaut un onglet neuf et une
         // explication qu'une page morte dont on ne sait pas sortir.
@@ -2023,6 +2099,13 @@ impl App {
         if self.trouver(id).is_none() {
             return;
         }
+        // Portier « tunnel obligatoire » : meme regle que pour un onglet neuf.
+        let url = if self.tunnel_bloque(&url) {
+            info!("portier tunnel : {url} remplace par la page du tunnel");
+            self.page_tunnel(&url)
+        } else {
+            url
+        };
         if let Some(o) = self.onglet_mut(id) {
             o.url = url.clone();
             o.titre = urls::nom_page_interne(&url).unwrap_or("").to_string();
@@ -3181,6 +3264,9 @@ impl App {
                 "pleinEcran": self.reglages.plein_ecran.clone(),
                 "barreFenetre": self.reglages.barre_fenetre(),
                 "moteur": self.reglages.moteur.clone(),
+                // Portier « tunnel obligatoire » : le reglage, et le tunnel reellement monte.
+                "tunnelOblige": self.reglages.tunnel_oblige,
+                "tunnel": self.tunnel.clone(),
             },
             "profil": self.profil.racine().display().to_string(),
             "dossierExtensions": self.profil.dossier_extensions().display().to_string(),
@@ -3410,6 +3496,9 @@ impl App {
                 self.tick();
                 self.suivre_le_son();
                 self.suivre_telechargements();
+                // Portier « tunnel obligatoire » : l'etat du reseau se relit au battement (au plus
+                // une fois toutes les 5 s), pour que le blocage s'arrete des que le tunnel monte.
+                self.verifier_tunnel(false);
                 // Compte rendu d'une restauration faite au demarrage : la barre existe
                 // desormais, donc le message peut s'afficher autrement que dans le journal.
                 if let Some(message) = self.message_restauration.take() {
@@ -3699,6 +3788,13 @@ impl App {
                     "« {} » est interne à Chromium : navigation refusée, la page reste en place.",
                     urls::affichage_court(&url)
                 ));
+            }
+            UserEvent::TunnelBloque(url) => {
+                // Le portier a refuse un site : la page reste en place, et on dit pourquoi une
+                // fois. Reculer d'une page evite de laisser l'onglet sur une adresse fausse.
+                info!("navigation refusee (tunnel absent) : {url}");
+                self.signaler("Tunnel absent : navigation bloquée (Réglages → Réseau).");
+                self.verifier_tunnel(true);
             }
             UserEvent::TelechargementDebut { onglet, telechargement } => self.telechargement_debut(onglet, telechargement),
             UserEvent::TelechargementEtat { id, termine, interrompu, reprenable, raison, recu } => {
@@ -4481,6 +4577,40 @@ impl App {
                     self.profil.sauver_reglages(&self.reglages);
                     self.pousser_etat();
                 }
+            }
+            // Portier « tunnel obligatoire » : le reglage se pose, et le portier se met a jour
+            // tout de suite (sans attendre le battement suivant).
+            "tunnelOblige" => {
+                let actif = v["actif"].as_bool().unwrap_or(!self.reglages.tunnel_oblige);
+                self.reglages.tunnel_oblige = actif;
+                self.profil.sauver_reglages(&self.reglages);
+                self.verifier_tunnel(true);
+                let message = if !actif {
+                    "Tunnel plus exigé.".to_string()
+                } else if let Some(nom) = self.tunnel.clone() {
+                    format!("Tunnel exigé — tunnel détecté : {nom}.")
+                } else {
+                    "Tunnel exigé : aucun tunnel détecté, la navigation vers les sites est bloquée.".to_string()
+                };
+                self.signaler(&message);
+                self.pousser_etat();
+            }
+            // « Réessayer » depuis la page du tunnel : on relit l'état du réseau, et on ouvre la
+            // page demandee si le tunnel est enfin la.
+            "tunnelReessayer" => {
+                let cible = v["url"].as_str().unwrap_or("").trim().to_string();
+                self.verifier_tunnel(true);
+                match (self.tunnel.clone(), cible.is_empty()) {
+                    (Some(nom), false) => {
+                        info!("tunnel {nom} : reprise de {cible}");
+                        if let Some(id) = self.actif {
+                            self.naviguer_dedans(id, cible);
+                        }
+                    }
+                    (Some(nom), true) => self.signaler(&format!("Tunnel détecté : {nom}.")),
+                    (None, _) => self.signaler("Toujours aucun tunnel : rien ne s'ouvre."),
+                }
+                self.pousser_etat();
             }
             "veilleAuto" => {
                 self.reglages.veille_auto = v["actif"].as_bool().unwrap_or(true);

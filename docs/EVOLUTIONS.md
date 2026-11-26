@@ -1507,6 +1507,33 @@ sortie est le reflet de l'état d'avant, on n'y rentre pas. Preuves : `cargo tes
 **toujours en plein écran**, **aucun onglet de trop**, onglet affiché inchangé ; puis un vrai
 changement d'onglet → la page **sort** du plein écran (états égaux), sans rentrée parasite.
 
+**0.4.75 — le portier « tunnel obligatoire » (premier morceau du VPN).** Question de Clément
+(27/11) : « est-ce qu'on peut prévoir l'utilisation de VPN ? » Mesures d'abord, sur cette machine :
+**WireGuard n'est pas installé**, aucune carte VPN/Wintun/TAP, aucun profil VPN Windows, et Trame
+s'installe **par utilisateur** (`PrivilegesRequired=lowest`) donc tourne **sans droits admin**. Un
+tunnel WireGuard embarqué demandera donc un pilote (Wintun), des routes, un DNS et un kill switch —
+tous derrière l'élévation : décision prise, un **service compagnon installé une fois**. Et un essai du
+mécanisme de proxy (`outils/sonder-proxy.mjs`, SOCKS5 local) a montré que le moteur passe bien par le
+proxy **en lui donnant le nom d'hôte** (`example.com:443`), donc sans fuite DNS.
+Avant le tunnel lui-même, le **portier** (choix de Clément : « refuser de naviguer ») est livré :
+- `src/reseau.rs` — `tunnel_parmi` (fonction **pure**, 4 tests) décide ce qu'est un tunnel : carte
+  **montée** et (type *tunnel* **ou** nom connu : wireguard, wintun, tap-windows, openvpn, tailscale,
+  zerotier, nordlynx, proton, vpn). Le **PPP seul ne compte pas** (une connexion PPPoE n'est pas un
+  tunnel). Enumération Windows par `GetAdaptersAddresses` (features `IpHelper`, `Ndis`, `WinSock`).
+- Réglage `tunnel_oblige` (Réglages → Confidentialité → **Tunnel (VPN)**), avec l'état réel juste à
+  côté (« Tunnel détecté : … ») et un bouton **Relire**.
+- Portier : la garde de navigation refuse tout site quand le réglage est allumé sans tunnel
+  (`urls::interne_ou_locale` laisse passer `trame:`, `about:`, `file:`, `localhost`/`127.0.0.1` et
+  `*.localhost` — sans quoi on ne pourrait plus atteindre les réglages pour l'éteindre), et une
+  navigation lancée par Trame est remplacée par la page `ui/tunnel.html?url=…` qui explique et propose
+  **« Réessayer »**. L'état du réseau se relit au battement (au plus une fois toutes les 5 s).
+Preuves : `cargo test` **231/231** (+5), `tester-ui` **107/107** (+2), et le banc
+`outils/eprouver-tunnel.mjs` sur le vrai binaire : portier allumé → la page du tunnel s'affiche,
+**aucun document du site n'est chargé**, les **réglages restent accessibles**, puis le portier éteint
+par la **vraie bascule** → l'adresse s'ouvre. **Reste à faire**, dit franchement : le tunnel
+lui-même (import de configuration, `boringtun`, Wintun, routes/DNS, kill switch) et son service
+compagnon — c'est le gros chantier suivant, pas un réglage.
+
 ## 11. L'état aujourd'hui
 
 ```

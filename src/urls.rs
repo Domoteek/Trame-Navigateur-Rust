@@ -161,6 +161,25 @@ pub fn nettoyer(url: &str, garder_affiliation: bool) -> Option<String> {
     Some(u.to_string())
 }
 
+/// Une adresse qui ne sort pas de la machine : page interne de Trame, `file:`, boucle locale.
+///
+/// Le portier « tunnel obligatoire » laisse passer ces adresses : elles ne peuvent rien laisser
+/// fuir sur le réseau, et sans elles on ne pourrait plus atteindre les réglages pour éteindre le
+/// portier.
+pub fn interne_ou_locale(url: &str) -> bool {
+    let bas = url.trim().to_ascii_lowercase();
+    if bas.starts_with("trame:") || bas.starts_with("about:") || bas.starts_with("file:") {
+        return true;
+    }
+    let Ok(u) = url::Url::parse(&bas) else { return false };
+    match u.host_str() {
+        // `localhost` et tout ce qui finit par `.localhost` (dont `trame.localhost`, la forme que
+        // WebView2 donne aux pages internes) sont la boucle locale : rien ne sort de la machine.
+        Some(h) => h == "localhost" || h.ends_with(".localhost") || h == "127.0.0.1" || h == "[::1]" || h == "::1",
+        None => false,
+    }
+}
+
 /// Raccourci pour les tests : moteur par defaut.
 #[cfg(test)]
 pub fn normaliser(saisie: &str) -> String {
@@ -375,8 +394,7 @@ mod tests {
     }
 
     /// Deux adresses du même fichier se reconnaissent malgré le jeton signé du CDN : c'est ce qui
-    /// permet de refermer l'onglet ouvert pour un téléchargement (0.4.73).
-    #[test]
+    /// permet de refermer l'onglet ouvert pour un téléchargement (0.4.73).    #[test]
     fn deux_adresses_du_meme_fichier_se_reconnaissent() {
         let a = "https://cdn.discordapp.com/attachments/772/157/Trame-setup.exe?ex=1&is=2&hm=3";
         let b = "https://cdn.discordapp.com/attachments/772/157/Trame-setup.exe?ex=9&is=8&hm=7";
@@ -391,5 +409,25 @@ mod tests {
         // Ce qui n'est pas une adresse se compare tel quel (jamais d'egalite abusive).
         assert!(super::meme_fichier("pas une adresse", "pas une adresse"));
         assert!(!super::meme_fichier("pas une adresse", "autre chose"));
+    }
+
+    /// Le portier « tunnel obligatoire » laisse passer ce qui ne sort pas de la machine — sans quoi
+    /// on ne pourrait plus atteindre les réglages pour l'éteindre.
+    #[test]
+    fn une_adresse_locale_ne_sort_pas_de_la_machine() {
+        for locale in [
+            "trame://localhost/reglages.html",
+            "trame://localhost/tunnel.html?url=https%3A%2F%2Fexample.com",
+            "http://trame.localhost/newtab.html",
+            "http://localhost:8720/",
+            "http://127.0.0.1:19481/gros.exe",
+            "file:///D:/LIFE/x.html",
+            "about:blank",
+        ] {
+            assert!(super::interne_ou_locale(locale), "« {locale} » ne sort pas de la machine");
+        }
+        for distante in ["https://example.com", "http://192.168.1.11:8720/", "https://google.fr"] {
+            assert!(!super::interne_ou_locale(distante), "« {distante} » sort sur le réseau");
+        }
     }
 }

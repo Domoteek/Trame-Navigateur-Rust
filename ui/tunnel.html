@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Tunnel absent</title>
+    <style>
+      :root {
+        --fond: #080b11;
+        --surface: #111825;
+        --surface-2: #161f2e;
+        --bord: rgba(255, 255, 255, 0.09);
+        --texte: #e9eefa;
+        --texte-2: #97a4bb;
+        --texte-3: #616e85;
+        --accent: #60a5fa;
+        --accent-2-rgb: 167, 139, 250;
+        --accent-rgb: 96, 165, 250;
+        --danger: #f87171;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background:
+          radial-gradient(55% 40% at 12% 0%, rgba(var(--accent-rgb), 0.10), transparent 62%),
+          radial-gradient(50% 35% at 92% 4%, rgba(var(--accent-2-rgb), 0.09), transparent 60%),
+          var(--fond);
+        color: var(--texte);
+        font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+        font-size: 14px;
+        display: grid;
+        place-items: center;
+        padding: 48px 32px;
+      }
+      .carte {
+        max-width: 620px;
+        width: 100%;
+        background: linear-gradient(180deg, var(--surface-2), var(--surface));
+        border: 1px solid var(--bord);
+        border-radius: 16px;
+        padding: 28px 28px 24px;
+      }
+      .sceau {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--danger);
+        margin-bottom: 14px;
+      }
+      h1 { margin: 0 0 10px; font-size: 21px; font-weight: 600; letter-spacing: -0.01em; }
+      p { margin: 0 0 12px; color: var(--texte-2); line-height: 1.55; }
+      .cible {
+        margin: 16px 0 20px;
+        padding: 10px 12px;
+        border: 1px solid var(--bord);
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.25);
+        font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+        font-size: 12px;
+        color: var(--texte);
+        overflow-wrap: anywhere;
+      }
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+      button {
+        font: inherit;
+        padding: 9px 16px;
+        border-radius: 10px;
+        border: 1px solid var(--bord);
+        background: var(--surface-2);
+        color: var(--texte);
+        cursor: pointer;
+      }
+      button:hover { border-color: rgba(var(--accent-rgb), 0.5); }
+      button.principal { background: rgba(var(--accent-rgb), 0.16); border-color: rgba(var(--accent-rgb), 0.5); }
+      .pied { margin-top: 18px; font-size: 12px; color: var(--texte-3); line-height: 1.5; }
+      code { background: rgba(255, 255, 255, 0.06); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="carte">
+      <div class="sceau">● Tunnel absent</div>
+      <h1>Aucun tunnel (VPN) n'est monté</h1>
+      <p>
+        Tu as demandé à Trame de <b>ne rien ouvrir sans tunnel</b>. Rien n'a été envoyé sur le réseau :
+        cette page s'affiche à la place du site.
+      </p>
+      <p>Monte ton VPN (WireGuard, OpenVPN, ton client habituel), puis réessaie.</p>
+      <div class="cible" id="cible">—</div>
+      <div class="actions">
+        <button class="principal" id="btn-reessayer">Réessayer</button>
+        <button id="btn-reglages">Ouvrir les réglages</button>
+      </div>
+      <div class="pied">
+        Le réglage vit dans <code>Réglages → Confidentialité → Tunnel (VPN)</code>. Il se relit tout
+        seul toutes les 5 secondes ; « Réessayer » force la lecture.
+      </div>
+    </div>
+    <script>
+      const ipc = (message) => {
+        try {
+          window.ipc.postMessage(JSON.stringify(message));
+        } catch (e) {
+          /* page ouverte hors de Trame : rien a faire */
+        }
+      };
+      const cible = new URLSearchParams(location.search).get("url") || "";
+      const zone = document.getElementById("cible");
+      zone.textContent = cible || "Adresse non précisée.";
+
+      document.getElementById("btn-reessayer").onclick = () => ipc({ m: "tunnelReessayer", url: cible });
+      document.getElementById("btn-reglages").onclick = () => ipc({ m: "ouvrirReglages" });
+      // Entrée : même geste que le bouton principal.
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") ipc({ m: "tunnelReessayer", url: cible });
+      });
+    </script>
+  </body>
+</html>

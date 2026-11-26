@@ -249,6 +249,18 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.75, publiée et installée le 2026-11-27.** Premier morceau du **VPN** : le **portier**.
+> Réglages → Confidentialité → **Tunnel (VPN)** : « Exiger un tunnel avant de naviguer ». Allumé et
+> sans tunnel monté, Trame **refuse** d'ouvrir un site — il affiche une page qui explique, avec
+> « Réessayer » — au lieu de laisser passer le trafic en clair. Les pages internes (réglages, nouvel
+> onglet) et la boucle locale restent joignables, sinon on ne pourrait plus éteindre l'exigence.
+> La détection lit les cartes que Windows décrit (`GetAdaptersAddresses`) : type *tunnel*, ou nom
+> connu (WireGuard, Wintun, TAP, OpenVPN, VPN…), et **seulement si la carte est montée**. Preuves :
+> `cargo test` **231/231**, `tester-ui` **107/107**, `outils/eprouver-tunnel.mjs` sur le vrai binaire
+> (page du tunnel affichée, aucun document du site chargé, réglages toujours accessibles, portier
+> éteint → l'adresse s'ouvre). Le tunnel lui-même (WireGuard embarqué + service compagnon) reste à
+> faire.
+>
 > **0.4.74, publiée et installée le 2026-11-27.** Après la 0.4.73, la vidéo en plein écran n'était
 > plus plantée mais restait **« beuguée »** — l'affichage plein écran du lecteur dans une fenêtre
 > normale — et la fenêtre **sautait**. Cause : le moteur garde son propre état de plein écran, et
@@ -394,7 +406,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.74-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.75-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >
