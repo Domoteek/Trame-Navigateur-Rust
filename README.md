@@ -249,6 +249,21 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.87, publiée et installée le 2026-11-28.** « Il faut que ça marche avec OpenVPN » : **OpenVPN 3
+> Core** entre dans le binaire, en **espace utilisateur** — il ne crée aucun adaptateur réseau, donc
+> ni pilote ni droits administrateur — et se branche sur la pile `smoltcp` et le mandataire SOCKS5
+> déjà écrits pour WireGuard. Un trait `Tunnel` commun (`src/moteur.rs`), les deux moteurs derrière
+> (`vpn` et `ovpn`), et un rangement qui accepte les deux genres dans `tunnels/<id>/` : un `.ovpn`
+> est gardé **entier chiffré par DPAPI** (il peut porter la clé privée du client), les identifiants du
+> fournisseur aussi. L'import reconnaît le format au contenu, pas à l'extension, et les identifiants
+> se saisissent dans les réglages. Preuves : `cargo test` **259/259**, `tester-ui` **113/113** (+1),
+> et le moteur lui-même mesuré en sonde : profil sans identifiants → `ce profil demande un utilisateur
+> et un mot de passe` ; avec identifiants → `le tunnel n'a pas monté en 30 s — OpenVPN core 3.11.8 win
+> x86_64 64-bit`. **Le premier profil Nord réel reste à éprouver** (voir `docs/OPENVPN.md`) : c'est la
+> seule chose qui manque pour dire « ça marche ». ⚠️ Construire Trame demande désormais **Strawberry
+> Perl** (`OPENSSL_SRC_PERL`) : OpenSSL, LZ4 et Core sont compilés depuis les sources (17 min la
+> première fois) ; le binaire passe de 3,9 à **8,6 Mo**.
+>
 > **0.4.86, publiée et installée le 2026-11-28.** Après l'échec NordVPN du jour — import accepté, puis
 > **aucune poignée de main sur sept adresses** alors que Mullvad perce en 20 ms — deux manques sont
 > corrigés. (1) **Toutes les adresses du nom sont essayées** : un endpoint de fournisseur rend une
@@ -526,7 +541,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.86-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.87-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >
