@@ -683,6 +683,12 @@
                 </div>
               </div>
               <div id="liste-tunnels" class="tunnels"></div>
+              <div class="ligne sous" id="ligne-tunnel-erreur" hidden>
+                <div class="libelle">
+                  <b>Le tunnel n'a pas pu se monter</b>
+                  <span id="txt-tunnel-erreur"></span>
+                </div>
+              </div>
               <div class="ligne sous">
                 <div class="libelle">
                   <b>Le tunnel lui-même</b>
@@ -1659,6 +1665,11 @@
           // qui est active. Le resume ne montre jamais la cle privee.
           const tunnelConf = r.tunnelImporte || null;
           rendreTunnels(r);
+          // Pourquoi le tunnel n'a pas monté, quand il a essayé et échoué : une phrase du moteur,
+          // affichée telle quelle (adresses essayées, clé non reconnue, port filtré).
+          const erreurTunnel = r.tunnelErreur || "";
+          $("ligne-tunnel-erreur").hidden = !erreurTunnel;
+          $("txt-tunnel-erreur").textContent = erreurTunnel;
           // Une configuration vient d'être importée alors que le portier est armé : le tunnel ne
           // se montera qu'au démarrage, on propose donc de redémarrer tout de suite. La question
           // est posée après le rendu : une boîte bloquante au milieu d'un rafraîchissement

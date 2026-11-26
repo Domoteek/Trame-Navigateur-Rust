@@ -64,33 +64,27 @@ pub fn demarrer(config: crate::tunnel::Config) -> Result<Mandataire, String> {
     std::thread::Builder::new()
         .name("trame-mandataire".into())
         .spawn(move || {
-            let mut session = match Session::ouvrir(&config) {
+            // `connecter` essaie les adresses du nom l'une après l'autre et rend le détail de
+            // l'échec : c'est cette phrase que l'interface affichera quand rien ne monte.
+            let session = match crate::vpn::connecter(&config, std::time::Duration::from_secs(10)) {
                 Ok(s) => s,
                 Err(e) => {
                     let _ = tx.send(Err(e));
                     return;
                 }
             };
-            match session.attendre_handshake(std::time::Duration::from_secs(10)) {
-                Ok(duree) => {
-                    crate::info!("mandataire : tunnel établi en {} ms", duree.as_millis());
-                    let _ = tx.send(Ok(()));
-                }
-                Err(e) => {
-                    let _ = tx.send(Err(e));
-                    return;
-                }
-            }
+            crate::info!("mandataire : tunnel établi avec le pair {}", session.pair());
+            let _ = tx.send(Ok(()));
             if let Err(e) = boucle(session, ecoute, &config, &jeton) {
                 crate::alerte!("mandataire : {e}");
             }
         })
         .map_err(|e| format!("fil du mandataire impossible : {e}"))?;
 
-    match rx.recv_timeout(std::time::Duration::from_secs(12)) {
+    match rx.recv_timeout(std::time::Duration::from_secs(30)) {
         Ok(Ok(())) => Ok(Mandataire { port, arret }),
         Ok(Err(e)) => Err(e),
-        Err(_) => Err("le tunnel n'a pas répondu en 12 s".to_string()),
+        Err(_) => Err("le tunnel n'a pas répondu en 30 s".to_string()),
     }
 }
 

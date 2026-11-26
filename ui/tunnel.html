@@ -118,6 +118,28 @@
           "clique <b>Importer…</b> et choisis ton fichier <code>.conf</code>. Ou éteins « Exiger un tunnel ».";
       }
 
+      // Une configuration est là mais le tunnel n'a pas monté : dire POURQUOI, avec la phrase du
+      // moteur (adresses essayées, clé non reconnue, port filtré). Sinon la cause ne vivait que
+      // dans le journal, et l'écran disait seulement « rien ne s'ouvre ».
+      const erreur = new URLSearchParams(location.search).get("erreur") || "";
+      if (erreur) {
+        const bloc = document.getElementById("suite");
+        bloc.textContent = "";
+        const titre = document.createElement("span");
+        titre.style.display = "block";
+        titre.style.marginTop = "10px";
+        titre.style.opacity = "0.75";
+        titre.textContent = "Le tunnel n'a pas pu se monter :";
+        const detail = document.createElement("code");
+        detail.style.display = "block";
+        detail.style.marginTop = "6px";
+        detail.style.fontSize = "12px";
+        detail.style.lineHeight = "1.5";
+        detail.textContent = erreur;
+        bloc.appendChild(titre);
+        bloc.appendChild(detail);
+      }
+
       document.getElementById("btn-reessayer").onclick = () => ipc({ m: "tunnelReessayer", url: cible });
       document.getElementById("btn-reglages").onclick = () => ipc({ m: "ouvrirReglages" });
       // Entrée : même geste que le bouton principal.

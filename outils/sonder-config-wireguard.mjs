@@ -69,7 +69,20 @@ const enfant = spawn(BINAIRE, [], {
   stdio: "ignore",
 });
 
+/** Le dossier de la configuration importée dans le profil jetable (`tunnels/<id>/`). */
+function dossierImporte() {
+  const d = join(profil, "tunnels");
+  if (!existsSync(d)) return null;
+  for (const e of readdirSync(d, { withFileTypes: true })) {
+    if (!e.isDirectory()) continue;
+    const p = join(d, e.name);
+    if (existsSync(join(p, "tunnel.json")) && existsSync(join(p, "tunnel.cle"))) return p;
+  }
+  return null;
+}
+
 let ecrit = false;
+let dossier = null;
 try {
   const cible = await attendreCible(PORT, "surface=rail");
   const rail = await connecter(cible.webSocketDebuggerUrl);
@@ -78,7 +91,8 @@ try {
   const message = JSON.stringify({ m: "tunnelImporter", chemin: conf });
   await rail.evaluer(`window.ipc.postMessage(${JSON.stringify(message)}); true`);
   for (let i = 0; i < 50; i++) {
-    if (existsSync(join(profil, "tunnel.json")) && existsSync(join(profil, "tunnel.cle"))) {
+    dossier = dossierImporte();
+    if (dossier) {
       ecrit = true;
       break;
     }
@@ -98,14 +112,14 @@ if (!ecrit) {
 }
 
 // 2. Ce que Trame a retenu du fichier (partie publique seulement : jamais la clé).
-const publique = JSON.parse(readFileSync(join(profil, "tunnel.json"), "utf8"));
+const publique = JSON.parse(readFileSync(join(dossier, "tunnel.json"), "utf8"));
 console.log("  adresses   :", (publique.adresses || []).join(", ") || "(aucune)");
 console.log("  endpoint   :", publique.endpoint);
 console.log("  dns        :", (publique.dns || []).join(", ") || "(aucun)");
 console.log("  allowedIps :", (publique.allowedIps || []).join(", "));
 console.log("  mtu        :", publique.mtu ?? "(defaut 1420)");
 console.log("  keepalive  :", publique.keepalive ?? "(aucun)");
-console.log(`\ncled privee : presente, chiffree (tunnel.cle ${readFileSync(join(profil, "tunnel.cle")).length} octets)\n`);
+console.log(`\ncled privee : presente, chiffree (tunnel.cle ${readFileSync(join(dossier, "tunnel.cle")).length} octets)\n`);
 
 // 3. La poignée de main, sur le vrai moteur.
 console.log("poignee de main…");

@@ -249,6 +249,20 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.86, publiée et installée le 2026-11-28.** Après l'échec NordVPN du jour — import accepté, puis
+> **aucune poignée de main sur sept adresses** alors que Mullvad perce en 20 ms — deux manques sont
+> corrigés. (1) **Toutes les adresses du nom sont essayées** : un endpoint de fournisseur rend une
+> adresse différente à chaque requête (TTL 30 s, mesuré), et l'application ne prenait que la
+> **première**, donc une adresse tombée ou une IPv6 sans IPv6 sur la machine laissait le tunnel muet
+> sans recours. IPv4 d'abord, doublons retirés, trois adresses au plus, budget total inchangé (10 s).
+> (2) **La raison de l'échec est affichée**, plus seulement écrite dans le journal : sous la liste des
+> configurations (`tunnelErreur`), et sur la **page de blocage** (`tunnel.html?erreur=…`) avec les
+> adresses tentées et la cause possible. Preuves : `cargo test` **251/251** (+3, dont un test
+> `urls.rs` que le préfixe `#[test]` collé à un commentaire rendait **invisible depuis la 0.4.73** —
+> il tourne de nouveau), `tester-ui` **112/112** (+2), et la sonde sur le vrai binaire : Nord rend
+> désormais `aucune poignée de main — … Adresses essayées : 187.14.108.216:51820`, Mullvad `poignée
+> de main avec 193.32.126.68:51820 en 22 ms`.
+>
 > **0.4.85, publiée et installée le 2026-11-28.** « Il me faudra la possibilité d'intégrer plusieurs
 > fichiers .conf en fonction du pays où je veux me situer, et switcher rapidement entre l'un et l'autre. »
 > Les configurations WireGuard ne s'écrasent plus : chacune vit dans **son dossier**
@@ -512,7 +526,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.85-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.86-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

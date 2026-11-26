@@ -39,8 +39,8 @@ pub struct Session {
 }
 
 impl Session {
-    /// Ouvre la session : clés, socket UDP, pair. Ne fait aucun échange réseau.
-    pub fn ouvrir(config: &crate::tunnel::Config) -> Result<Session, String> {
+    /// Ouvre la session vers une adresse **précise** (une des adresses du nom, voir `connecter`).
+    pub fn ouvrir_a(config: &crate::tunnel::Config, pair: SocketAddr) -> Result<Session, String> {
         let secret = crate::tunnel::octets_32(&config.cle_privee)
             .ok_or("clé privée illisible (32 octets en base64 attendus)")?;
         let publique = crate::tunnel::octets_32(&config.cle_paire)
@@ -49,7 +49,6 @@ impl Session {
             Some(cle) => Some(crate::tunnel::octets_32(cle).ok_or("clé partagée illisible")?),
             None => None,
         };
-        let pair = resoudre(&config.endpoint)?;
 
         let udp = UdpSocket::bind("0.0.0.0:0").map_err(|e| format!("socket UDP impossible : {e}"))?;
         udp.connect(pair).map_err(|e| format!("connexion UDP vers {pair} impossible : {e}"))?;
@@ -217,14 +216,84 @@ impl Session {
     }
 }
 
-/// `hote:port` → adresse. Le nom est résolu ici (au démarrage), pas dans le tunnel : c'est la
-/// seule résolution qui sorte de la machine, et elle ne concerne que l'adresse du pair.
-fn resoudre(endpoint: &str) -> Result<SocketAddr, String> {
-    endpoint
+/// **Toutes** les adresses d'un endpoint, IPv4 d'abord et sans doublon.
+///
+/// Un nom d'hôte de fournisseur rend plusieurs adresses, qui tournent (mesuré le 2026-11-28 sur
+/// `paris.fr.wg.nordhold.net` : TTL 30 s, une adresse différente à chaque requête, dont des
+/// injoignables). Prendre la **première** seulement laissait le tunnel muet pour une raison
+/// invisible. Et l'ordre compte : une IPv6 en tête, sur une machine sans IPv6, donne une poignée
+/// de main silencieuse — alors que Trame sort en IPv4.
+pub fn resoudre_toutes(endpoint: &str) -> Result<Vec<SocketAddr>, String> {
+    let adresses: Vec<SocketAddr> = endpoint
         .to_socket_addrs()
         .map_err(|e| format!("endpoint « {endpoint} » introuvable : {e}"))?
-        .next()
-        .ok_or_else(|| format!("endpoint « {endpoint} » : aucune adresse"))
+        .collect();
+    let triees = ordonner(adresses);
+    if triees.is_empty() {
+        return Err(format!("endpoint « {endpoint} » : aucune adresse"));
+    }
+    Ok(triees)
+}
+
+/// IPv4 avant IPv6, doublons retirés. L'ordre d'arrivée est conservé à l'intérieur de chaque
+/// famille : c'est celui du résolveur, qui sait ce qui est proche.
+fn ordonner(adresses: Vec<SocketAddr>) -> Vec<SocketAddr> {
+    let mut triees: Vec<SocketAddr> = Vec::new();
+    for adresse in adresses {
+        if triees.contains(&adresse) {
+            continue;
+        }
+        if adresse.is_ipv6() {
+            triees.push(adresse);
+        } else {
+            // Insertion stable : chaque IPv4 se glisse devant la première IPv6 déjà rangée.
+            let avant_ipv6 = triees.iter().position(|a| a.is_ipv6()).unwrap_or(triees.len());
+            triees.insert(avant_ipv6, adresse);
+        }
+    }
+    triees
+}
+
+/// Ouvre la session et **attend la poignée de main**, en essayant les adresses du nom l'une après
+/// l'autre (trois au plus), avec un budget total inchangé : il est réparti entre elles.
+///
+/// Mesure du 2026-11-28 : une configuration Mullvad perce en 20 ms, une configuration Nord ne
+/// répond sur **sept** adresses essayées à la main. Le silence de WireGuard ne dit pas pourquoi
+/// (clé inconnue du serveur, port filtré, serveur hors service) ; ce que Trame peut faire, c'est
+/// essayer les autres adresses du même nom avant de renoncer, et dire lesquelles ont été tentées.
+pub fn connecter(config: &crate::tunnel::Config, delai: std::time::Duration) -> Result<Session, String> {
+    let adresses = resoudre_toutes(&config.endpoint)?;
+    let essayees: Vec<SocketAddr> = adresses.iter().copied().take(3).collect();
+    // Au moins deux secondes par adresse : en dessous, un pair lointain n'a pas le temps de
+    // répondre, et on condamnerait une configuration valide.
+    let part = (delai / essayees.len() as u32).max(std::time::Duration::from_secs(2));
+    let mut echecs: Vec<String> = Vec::new();
+    for adresse in &essayees {
+        let mut session = match Session::ouvrir_a(config, *adresse) {
+            Ok(s) => s,
+            Err(e) => {
+                echecs.push(format!("{adresse} ({e})"));
+                continue;
+            }
+        };
+        let debut = std::time::Instant::now();
+        match session.attendre_handshake(part) {
+            Ok(_) => {
+                crate::info!(
+                    "tunnel : poignée de main en {} ms avec {adresse} ({} adresse(s) essayée(s))",
+                    debut.elapsed().as_millis(),
+                    essayees.len()
+                );
+                return Ok(session);
+            }
+            Err(e) => echecs.push(format!("{adresse} ({e})")),
+        }
+    }
+    Err(format!(
+        "aucune poignée de main — le pair ne répond sur aucune adresse ({}). Un serveur WireGuard se tait quand il ne reconnaît pas la clé : configuration non validée côté fournisseur, ou port 51820 filtré sur le réseau. Adresses essayées : {}",
+        config.endpoint,
+        echecs.join(" ; ")
+    ))
 }
 
 /// Sonde de mise au point : monte le tunnel configuré, tente la poignée de main, rend le détail.
@@ -232,8 +301,9 @@ fn resoudre(endpoint: &str) -> Result<SocketAddr, String> {
 /// Jamais appelée en usage normal : `main` ne la déclenche que sur `TRAME_TUNNEL_ESSAI`.
 pub fn essai(racine: &std::path::Path) -> Result<String, String> {
     let config = crate::tunnel::charger(racine).ok_or("aucune configuration de tunnel importée")?;
-    let mut session = Session::ouvrir(&config)?;
-    let duree = session.attendre_handshake(std::time::Duration::from_secs(10))?;
+    let debut = std::time::Instant::now();
+    let session = connecter(&config, std::time::Duration::from_secs(10))?;
+    let duree = debut.elapsed();
     let (_, tx, rx, perte, rtt) = session.stats();
     Ok(format!(
         "poignée de main avec {} en {} ms (tx {tx} o, rx {rx} o, perte {perte:.1} %, rtt {:?}, pair {}, {} datagrammes envoyés / {} reçus)",
@@ -300,13 +370,40 @@ mod tests {
         .expect("configuration valide")
     }
 
+    /// Ouvre une session de test vers la première adresse de l'endpoint (toujours locale ici).
+    fn ouvrir(config: &crate::tunnel::Config) -> Session {
+        let pair = resoudre_toutes(&config.endpoint).expect("endpoint resolu")[0];
+        Session::ouvrir_a(config, pair).expect("session")
+    }
+
     /// La session s'ouvre sans toucher au réseau, et son endpoint est bien résolu.
     #[test]
     fn une_session_s_ouvre_sans_reseau() {
-        let session = Session::ouvrir(&config("127.0.0.1:51820")).expect("session");
+        let session = ouvrir(&config("127.0.0.1:51820"));
         assert_eq!(session.pair().port(), 51820);
         assert!(!session.etabli(), "aucune poignée de main avant le premier paquet");
         assert_eq!(session.age_handshake(), None);
+    }
+
+    /// Un nom d'hôte rend plusieurs adresses : IPv4 d'abord, sans doublon. L'ordre décide —
+    /// une IPv6 en tête, sur une machine sans IPv6, donnait une poignée de main silencieuse.
+    #[test]
+    fn les_adresses_sont_ordonnees_ipv4_d_abord_et_sans_doublon() {
+        use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
+        let v6a = SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 51820, 0, 0));
+        let v4a = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(193, 32, 126, 68), 51820));
+        let v4b = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(193, 32, 126, 69), 51820));
+        let triees = ordonner(vec![v6a, v4a, v4b, v4a]);
+        assert_eq!(triees, vec![v4a, v4b, v6a], "IPv4 dans l'ordre du résolveur, puis IPv6");
+    }
+
+    /// Un endpoint en clair (une seule adresse) reste une adresse : la résolution ne doit pas
+    /// perdre le cas simple.
+    #[test]
+    fn un_endpoint_numerique_rend_une_seule_adresse() {
+        let adresses = resoudre_toutes("127.0.0.1:51820").expect("adresse");
+        assert_eq!(adresses.len(), 1);
+        assert_eq!(adresses[0].port(), 51820);
     }
 
     /// Deux pairs locaux : la poignée de main aboutit, et les compteurs le disent. C'est le banc
@@ -324,7 +421,7 @@ mod tests {
         let public_serveur = x25519_dalek::PublicKey::from(&secret_serveur);
 
         let mut serveur = Tunn::new(secret_serveur, public_client, None, None, 7, None).expect("tunn serveur");
-        let mut client = Session::ouvrir(&config(&adresse.to_string())).expect("session cliente");
+        let mut client = ouvrir(&config(&adresse.to_string()));
         // Le client doit connaître la clé publique du serveur : on refait sa configuration.
         client.tunnel = Tunn::new(secret_client, public_serveur, None, Some(25), 9, None).expect("tunn client");
 

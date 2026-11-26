@@ -432,7 +432,8 @@ mod tests {
     }
 
     /// Deux adresses du même fichier se reconnaissent malgré le jeton signé du CDN : c'est ce qui
-    /// permet de refermer l'onglet ouvert pour un téléchargement (0.4.73).    #[test]
+    /// permet de refermer l'onglet ouvert pour un téléchargement (0.4.73).
+    #[test]
     fn deux_adresses_du_meme_fichier_se_reconnaissent() {
         let a = "https://cdn.discordapp.com/attachments/772/157/Trame-setup.exe?ex=1&is=2&hm=3";
         let b = "https://cdn.discordapp.com/attachments/772/157/Trame-setup.exe?ex=9&is=8&hm=7";

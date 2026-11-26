@@ -327,6 +327,10 @@ pub struct App {
     /// La configuration WireGuard importee (VPN integre) : sans la cle privee, qui vit chiffree
     /// dans `tunnel.cle` et ne sert qu'au tunnel lui-meme.
     tunnel_conf: Option<crate::tunnel::Config>,
+    /// Pourquoi le tunnel integre n'a pas pu se monter, la derniere fois. Une phrase lisible, que
+    /// l'interface affiche : sans elle, un tunnel muet ne laissait aucune trace visible (constat
+    /// de Clement, 2026-11-28 : « ca fonctionne pas », et rien a lire). Effacee des que ca monte.
+    tunnel_erreur: Option<String>,
     /// Le mandataire SOCKS5 qui fait passer les pages dans le tunnel, quand il tourne. Il doit
     /// demarrer AVANT la premiere webview : le proxy de WebView2 est fixe a la creation de
     /// l'environnement, et ne se change plus ensuite.
@@ -825,6 +829,7 @@ impl App {
             tunnel: None,
             tunnel_verifie: 0,
             tunnel_conf,
+            tunnel_erreur: None,
             mandataire: None,
             blocage: crate::moteur_ext::Blocage::default(),
             adresses_nettoyees: 0,
@@ -1174,11 +1179,15 @@ impl App {
             Ok(mandataire) => {
                 info!("tunnel intégré : mandataire sur {} (pair {nom})", mandataire.adresse());
                 self.mandataire = Some(mandataire);
+                self.tunnel_erreur = None;
                 self.tunnel_verifie = 0;
                 self.verifier_tunnel(true);
             }
             Err(e) => {
                 alerte!("tunnel intégré : démarrage impossible ({e})");
+                // La phrase reste affichée tant que ça ne monte pas : c'est elle qui dit quoi
+                // regarder (clé non reconnue, port filtré, adresses essayées).
+                self.tunnel_erreur = Some(e.clone());
                 self.signaler(&format!("Tunnel : démarrage impossible ({e})"));
             }
         }
@@ -1393,6 +1402,11 @@ impl App {
                 // quelqu'un qui n'a rien importé (constat de Clément, 2026-11-27).
                 if self.tunnel_conf.is_none() {
                     u.query_pairs_mut().append_pair("sans", "1");
+                }
+                // Une configuration existe mais le tunnel n'a pas monté : la page de blocage dit
+                // pourquoi, avec la phrase du moteur — sinon la cause reste dans le journal.
+                if let Some(erreur) = self.tunnel_erreur.as_deref().filter(|e| !e.trim().is_empty()) {
+                    u.query_pairs_mut().append_pair("erreur", erreur);
                 }
                 u.to_string()
             }
@@ -3380,6 +3394,9 @@ impl App {
                     "allowedIps": c.allowed_ips,
                     "keepalive": c.keepalive,
                 })),
+                // Pourquoi le tunnel integre n'a pas monte, quand c'est le cas : l'interface
+                // l'affiche tel quel, sinon la panne reste dans le journal.
+                "tunnelErreur": self.tunnel_erreur.clone(),
                 // Toutes les configurations rangees (plusieurs pays) et celle qui est active.
                 "tunnels": Self::etat_tunnels(self.profil.racine()),
             },

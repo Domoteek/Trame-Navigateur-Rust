@@ -3337,6 +3337,60 @@ async function suite() {
     await p.close();
   });
 
+  await cas("reglages : le tunnel qui n'a pas monté dit pourquoi", async () => {
+    const p = await page("reglages.html");
+    const raison = "aucune poignée de main — le pair ne répond sur aucune adresse ; adresses essayées : 187.14.108.216:51820";
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: {
+        astuces: true,
+        tunnelOblige: true,
+        tunnel: null,
+        tunnelImporte: { nom: "nord-fr", resume: "10.5.0.2/16 → 187.14.108.216:51820" },
+        tunnelErreur: raison,
+      },
+    });
+    await rubrique(p, "confidentialite");
+    egal(await p.$eval("#ligne-tunnel-erreur", (n) => n.hidden), false, "la raison est affichée");
+    egal(
+      (await p.$eval("#txt-tunnel-erreur", (n) => n.textContent)).includes("187.14.108.216"),
+      true,
+      "la raison nomme l'adresse essayée"
+    );
+    // Le tunnel monte : la ligne disparaît.
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: {
+        astuces: true,
+        tunnelOblige: true,
+        tunnel: "Tunnel intégré (WireGuard)",
+        tunnelImporte: { nom: "nord-fr", resume: "10.5.0.2/16 → 187.14.108.216:51820" },
+        tunnelErreur: null,
+      },
+    });
+    egal(await p.$eval("#ligne-tunnel-erreur", (n) => n.hidden), true, "elle disparaît quand le tunnel monte");
+    await p.close();
+  });
+
+  await cas("page du tunnel : elle dit pourquoi le tunnel n'a pas monté", async () => {
+    const raison = "aucune poignée de main — adresses essayées : 187.14.108.216:51820";
+    const p = await page("tunnel.html", {
+      query: `?url=${encodeURIComponent("https://example.com/x")}&erreur=${encodeURIComponent(raison)}`,
+      sansEtat: true,
+    });
+    egal(
+      (await p.$eval("#suite", (n) => n.textContent)).includes("Le tunnel n'a pas pu se monter"),
+      true,
+      "la page annonce l'échec"
+    );
+    egal(
+      (await p.$eval("#suite", (n) => n.textContent)).includes("187.14.108.216"),
+      true,
+      "et donne la raison du moteur, adresse comprise"
+    );
+    await p.close();
+  });
+
   await cas("page du tunnel : elle dit l'adresse visée, et « Réessayer » la redemande", async () => {
     const p = await page("tunnel.html", { query: "?url=https%3A%2F%2Fexample.com%2Fx", sansEtat: true });
     verifier(
