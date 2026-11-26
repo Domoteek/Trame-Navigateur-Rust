@@ -3445,6 +3445,72 @@ async function suite() {
     await p.close();
   });
 
+  await cas("reglages : le bouton Enregistrer sauve les identifiants du profil actif", async () => {
+    const p = await page("reglages.html");
+    const questions = [];
+    p.on("dialog", async (d) => {
+      questions.push(d.message());
+      await d.accept();
+    });
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: {
+        astuces: true,
+        tunnelOblige: true,
+        tunnel: null,
+        tunnels: {
+          actif: "nord-fr",
+          liste: [{ id: "nord-fr", nom: "nord-fr", resume: "openvpn udp 187.14.106.91", endpoint: "187.14.106.91", actif: true }],
+        },
+      },
+    });
+    await rubrique(p, "confidentialite");
+    // Sans utilisateur : rien ne part, et le focus revient sur le champ.
+    await vider(p);
+    await p.click("#btn-tunnel-identifiants");
+    await p.waitForTimeout(150);
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelIdentifiants"),
+      [],
+      "sans utilisateur, rien n'est envoyé"
+    );
+    egal(questions.length, 1, "l'interface le dit");
+    // Avec les deux champs : le message porte les identifiants, puis la proposition de redémarrage.
+    await vider(p);
+    await p.fill("#tunnel-utilisateur", "service-nord");
+    await p.fill("#tunnel-motdepasse", "secret-de-test");
+    await p.click("#btn-tunnel-identifiants");
+    await p.waitForTimeout(150);
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelIdentifiants"),
+      [{ m: "tunnelIdentifiants", utilisateur: "service-nord", motdepasse: "secret-de-test" }],
+      "Enregistrer envoie les identifiants"
+    );
+    // L'hôte répond en poussant l'état avec un nouvel instant d'import : c'est ce témoin qui
+    // déclenche la proposition, l'identité de la configuration n'ayant pas changé.
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: {
+        astuces: true,
+        tunnelOblige: true,
+        tunnel: null,
+        tunnelImporteLe: 1234567,
+        tunnels: {
+          actif: "nord-fr",
+          liste: [{ id: "nord-fr", nom: "nord-fr", resume: "openvpn udp 187.14.106.91", endpoint: "187.14.106.91", actif: true }],
+        },
+      },
+    });
+    await p.waitForTimeout(200);
+    egal(
+      (await messages(p)).filter((m) => m.m === "redemarrerTrame"),
+      [{ m: "redemarrerTrame" }],
+      "portier armé : le redémarrage est proposé"
+    );
+    egal(await p.$eval("#tunnel-motdepasse", (n) => n.value), "", "le mot de passe est vidé du champ");
+    await p.close();
+  });
+
   await cas("page du tunnel : elle dit l'adresse visée, et « Réessayer » la redemande", async () => {
     const p = await page("tunnel.html", { query: "?url=https%3A%2F%2Fexample.com%2Fx", sansEtat: true });
     verifier(

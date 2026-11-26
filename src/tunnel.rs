@@ -641,6 +641,27 @@ pub fn charger_ovpn(racine: &Path, id: &str) -> Option<(String, Option<(String, 
     Some((profil, identifiants))
 }
 
+/// Enregistre (ou remplace) les identifiants d'une configuration **OpenVPN** — chiffrés par DPAPI,
+/// comme le profil. C'est le geste du bouton « Enregistrer » des réglages : il ne touche ni au
+/// profil ni au choix de la configuration active.
+pub fn enregistrer_identifiants(
+    racine: &Path,
+    id: &str,
+    utilisateur: &str,
+    mot_de_passe: &str,
+) -> Result<(), String> {
+    if genre(racine, id) != Some(Genre::OpenVpn) {
+        return Err("cette configuration n'est pas un profil OpenVPN".to_string());
+    }
+    if utilisateur.trim().is_empty() {
+        return Err("il manque l'utilisateur".to_string());
+    }
+    let paquet = format!("{utilisateur}\n{mot_de_passe}");
+    let chiffre = proteger(paquet.as_bytes())?;
+    let d = dossier(racine).join(id);
+    std::fs::write(d.join("identifiants.cle"), chiffre).map_err(|e| format!("écriture impossible : {e}"))
+}
+
 /// Relit une configuration **quel que soit son genre** : c'est ce que l'application donne au bon
 /// moteur au démarrage.
 pub fn charger_configuration(racine: &Path, id: &str) -> Option<Configuration> {

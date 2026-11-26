@@ -697,6 +697,7 @@
                 <div class="boutons" style="margin: 0">
                   <input class="saisie" id="tunnel-utilisateur" type="text" placeholder="utilisateur" autocomplete="off" spellcheck="false" style="width: 140px" />
                   <input class="saisie" id="tunnel-motdepasse" type="password" placeholder="mot de passe" autocomplete="off" style="width: 140px" />
+                  <button class="bouton principal" id="btn-tunnel-identifiants">Enregistrer</button>
                 </div>
               </div>
               <div id="liste-tunnels" class="tunnels"></div>
@@ -1857,6 +1858,21 @@
           // Sans configuration importée, aucun tunnel ne se monte : redémarrer ne changerait
           // rien, le portier se contenterait de bloquer les sites.
           if (reg.tunnelImporte) proposerRedemarrage(actif);
+        };
+        $("btn-tunnel-identifiants").onclick = () => {
+          const utilisateur = ($("tunnel-utilisateur").value || "").trim();
+          const motdepasse = $("tunnel-motdepasse").value || "";
+          if (!utilisateur) {
+            $("tunnel-utilisateur").focus();
+            alert("Il manque l'utilisateur des identifiants de service.");
+            return;
+          }
+          // Même témoin que l'import : quand les identifiants arrivent sur la configuration
+          // active, Trame proposera le redémarrage (le tunnel ne se monte qu'au démarrage).
+          confAvantImport = identiteTunnel(etat && etat.reglages);
+          attenteImport = true;
+          ipc({ m: "tunnelIdentifiants", utilisateur, motdepasse });
+          $("tunnel-motdepasse").value = "";
         };
         $("btn-tunnel-relire").onclick = () => ipc({ m: "tunnelReessayer", url: "" });
         $("btn-tunnel-importer").onclick = () => {

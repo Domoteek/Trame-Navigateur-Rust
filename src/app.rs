@@ -4932,6 +4932,39 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
                 self.pousser_etat();
             }
             // « Supprimer » une configuration precise : sa cle disparait, les autres restent.
+            // « Enregistrer » les identifiants de service d'un profil OpenVPN : le geste qui
+            // manquait (les champs ne servaient qu'à l'import). Ils sont chiffrés par DPAPI, comme
+            // le profil, et la configuration active est visée par défaut.
+            "tunnelIdentifiants" => {
+                let id = v["id"]
+                    .as_str()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| crate::tunnel::actif(self.profil.racine()));
+                let utilisateur = v["utilisateur"].as_str().unwrap_or("").trim().to_string();
+                let motdepasse = v["motdepasse"].as_str().unwrap_or("").to_string();
+                match id {
+                    Some(id) => match crate::tunnel::enregistrer_identifiants(
+                        self.profil.racine(),
+                        &id,
+                        &utilisateur,
+                        &motdepasse,
+                    ) {
+                        Ok(()) => {
+                            info!("tunnel : identifiants enregistres pour {id} (chiffres)");
+                            self.tunnel_actif = crate::tunnel::charger_active(self.profil.racine());
+                            self.tunnel_importe_le = crate::log::maintenant_ms();
+                            self.signaler("Identifiants enregistrés (chiffrés) : redémarre Trame pour les utiliser.");
+                        }
+                        Err(e) => {
+                            alerte!("tunnel : identifiants non enregistres ({e})");
+                            self.signaler(&format!("Identifiants non enregistrés : {e}"));
+                        }
+                    },
+                    None => self.signaler("Aucune configuration active : importer d'abord un profil."),
+                }
+                self.pousser_etat();
+            }
             "tunnelSupprimer" => {
                 let id = v["id"].as_str().unwrap_or("").trim().to_string();
                 match crate::tunnel::supprimer(self.profil.racine(), &id) {
