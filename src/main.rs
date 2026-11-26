@@ -39,6 +39,7 @@ mod systeme;
 mod teinte;
 mod telechargements;
 mod tunnel;
+mod vpn;
 mod urls;
 mod vitality;
 mod weave;
@@ -78,6 +79,19 @@ fn main() {
     let profil = profile::Profil::ouvrir();
     log::init(profil.fichier_journal());
     info!("Trame demarre (profil {})", profil.racine().display());
+
+    // Sonde de mise au point du tunnel (jamais en usage normal) : `TRAME_TUNNEL_ESSAI=1` monte le
+    // tunnel configure, tente la poignee de main avec le pair, ecrit le resultat et sort. Elle
+    // existe pour pouvoir eprouver le moteur sans toucher au profil de tous les jours.
+    if std::env::var("TRAME_TUNNEL_ESSAI").is_ok() {
+        let ligne = match vpn::essai(profil.racine()) {
+            Ok(detail) => format!("tunnel : {detail}"),
+            Err(e) => format!("tunnel : ECHEC ({e})"),
+        };
+        info!("{ligne}");
+        println!("{ligne}");
+        return;
+    }
 
     // Un lien recu de Windows (Trame navigateur par defaut) ou de la ligne de commande.
     let adresse = externe::adresse_des_arguments(std::env::args().skip(1));

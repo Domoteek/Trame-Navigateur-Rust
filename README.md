@@ -249,6 +249,15 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.78, publiée et installée le 2026-11-27.** **Le moteur du tunnel existe, et il parle à Mullvad.**
+> `boringtun` (WireGuard en Rust, en **espace utilisateur**) est dans le binaire : `src/vpn.rs` ouvre
+> une session (clés, socket UDP, minuteries), envoie la poignée de main et la maintient. Mesure sur la
+> configuration réellement importée : **poignée de main avec `193.32.126.68:51820` en 20 ms**, 2
+> datagrammes envoyés, 1 reçu, `rtt 20 ms` — **sans pilote, sans droits administrateur**. Un banc à
+> deux pairs locaux (`cargo test`) prouve le même échange hors réseau. Le binaire passe de 3,2 à
+> 3,7 Mo. Reste, pour que les pages passent dedans : la **pile TCP/IP en espace utilisateur** et le
+> **proxy local (SOCKS5)** que Trame traversera.
+>
 > **0.4.77, publiée et installée le 2026-11-27.** Le portier « tunnel obligatoire » ne bloque plus le
 > **réseau local** : Proxmox (`192.168.1.5:8006`), le tableau de bord du home lab
 > (`192.168.1.11:8720`), `10.x`, `172.16-31.x`, les adresses lien-local, l'IPv6 ULA `fc00::/7` et
@@ -426,7 +435,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.77-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.78-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >
