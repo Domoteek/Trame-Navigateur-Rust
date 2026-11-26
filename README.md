@@ -249,6 +249,16 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.82, publiée et installée le 2026-11-28.** « C'est activé mais beaucoup d'onglets ne se chargent
+> pas. » Deux causes, mesurées : (1) **un seul nom pouvait être résolu à la fois** — la page suivante
+> écrasait la résolution en cours, d'où des onglets qui n'arrivaient jamais ; chaque connexion a
+> désormais **son propre socket DNS** et un **port local distinct** (un socket lié au port 0 ne reçoit
+> pas sa réponse). (2) **le relais jetait le reliquat** d'un envoi partiel vers le tunnel, ce qui
+> tronquait les requêtes ; il est conservé pour le tour suivant. Preuves : `cargo test` **245/245**,
+> `tester-ui` **107/107**, et le banc qui ouvre **trois onglets sur trois hôtes différents**
+> (`example.com`, `iana.org`, page de contrôle Mullvad) : les trois se chargent, `mullvad=true`,
+> `fr-par-wg-003`.
+>
 > **0.4.81, publiée et installée le 2026-11-28.** **Le VPN intégré fonctionne : les pages sortent par
 > Mullvad.** Une **pile TCP/IP en espace utilisateur** (`smoltcp`) est branchée sur les paquets du
 > tunnel, un **résolveur DNS dans le tunnel** (le DNS du fournisseur, jamais celui de la box) et un
@@ -467,7 +477,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.81-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.82-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

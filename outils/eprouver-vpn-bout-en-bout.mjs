@@ -138,6 +138,36 @@ try {
     page.fermer();
   }
 
+  // Le vrai usage de Clément : PLUSIEURS onglets sur des hôtes différents, donc plusieurs
+  // résolutions DNS en même temps. Défaut constaté le 2026-11-28 : beaucoup d'onglets ne se
+  // chargeaient pas, parce qu'un seul nom pouvait être résolu à la fois.
+  const sites = ["https://example.com/", "https://www.iana.org/help/example-domains"];
+  const ouvrir = async (url) => {
+    await rail.evaluer(`document.getElementById("btn-nouvel").click()`);
+    await pause(1200);
+    await barre.evaluer(`(() => {
+      const c = document.getElementById("couture");
+      c.focus();
+      c.value = ${JSON.stringify(url)};
+      c.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", altKey: false, bubbles: true, cancelable: true }));
+    })()`);
+    await pause(9000);
+    const cible = (await cibles(PORT)).find((t) => t.type === "page" && t.url.startsWith(url.replace(/\/$/, "")));
+    if (!cible) return { url, titre: "" };
+    const p = await connecter(cible.webSocketDebuggerUrl);
+    await p.envoyer("Runtime.enable");
+    await pause(400);
+    const titre = await p.evaluer("document.title");
+    p.fermer();
+    return { url, titre };
+  };
+
+  for (const site of sites) {
+    const resultat = await ouvrir(site);
+    console.log(`onglet ${site} : titre ${JSON.stringify(resultat.titre)}`);
+    ok(resultat.titre.trim().length > 0, `${site} se charge dans son propre onglet`);
+  }
+
   barre.fermer();
   rail.fermer();
 } finally {

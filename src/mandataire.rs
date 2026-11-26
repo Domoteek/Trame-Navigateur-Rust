@@ -324,8 +324,8 @@ fn sauter_nom(reponse: &[u8], mut i: usize) -> Option<usize> {
 enum Etat {
     Salutation,
     Requete,
-    /// On attend la résolution DNS du nom (`id` de la demande).
-    Resolution(u16),
+    /// On attend la résolution DNS du nom, sur CE client (socket, identifiant, envoi, essais).
+    Resolution { socket: SocketHandle, id: u16, envoye_le: u64, essais: u8, nom: String },
     Connexion(SocketHandle),
     Relais(SocketHandle),
 }
@@ -375,7 +375,6 @@ fn boucle(
 
     let mut sockets = SocketSet::new(Vec::new());
     let dns: Option<IpAddr> = config.dns.first().and_then(|d| d.parse().ok());
-    let mut resolveur = dns.map(|adresse| Resolveur::nouveau(adresse, &mut sockets));
 
     let mut clients: Vec<Client> = Vec::new();
     crate::info!(
@@ -417,16 +416,12 @@ fn boucle(
         iface.poll(temps, &mut pile, &mut sockets);
 
         // 4. Le résolveur, s'il a une demande en cours.
-        if let Some(r) = resolveur.as_mut() {
-            r.entretenir(&mut sockets, maintenant);
-        }
-
         // 5. Chaque client avance d'un cran.
         let mut a_oublier = Vec::new();
         {
             let contexte = iface.context();
             for (index, client) in clients.iter_mut().enumerate() {
-                if client.avancer(&mut sockets, &mut resolveur, contexte, maintenant).is_err() {
+                if client.avancer(&mut sockets, dns, contexte, maintenant).is_err() {
                     a_oublier.push(index);
                 }
             }
@@ -455,7 +450,7 @@ impl Client {
     fn avancer(
         &mut self,
         sockets: &mut SocketSet<'_>,
-        resolveur: &mut Option<Resolveur>,
+        serveur_dns: Option<IpAddr>,
         contexte: &mut smoltcp::iface::Context,
         maintenant: u64,
     ) -> Result<(), ()> {
@@ -512,23 +507,33 @@ impl Client {
                         let longueur = self.tampon[4] as usize;
                         let nom = String::from_utf8_lossy(&self.tampon[5..5 + longueur]).to_string();
                         self.tampon.drain(..taille);
-                        let Some(r) = resolveur.as_mut() else {
+                        let Some(serveur) = serveur_dns else {
                             let _ = self.flux.write_all(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
                             return Err(());
                         };
-                        // Une demande identique déjà en vol : on s'y accroche.
-                        let identifiant = if r.en_cours != 0 && r.nom == nom {
-                            r.en_cours
-                        } else {
-                            match r.demander(sockets, &nom, maintenant) {
-                                Some(id) => id,
-                                None => {
-                                    let _ = self.flux.write_all(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
-                                    return Err(());
-                                }
-                            }
-                        };
-                        self.etat = Etat::Resolution(identifiant);
+                        // Un socket DNS PAR CLIENT : deux onglets qui résolvent deux noms en même
+                        // temps ne se volent plus la réponse (défaut constaté le 2026-11-28 :
+                        // beaucoup d'onglets ne se chargeaient pas).
+                        let rx = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0u8; 2048]);
+                        let tx = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0u8; 2048]);
+                        let mut socket = udp::Socket::new(rx, tx);
+                        // Un port local DISTINCT : un socket lie au port 0 ne recoit pas sa reponse
+                        // (smoltcp remet le datagramme au socket lie au port de destination).
+                        let port_local = 40000u16 + (maintenant % 10000) as u16;
+                        if socket.bind(port_local).is_err() {
+                            let _ = self.flux.write_all(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+                            return Err(());
+                        }
+                        let handle = sockets.add(socket);
+                        let identifiant = (maintenant % 60000) as u16 + 1;
+                        let requete = requete_dns(identifiant, &nom);
+                        let endpoint = IpEndpoint::new(ip_smoltcp(serveur), 53);
+                        let socket = sockets.get_mut::<udp::Socket>(handle);
+                        if socket.send_slice(&requete, udp::UdpMetadata::from(endpoint)).is_err() {
+                            let _ = self.flux.write_all(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+                            return Err(());
+                        }
+                        self.etat = Etat::Resolution { socket: handle, id: identifiant, envoye_le: maintenant, essais: 1, nom };
                         self.hote = Some((IpAddr::V4(Ipv4Addr::UNSPECIFIED), port));
                         return Ok(());
                     }
@@ -537,27 +542,46 @@ impl Client {
                 self.tampon.drain(..taille);
                 self.connecter(sockets, contexte)?;
             }
-            Etat::Resolution(identifiant) => {
-                let Some(r) = resolveur.as_mut() else { return Err(()) };
-                if r.en_cours != identifiant {
-                    return Err(());
-                }
-                let Some(resultat) = r.resultat.take() else {
-                    return Ok(()); // on attend
+            Etat::Resolution { socket, id, envoye_le, essais, ref nom } => {
+                let nom = nom.clone();
+                let mut tampon = [0u8; 2048];
+                let recu = {
+                    let socket = sockets.get_mut::<udp::Socket>(socket);
+                    socket.recv_slice(&mut tampon).ok().map(|(n, _)| n)
                 };
-                r.en_cours = 0;
-                match resultat {
-                    Ok(ip) => {
-                        if let Some((_, port)) = self.hote {
-                            self.hote = Some((ip, port));
+                if let Some(n) = recu {
+                    match extraire_a(&tampon[..n], id) {
+                        Some(ip) => {
+                            if let Some((_, port)) = self.hote {
+                                self.hote = Some((ip, port));
+                            }
+                            self.connecter(sockets, contexte)?;
                         }
-                        self.connecter(sockets, contexte)?;
+                        None => {
+                            crate::info!("mandataire : « {nom} » introuvable (DNS du tunnel)");
+                            let _ = self.flux.write_all(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+                            return Err(());
+                        }
                     }
-                    Err(e) => {
-                        crate::info!("mandataire : {e}");
+                } else if maintenant.saturating_sub(envoye_le) > 2_000 {
+                    if essais >= 3 {
+                        crate::info!("mandataire : le DNS du tunnel n'a pas répondu pour « {nom} »");
                         let _ = self.flux.write_all(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
                         return Err(());
                     }
+                    let Some(serveur) = serveur_dns else { return Err(()) };
+                    let requete = requete_dns(id, &nom);
+                    let endpoint = IpEndpoint::new(ip_smoltcp(serveur), 53);
+                    let handle = socket;
+                    let socket = sockets.get_mut::<udp::Socket>(handle);
+                    let _ = socket.send_slice(&requete, udp::UdpMetadata::from(endpoint));
+                    self.etat = Etat::Resolution {
+                        socket: handle,
+                        id,
+                        envoye_le: maintenant,
+                        essais: essais + 1,
+                        nom,
+                    };
                 }
             }
             Etat::Connexion(handle) => {
@@ -584,7 +608,13 @@ impl Client {
                 let a_envoyer = std::mem::take(&mut self.tampon);
                 let socket = sockets.get_mut::<tcp::Socket>(handle);
                 if !a_envoyer.is_empty() && socket.may_send() {
-                    let _ = socket.send_slice(&a_envoyer);
+                    // `send_slice` en prend ce qu'il peut : le reste repartira au tour suivant.
+                    // Jeter le reliquat tronquait les requêtes (défaut constaté le 2026-11-28).
+                    match socket.send_slice(&a_envoyer) {
+                        Ok(n) if n < a_envoyer.len() => self.tampon.extend_from_slice(&a_envoyer[n..]),
+                        Err(_) => self.tampon.extend_from_slice(&a_envoyer),
+                        _ => {}
+                    }
                 }
                 if socket.may_recv() {
                     if let Ok(n) = socket.recv_slice(&mut recu) {
