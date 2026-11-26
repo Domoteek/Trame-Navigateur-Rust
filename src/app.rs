@@ -326,7 +326,7 @@ pub struct App {
     tunnel_verifie: u64,
     /// La configuration WireGuard importee (VPN integre) : sans la cle privee, qui vit chiffree
     /// dans `tunnel.cle` et ne sert qu'au tunnel lui-meme.
-    tunnel_conf: Option<crate::tunnel::Config>,
+    tunnel_actif: Option<crate::tunnel::Configuration>,
     /// Pourquoi le tunnel integre n'a pas pu se monter, la derniere fois. Une phrase lisible, que
     /// l'interface affiche : sans elle, un tunnel muet ne laissait aucune trace visible (constat
     /// de Clement, 2026-11-28 : « ca fonctionne pas », et rien a lire). Effacee des que ca monte.
@@ -494,6 +494,18 @@ const MEMOIRE_BASSE_APRES_MS: u64 = 20_000;
 /// navigation n'a plus de sens sur un ecran de portable.
 const ZOOM_MIN: f64 = 0.5;
 const ZOOM_MAX: f64 = 2.0;
+
+/// Le canevas d'une webview **de contenu** : blanc, comme celui de Chrome.
+///
+/// Mesure du 2026-11-26 (Clément, « on voit rien » sur AliExpress) : ce site laisse `html` et
+/// `body` transparents — `background-color: rgba(0, 0, 0, 0)` sur les deux, releve dans Chrome
+/// au meme instant. Un site qui ne peint aucun fond laisse donc voir le canevas de la webview.
+/// Regle sur la couleur de la teinte, ce canevas affichait `#060d14` sous un texte prevu pour du
+/// blanc : gris sur bleu nuit, illisible. Chrome peint blanc ; on fait pareil.
+///
+/// Le canevas de la teinte garde son role la ou il est juste : les surfaces internes (rail,
+/// barre, pages `trame://`, zappeur), qui peignent leur propre fond de toute facon.
+const TOILE: (u8, u8, u8, u8) = (255, 255, 255, 255);
 
 /// Ramene un facteur de zoom dans les bornes, arrondi au dixieme.
 pub fn zoom_borne(facteur: f64) -> f64 {
@@ -743,7 +755,7 @@ impl App {
         if let Some(id) = crate::tunnel::migrer(profil.racine()) {
             info!("tunnel : ancienne configuration reprise dans tunnels/{id}");
         }
-        let tunnel_conf = crate::tunnel::charger(profil.racine());
+        let tunnel_actif = crate::tunnel::charger_active(profil.racine());
 
         let mut app = App {
             window,
@@ -828,7 +840,7 @@ impl App {
             tunnel_bloque: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             tunnel: None,
             tunnel_verifie: 0,
-            tunnel_conf,
+            tunnel_actif,
             tunnel_erreur: None,
             mandataire: None,
             blocage: crate::moteur_ext::Blocage::default(),
@@ -1173,11 +1185,39 @@ impl App {
         if !self.reglages.tunnel_oblige {
             return;
         }
-        let Some(config) = self.tunnel_conf.clone() else { return };
-        let nom = config.endpoint.clone();
-        match crate::mandataire::demarrer(config) {
+        // Le genre de la configuration active décide du moteur — c'est le seul endroit où Trame
+        // sait qu'il y a deux moteurs. Le reste (piles, SOCKS5, portier) est commun.
+        let Some(active) = self.tunnel_actif.clone() else { return };
+        let nom = match &active {
+            crate::tunnel::Configuration::WireGuard(config) => config.endpoint.clone(),
+            crate::tunnel::Configuration::OpenVpn { nom, .. } => nom.clone(),
+        };
+        let demarrage = match active {
+            crate::tunnel::Configuration::WireGuard(config) => {
+                let prepare = config.clone();
+                crate::mandataire::demarrer_tunnel(move || {
+                    let session = crate::vpn::connecter(&prepare, std::time::Duration::from_secs(10))?;
+                    let parametres = crate::moteur::Parametres::depuis_wireguard(&prepare);
+                    Ok((Box::new(session) as Box<dyn crate::moteur::Tunnel>, parametres))
+                })
+            }
+            crate::tunnel::Configuration::OpenVpn { profil, identifiants, .. } => {
+                let prepare = (profil, identifiants);
+                crate::mandataire::demarrer_tunnel(move || {
+                    let (profil, identifiants) = prepare;
+                    let session = crate::ovpn::Session::connecter(
+                        &profil,
+                        identifiants,
+                        crate::ovpn::DELAI_MONTAGE,
+                    )?;
+                    let parametres = session.parametres();
+                    Ok((Box::new(session) as Box<dyn crate::moteur::Tunnel>, parametres))
+                })
+            }
+        };
+        match demarrage {
             Ok(mandataire) => {
-                info!("tunnel intégré : mandataire sur {} (pair {nom})", mandataire.adresse());
+                info!("tunnel intégré : mandataire sur {} ({nom})", mandataire.adresse());
                 self.mandataire = Some(mandataire);
                 self.tunnel_erreur = None;
                 self.tunnel_verifie = 0;
@@ -1400,7 +1440,7 @@ impl App {
                 u.query_pairs_mut().append_pair("url", cible);
                 // Sans configuration importée, la page le dit : « monte ton VPN » n'aide pas
                 // quelqu'un qui n'a rien importé (constat de Clément, 2026-11-27).
-                if self.tunnel_conf.is_none() {
+                if self.tunnel_actif.is_none() {
                     u.query_pairs_mut().append_pair("sans", "1");
                 }
                 // Une configuration existe mais le tunnel n'a pas monté : la page de blocage dit
@@ -1554,7 +1594,8 @@ impl App {
             .with_bounds(geo.contenu)
             .with_visible(visible)
             .with_focused(false)
-            .with_background_color(self.couleur_fond())
+            // Un onglet de contenu montre un site : blanc en canevas, comme Chrome (voir `TOILE`).
+            .with_background_color(TOILE)
             .with_devtools(true)
             .with_navigation_handler(garde);
         // Sondes de diagnostic (comparaison) : `TRAME_SANS_AMORCE` n'injecte pas les scripts de
@@ -2494,7 +2535,8 @@ impl App {
             .with_bounds(geo.contenu)
             .with_visible(true)
             .with_focused(true)
-            .with_background_color(self.couleur_fond())
+            // L'apercu montre un vrai site : meme canevas blanc que l'onglet (voir `TOILE`).
+            .with_background_color(TOILE)
             .with_navigation_handler(garde)
             .with_initialization_script(&crate::teinte::injecter(APERCU, &palette_apercu))
             .with_on_page_load_handler(move |_, url| {
@@ -3384,16 +3426,25 @@ impl App {
                 "tunnelOblige": self.reglages.tunnel_oblige,
                 "tunnel": self.tunnel.clone(),
                 // Le tunnel INTEGRE (VPN de Trame) : ce qui est importe, et son resume lisible.
-                "tunnelImporte": self.tunnel_conf.as_ref().map(|c| json!({
-                    "nom": c.nom,
-                    "resume": c.resume(),
-                    "endpoint": c.endpoint,
-                    "adresses": c.adresses,
-                    "dns": c.dns,
-                    "clePaire": c.cle_paire,
-                    "allowedIps": c.allowed_ips,
-                    "keepalive": c.keepalive,
-                })),
+                // Deux genres cohabitent : WireGuard (le `.conf`) et OpenVPN (le `.ovpn`).
+                "tunnelImporte": self.tunnel_actif.as_ref().map(|c| match c {
+                    crate::tunnel::Configuration::WireGuard(config) => json!({
+                        "genre": "wireguard",
+                        "nom": config.nom,
+                        "resume": config.resume(),
+                        "endpoint": config.endpoint,
+                        "adresses": config.adresses,
+                        "dns": config.dns,
+                        "clePaire": config.cle_paire,
+                        "allowedIps": config.allowed_ips,
+                        "keepalive": config.keepalive,
+                    }),
+                    crate::tunnel::Configuration::OpenVpn { nom, identifiants, .. } => json!({
+                        "genre": "openvpn",
+                        "nom": nom,
+                        "resume": format!("profil OpenVPN — identifiants {}", if identifiants.is_some() { "gardés" } else { "non requis" }),
+                    }),
+                }),
                 // Pourquoi le tunnel integre n'a pas monte, quand c'est le cas : l'interface
                 // l'affiche tel quel, sinon la panne reste dans le journal.
                 "tunnelErreur": self.tunnel_erreur.clone(),
@@ -4759,8 +4810,8 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
                 let choisi = match v["chemin"].as_str().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
                     Some(chemin) => Some(chemin),
                     None => match crate::systeme::choisir_fichier(
-                        "Configuration WireGuard (.conf)",
-                        "WireGuard (*.conf)|*.conf|Tous les fichiers|*.*",
+                        "Configuration de tunnel (WireGuard .conf, OpenVPN .ovpn)",
+                        "Configurations de tunnel (*.conf;*.ovpn)|*.conf;*.ovpn|WireGuard (*.conf)|*.conf|OpenVPN (*.ovpn)|*.ovpn|Tous les fichiers|*.*",
                     ) {
                         Ok(choix) => choix,
                         Err(e) => {
@@ -4770,22 +4821,64 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
                     },
                 };
                 if let Some(chemin) = choisi {
-                    match crate::tunnel::lire_fichier(std::path::Path::new(&chemin)) {
-                        Ok(config) => match crate::tunnel::enregistrer(self.profil.racine(), &config) {
-                            Ok(id) => {
-                                let resume = config.resume();
-                                info!("tunnel : configuration importee dans tunnels/{id} ({resume})");
-                                self.tunnel_conf = Some(config);
-                                self.signaler(&format!("Tunnel importé : {resume}"));
+                    // Deux formats désormais : le `.conf` de WireGuard, et le `.ovpn` d'OpenVPN.
+                    // On les distingue au contenu, pas à l'extension (les fournisseurs nomment
+                    // leurs fichiers comme ils veulent).
+                    match std::fs::read_to_string(&chemin) {
+                        Ok(texte) if crate::ovpn::ressemble_a_un_profil(&texte) => {
+                            let nom = std::path::Path::new(&chemin)
+                                .file_stem()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_else(|| "OpenVPN".to_string());
+                            // Identifiants s'ils sont fournis par l'interface ; sinon le moteur
+                            // dira qu'il en faut, et le message le dira à l'écran.
+                            let identifiants = match (
+                                v["utilisateur"].as_str().map(|s| s.to_string()),
+                                v["motdepasse"].as_str().map(|s| s.to_string()),
+                            ) {
+                                (Some(u), Some(p)) if !u.trim().is_empty() => Some((u, p)),
+                                _ => None,
+                            };
+                            match crate::tunnel::enregistrer_ovpn(self.profil.racine(), &nom, &texte, identifiants) {
+                                Ok(id) => {
+                                    info!("tunnel : profil OpenVPN importe dans tunnels/{id} ({nom})");
+                                    self.tunnel_actif = crate::tunnel::charger_active(self.profil.racine());
+                                    self.signaler(&format!("Profil OpenVPN importé : {nom}"));
+                                }
+                                Err(e) => {
+                                    alerte!("tunnel : profil OpenVPN refuse ({e})");
+                                    self.signaler(&format!("Profil OpenVPN refusé : {e}"));
+                                }
+                            }
+                        }
+                        Ok(texte) => match crate::tunnel::lire(&texte) {
+                            Ok(mut config) => {
+                                config.nom = std::path::Path::new(&chemin)
+                                    .file_stem()
+                                    .map(|n| n.to_string_lossy().to_string())
+                                    .filter(|n| !n.trim().is_empty())
+                                    .unwrap_or_else(|| "Tunnel".to_string());
+                                match crate::tunnel::enregistrer(self.profil.racine(), &config) {
+                                    Ok(id) => {
+                                        let resume = config.resume();
+                                        info!("tunnel : configuration importee dans tunnels/{id} ({resume})");
+                                        self.tunnel_actif = crate::tunnel::charger_active(self.profil.racine());
+                                        self.signaler(&format!("Tunnel importé : {resume}"));
+                                    }
+                                    Err(e) => {
+                                        alerte!("tunnel : enregistrement impossible ({e})");
+                                        self.signaler(&format!("Tunnel : enregistrement impossible ({e})"));
+                                    }
+                                }
                             }
                             Err(e) => {
-                                alerte!("tunnel : enregistrement impossible ({e})");
-                                self.signaler(&format!("Tunnel : enregistrement impossible ({e})"));
+                                alerte!("tunnel : configuration refusee ({e})");
+                                self.signaler(&format!("Tunnel refusé : {e}"));
                             }
                         },
                         Err(e) => {
-                            alerte!("tunnel : configuration refusee ({e})");
-                            self.signaler(&format!("Tunnel refusé : {e}"));
+                            alerte!("tunnel : lecture impossible ({e})");
+                            self.signaler(&format!("Tunnel : lecture impossible ({e})"));
                         }
                     }
                 }
@@ -4797,10 +4890,10 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
             "tunnelChoisir" => {
                 let id = v["id"].as_str().unwrap_or("").trim().to_string();
                 match crate::tunnel::definir_actif(self.profil.racine(), &id) {
-                    Ok(()) => match crate::tunnel::charger_id(self.profil.racine(), &id) {
+                    Ok(()) => match crate::tunnel::charger_configuration(self.profil.racine(), &id) {
                         Some(config) => {
-                            info!("tunnel : configuration active -> {id} ({})", config.resume());
-                            self.tunnel_conf = Some(config);
+                            info!("tunnel : configuration active -> {id}");
+                            self.tunnel_actif = Some(config);
                             self.signaler("Tunnel choisi : il sera monté au prochain démarrage.");
                         }
                         None => {
@@ -4821,7 +4914,7 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
                 match crate::tunnel::supprimer(self.profil.racine(), &id) {
                     Ok(()) => {
                         info!("tunnel : configuration {id} supprimee");
-                        self.tunnel_conf = crate::tunnel::charger(self.profil.racine());
+                        self.tunnel_actif = crate::tunnel::charger_active(self.profil.racine());
                         self.signaler("Configuration supprimée : sa clé a été effacée.");
                     }
                     Err(e) => {
@@ -4840,7 +4933,7 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
                     Some(id) => match crate::tunnel::supprimer(self.profil.racine(), &id) {
                         Ok(()) => {
                             info!("tunnel : configuration {id} oubliee");
-                            self.tunnel_conf = crate::tunnel::charger(self.profil.racine());
+                            self.tunnel_actif = crate::tunnel::charger_active(self.profil.racine());
                             self.signaler("Tunnel oublié : la clé a été effacée.");
                         }
                         Err(e) => self.signaler(&format!("Tunnel : suppression impossible ({e})")),
