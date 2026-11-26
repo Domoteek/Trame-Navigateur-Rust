@@ -865,6 +865,19 @@ function rendreRail(s) {
     tete.appendChild(elem("span", "fil-compte", `${onglets.length}`));
 
     const outils = elem("span", "fil-outils");
+    // « + » du groupe : ouvrir un onglet DIRECTEMENT ici. Sans lui, le seul « + » (celui de la
+    // tete du rail) tissait l'onglet neuf ailleurs et fabriquait un groupe de plus (demande de
+    // Clement, 2026-11-26). Le fil est impose : aucun tissage, aucune surprise.
+    const ajouter = elem("button", "ajouter-fil");
+    // Titre a deux parties, comme les autres commandes du rail : l'action avant les deux-points,
+    // l'explication apres (c'est ce que la bulle de Trame affiche en second).
+    ajouter.title = `Nouvel onglet dans ce groupe : s'ajoute à la fin de « ${f.nom} », sans tissage`;
+    ajouter.appendChild(icone("plus", "petit"));
+    ajouter.onclick = (e) => {
+      e.stopPropagation();
+      ipc({ m: "nouvelOnglet", fil: f.id });
+    };
+    outils.appendChild(ajouter);
     const cloisonner = elem("button", f.cloison ? "on" : "");
     cloisonner.title = f.cloison
       ? "Décloisonner : rejoindre le profil principal (connexions et extensions partagées)"

@@ -2405,6 +2405,26 @@ async function suite() {
     await b.close();
   });
 
+  await cas("rail : le « + » d'un groupe ouvre un onglet DANS ce groupe", async () => {
+    const p = await page("chrome.html", { query: "?surface=rail" });
+    await p.setViewportSize({ width: 292, height: 700 });
+    const e = etatDeBase();
+    e.fils = [{ id: 7, nom: "Achats", onglets: [1] }];
+    e.onglets = [onglet(1, 7, "Un", "https://a.fr/")];
+    await pousser(p, e);
+    verifier(!!(await p.$('.fil[data-fil="7"] .ajouter-fil')), "le groupe a son bouton « + »");
+    await vider(p);
+    await p.click('.fil[data-fil="7"] .ajouter-fil');
+    const envoi = (await messages(p)).find((m) => m.m === "nouvelOnglet");
+    egal(envoi && envoi.fil, 7, `il demande le nouvel onglet dans SON fil (${JSON.stringify(envoi)})`);
+    // Le « + » de la tete du rail, lui, ne nomme aucun fil : l'hote le met dans le fil affiche.
+    await vider(p);
+    await p.click("#btn-nouvel");
+    const sansFil = (await messages(p)).find((m) => m.m === "nouvelOnglet");
+    egal(sansFil && sansFil.fil, undefined, "la tête du rail ne force aucun fil");
+    await p.close();
+  });
+
   await cas("rail : glisser un onglet entre deux onglets demande sa position", async () => {
     const p = await page("chrome.html", { query: "?surface=rail" });
     await p.setViewportSize({ width: 292, height: 700 });

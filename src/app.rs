@@ -1827,6 +1827,13 @@ impl App {
         self.session.onglets.iter().find(|o| o.id == id)
     }
 
+    /// Le fil de l'onglet affiche : c'est la que va un onglet neuf (il n'a pas de contenu, donc
+    /// le tissage ne peut pas le placer). `None` = aucun onglet affiche, le tissage reprend la
+    /// main et un fil naitra.
+    fn fil_affiche(&self) -> Option<ThreadId> {
+        self.actif.and_then(|id| self.trouver(id)).map(|o| o.fil)
+    }
+
     fn onglet_mut(&mut self, id: TabId) -> Option<&mut Onglet> {
         self.session.onglets.iter_mut().find(|o| o.id == id)
     }
@@ -3831,7 +3838,14 @@ impl App {
                 } else {
                     urls::normaliser_avec(&url, &self.reglages.moteur)
                 };
-                self.ouvrir_onglet(url, Declencheur::NouvelOnglet, None);
+                // `fil` impose le groupe (le « + » d'un groupe). Sans lui, le nouvel onglet
+                // rejoint le fil de l'onglet AFFICHE : un onglet neuf n'a aucun contenu, donc le
+                // tissage ne pouvait pas le placer et fabriquait un groupe de plus (constate par
+                // Clement le 2026-11-26 : « quand on fait ajouter en haut, ca cree un groupe et un
+                // onglet »). Le tissage automatique reste pour les onglets ouverts DEPUIS une page,
+                // ou il a un sens (provenance, domaine, titre).
+                let fil = v["fil"].as_u64().map(|n| n as ThreadId).or_else(|| self.fil_affiche());
+                self.ouvrir_onglet_dans(url, Declencheur::NouvelOnglet, None, fil);
             }
             // Deplacer un onglet dans son fil (ou dans un autre) : c'est l'ordre de
             // `session.onglets` qui ordonne le rail, et l'hote est seul juge. Meme geste que le
@@ -5016,10 +5030,14 @@ impl App {
     fn commande(&mut self, id: &str) {
         match id {
             "nouvel-onglet" => {
-                self.ouvrir_onglet(
+                // Meme regle que la touche et le « + » : le nouvel onglet rejoint le groupe de
+                // l'onglet affiche, il ne fabrique pas un groupe de plus.
+                let fil = self.fil_affiche();
+                self.ouvrir_onglet_dans(
                     urls::NOUVEL_ONGLET.to_string(),
                     Declencheur::NouvelOnglet,
                     None,
+                    fil,
                 );
             }
             "fermer-onglet" => {
@@ -5174,10 +5192,14 @@ impl App {
     fn raccourci(&mut self, action: &str) {
         match action {
             "nouvelOnglet" => {
-                self.ouvrir_onglet(
+                // Ctrl+T : le nouvel onglet rejoint le groupe de l'onglet affiche (meme regle que
+                // le « + » et la commande de la Couture).
+                let fil = self.fil_affiche();
+                self.ouvrir_onglet_dans(
                     urls::NOUVEL_ONGLET.to_string(),
                     Declencheur::NouvelOnglet,
                     None,
+                    fil,
                 );
             }
             "fermerOnglet" => {
