@@ -165,6 +165,9 @@ struct Pont {
     monte: Arc<Mutex<Option<Result<TunSettings, String>>>>,
     journal: Arc<Mutex<VecDeque<String>>>,
     arret: Arc<AtomicBool>,
+    /// La raison de la fin, quand `connect` rend la main en erreur : c'est elle qu'on veut lire,
+    /// pas « le tunnel n'a pas monté ».
+    fin: Arc<Mutex<Option<String>>>,
 }
 
 impl Pont {
@@ -194,8 +197,17 @@ impl EngineEvents for Pont {
         Err("clé du client hors du profil : non géré par Trame".to_string())
     }
     fn tun_up(&self, reglages: Result<TunSettings, String>) {
-        if let Ok(mut emplacement) = self.monte.lock() {
-            *emplacement = Some(reglages);
+        // Le tunnel n'est monté que si le serveur a **poussé une adresse**. Core appelle aussi
+        // `tun_up` pour annoncer des réglages vides au démarrage : les prendre pour un montage
+        // ferait croire à un tunnel qui n'existe pas (mesuré le 2026-11-28 sur le banc).
+        let utile = match &reglages {
+            Ok(t) => t.addr4.is_some() || t.addr6.is_some(),
+            Err(_) => true,
+        };
+        if utile {
+            if let Ok(mut emplacement) = self.monte.lock() {
+                *emplacement = Some(reglages);
+            }
         }
     }
     fn packet(&self, paquet: &[u8]) -> bool {
@@ -219,15 +231,27 @@ impl Session {
         delai: Duration,
     ) -> Result<Session, String> {
         let resume = valider(profil)?;
+        // La clé privée du client hors du profil : Trame ne sait pas la fournir (pas de magasin de
+        // certificats), et le moteur s'arrête sur « Missing External PKI alias ». Mieux vaut le
+        // dire avant de tenter quoi que ce soit que d'attendre trente secondes.
+        if resume.external_pki {
+            return Err(
+                "ce profil attend un certificat client hors du fichier (external PKI) : réimporter un \
+                 profil qui le porte, avec ses sections <cert> et <key>"
+                    .to_string(),
+            );
+        }
         let boite = Boite::nouvelle();
         let monte = Arc::new(Mutex::new(None));
         let journal = Arc::new(Mutex::new(VecDeque::new()));
         let arret = Arc::new(AtomicBool::new(false));
+        let fin = Arc::new(Mutex::new(None::<String>));
         let pont = Arc::new(Pont {
             boite: boite.clone(),
             monte: monte.clone(),
             journal: journal.clone(),
             arret: arret.clone(),
+            fin: fin.clone(),
         });
         let moteur = Arc::new(Engine::new(pont).map_err(|e| format!("moteur OpenVPN indisponible : {e}"))?);
         let (config, identifiants) = config_de_connexion(profil, identifiants);
@@ -242,11 +266,15 @@ impl Session {
 
         // `connect` bloque jusqu'à la fin de la session : il vit sur son fil.
         let pour_fil = moteur.clone();
+        let fin_du_fil = fin.clone();
         std::thread::Builder::new()
             .name("trame-openvpn".into())
             .spawn(move || {
                 if let Err(e) = pour_fil.connect() {
                     crate::alerte!("openvpn : session terminée ({})", e.message);
+                    if let Ok(mut raison) = fin_du_fil.lock() {
+                        *raison = Some(e.message);
+                    }
                 }
             })
             .map_err(|e| format!("fil OpenVPN impossible : {e}"))?;
@@ -275,6 +303,10 @@ impl Session {
             }
             if arret.load(Ordering::Relaxed) {
                 return Err(self::echec(&journal, "la session s'est arrêtée avant le montage"));
+            }
+            // Le fil de connexion a rendu la main en erreur : sa raison vaut mieux qu'un délai.
+            if let Some(raison) = fin.lock().ok().and_then(|mut r| r.take()) {
+                return Err(self::echec(&journal, &format!("session terminée ({raison})")));
             }
             if debut.elapsed() >= delai {
                 return Err(self::echec(
@@ -421,5 +453,22 @@ CERTIFICAT
     #[test]
     fn un_fichier_qui_n_est_pas_un_profil_est_refuse() {
         assert!(valider("bonjour\n").is_err());
+    }
+
+    /// Un profil dont la clé privée est **hors du fichier** (pas de section `<key>`) est refusé
+    /// tout de suite : Trame n'a pas de magasin de certificats pour la fournir, et le moteur
+    /// s'arrêterait sur « Missing External PKI alias » après une tentative inutile.
+    #[test]
+    fn un_profil_sans_cle_du_client_est_refuse_avant_de_tenter() {
+        let resume = valider(PROFIL).expect("profil lisible");
+        assert!(resume.external_pki, "ce profil n'a pas de clé : external_pki doit être vrai");
+        let erreur = match Session::connecter(PROFIL, Some(("u".into(), "p".into())), Duration::from_secs(2)) {
+            Ok(_) => panic!("ce profil aurait dû être refusé"),
+            Err(e) => e,
+        };
+        assert!(
+            erreur.contains("external PKI"),
+            "le refus doit dire pourquoi : {erreur}"
+        );
     }
 }
