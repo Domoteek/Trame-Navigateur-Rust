@@ -249,6 +249,21 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.89, publiée et installée le 2026-11-28.** Le premier essai sur un **vrai profil Nord** a buté
+> deux fois, et les deux causes étaient dans Trame. (1) La 0.4.88 **refusait** les profils sans
+> certificat client — or c'est exactement ce que Nord livre : `<ca>` + `<tls-crypt>` + `auth-user-pass`,
+> **pas de `<cert>`/`<key>`**. Ce refus est retiré ; à la place, le profil est **adapté** avec
+> `setenv CLIENT_CERT 0`, l'option qui dit à OpenVPN 3 qu'il n'y a aucun certificat à présenter.
+> (2) Core s'arrêtait ensuite sur `UNKNOWN/UNSUPPORTED OPTIONS: ping-timer-rem` (option OpenVPN 2.x) :
+> `ignore-unknown-option` la ramène au rang d'avertissement. **Mesure sur le profil Nord réel** : le
+> moteur se connecte, **négocie TLS** (`SSL Handshake: peer certificate: CN=fr1212.nordvpn.com, 4096
+> bit RSA, TLSv1.3`), envoie `PUSH_REQUEST`, et le serveur répond `AUTH_FAILED — Authentication
+> Rejected` avec des identifiants factices. **Il ne manque donc plus que les identifiants de service.**
+> Réimporter le même profil **met à jour** son entrée au lieu d'en créer une seconde, et l'import dit
+> désormais, quand le profil les exige et qu'ils manquent, qu'il faut remplir les deux champs et
+> réimporter. Preuves : `cargo test` **260/260**, `tester-ui` **113/113** (un cas « adresse suit la
+> navigation » a échoué une fois puis repassé : instabilité du banc, pas du produit).
+>
 > **0.4.88, publiée et installée le 2026-11-28.** Trois corrections nées du **banc OpenVPN** écrit le
 > même jour (`outils/eprouver-openvpn.mjs`). (1) Un profil dont la **clé du client est hors du
 > fichier** (`external_pki`, pas de section `<key>`) est désormais **refusé tout de suite**, avec la
@@ -554,7 +569,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.88-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.89-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

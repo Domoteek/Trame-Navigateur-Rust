@@ -4839,11 +4839,24 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
                                 (Some(u), Some(p)) if !u.trim().is_empty() => Some((u, p)),
                                 _ => None,
                             };
+                            let fournis = identifiants.is_some();
                             match crate::tunnel::enregistrer_ovpn(self.profil.racine(), &nom, &texte, identifiants) {
                                 Ok(id) => {
                                     info!("tunnel : profil OpenVPN importe dans tunnels/{id} ({nom})");
                                     self.tunnel_actif = crate::tunnel::charger_active(self.profil.racine());
-                                    self.signaler(&format!("Profil OpenVPN importé : {nom}"));
+                                    // Un profil NordVPN (auth-user-pass) ne monte pas sans ses
+                                    // identifiants de service : le dire tout de suite plutôt que de
+                                    // laisser l'utilisateur devant un échec de connexion.
+                                    let demande_identifiants =
+                                        crate::ovpn::valider(&texte).map(|r| !r.autologin).unwrap_or(false);
+                                    if demande_identifiants && !fournis {
+                                        self.signaler(
+                                            "Profil OpenVPN importé, mais il demande les identifiants de \
+                                             service : remplir les deux champs puis réimporter le même fichier.",
+                                        );
+                                    } else {
+                                        self.signaler(&format!("Profil OpenVPN importé : {nom}"));
+                                    }
                                 }
                                 Err(e) => {
                                     alerte!("tunnel : profil OpenVPN refuse ({e})");

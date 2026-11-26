@@ -53,7 +53,7 @@ pub fn valider(profil: &str) -> Result<Resume, String> {
     let moteur = Engine::new(Arc::new(Silencieux)).map_err(|e| format!("moteur OpenVPN indisponible : {e}"))?;
     let evalue = moteur
         .eval(&EngineConfig {
-            profile: profil.to_string(),
+            profile: profil_adapte(profil),
             gui_version: "trame".to_string(),
             conn_timeout_secs: 15,
             ..Default::default()
@@ -95,12 +95,40 @@ impl EngineEvents for Silencieux {
     fn tun_down(&self) {}
 }
 
-// Les variantes du crate qui nous serviront à la connexion réelle (étape suivante) sont importées
-// ici pour que les choix par défaut soient documentés à un seul endroit.
-#[allow(dead_code)]
+/// Le profil tel qu'il faut le donner à Core.
+///
+/// **Pourquoi cette ligne.** OpenVPN 3 exige un certificat client **même quand le profil n'en a
+/// pas** : il réclame un « External PKI alias » et refuse de démarrer (`Missing External PKI
+/// alias`, mesuré le 2026-11-28). L'option de profil `setenv CLIENT_CERT 0` lui dit qu'il n'y a
+/// aucun certificat à présenter — c'est exactement le cas des profils **NordVPN**, qui
+/// authentifient par **utilisateur / mot de passe** (`auth-user-pass`) et ne portent que `<ca>` et
+/// `<tls-crypt>`. Sans elle, un profil Nord valide était refusé avant même d'essayer.
+fn profil_adapte(profil: &str) -> String {
+    let mut tete = String::new();
+    if !profil.contains("<cert>") && !profil.contains("CLIENT_CERT") {
+        tete.push_str("setenv CLIENT_CERT 0\n");
+    }
+    // Core refuse de démarrer sur une option OpenVPN 2.x qu'il ne connaît pas (`UNKNOWN/UNSUPPORTED
+    // OPTIONS`) : les profils de fournisseurs en portent plusieurs. `ignore-unknown-option` les
+    // ramène au rang d'avertissement, ce qui est sans risque — ces options ne servent qu'au client
+    // 2.x (relance sur battement de cœur).
+    if !profil.contains("ignore-unknown-option") {
+        tete.push_str("ignore-unknown-option ping-timer-rem ping-exit\n");
+    }
+    if tete.is_empty() {
+        return profil.to_string();
+    }
+    let mut sortie = String::with_capacity(profil.len() + tete.len());
+    sortie.push_str(&tete);
+    sortie.push_str(profil);
+    sortie
+}
+
+/// Les réglages passés au moteur. `identifiants` est fourni quand le profil les demande
+/// (`auth-user-pass` sans section `<auth-user-pass>` dans le fichier).
 fn config_de_connexion(profil: &str, identifiants: Option<(String, String)>) -> (EngineConfig, Option<Credentials>) {
     let config = EngineConfig {
-        profile: profil.to_string(),
+        profile: profil_adapte(profil),
         gui_version: "trame".to_string(),
         conn_timeout_secs: 30,
         // VORACLE : la compression sur un tunnel chiffré fuit ce qu'il contient. Coupée, sauf si
@@ -231,16 +259,6 @@ impl Session {
         delai: Duration,
     ) -> Result<Session, String> {
         let resume = valider(profil)?;
-        // La clé privée du client hors du profil : Trame ne sait pas la fournir (pas de magasin de
-        // certificats), et le moteur s'arrête sur « Missing External PKI alias ». Mieux vaut le
-        // dire avant de tenter quoi que ce soit que d'attendre trente secondes.
-        if resume.external_pki {
-            return Err(
-                "ce profil attend un certificat client hors du fichier (external PKI) : réimporter un \
-                 profil qui le porte, avec ses sections <cert> et <key>"
-                    .to_string(),
-            );
-        }
         let boite = Boite::nouvelle();
         let monte = Arc::new(Mutex::new(None));
         let journal = Arc::new(Mutex::new(VecDeque::new()));
@@ -455,20 +473,31 @@ CERTIFICAT
         assert!(valider("bonjour\n").is_err());
     }
 
-    /// Un profil dont la clé privée est **hors du fichier** (pas de section `<key>`) est refusé
-    /// tout de suite : Trame n'a pas de magasin de certificats pour la fournir, et le moteur
-    /// s'arrêterait sur « Missing External PKI alias » après une tentative inutile.
+    /// Un profil **sans certificat client** (cas des profils NordVPN, qui authentifient par
+    /// utilisateur / mot de passe) est **adapté, pas refusé** : `setenv CLIENT_CERT 0` dit à Core
+    /// qu'il n'y a aucun certificat à présenter. Sans cette ligne, il répondrait
+    /// `Missing External PKI alias` et rien ne monterait.
     #[test]
-    fn un_profil_sans_cle_du_client_est_refuse_avant_de_tenter() {
-        let resume = valider(PROFIL).expect("profil lisible");
-        assert!(resume.external_pki, "ce profil n'a pas de clé : external_pki doit être vrai");
-        let erreur = match Session::connecter(PROFIL, Some(("u".into(), "p".into())), Duration::from_secs(2)) {
-            Ok(_) => panic!("ce profil aurait dû être refusé"),
-            Err(e) => e,
-        };
+    fn un_profil_sans_certificat_client_est_adapte() {
+        let adapte = profil_adapte(PROFIL);
         assert!(
-            erreur.contains("external PKI"),
-            "le refus doit dire pourquoi : {erreur}"
+            adapte.starts_with("setenv CLIENT_CERT 0"),
+            "la ligne doit être posée avant le profil : {adapte:?}"
         );
+        assert!(adapte.contains("auth-user-pass"), "le reste du profil est intact");
+        // Un profil qui porte son certificat ne reçoit pas la ligne CLIENT_CERT — mais garde la
+        // tolérance aux options OpenVPN 2.x, qui ne coûte rien.
+        let avec_cert = "client\n<cert>\nX\n</cert>\n";
+        let adapte_cert = profil_adapte(avec_cert);
+        assert!(!adapte_cert.contains("CLIENT_CERT"), "pas de CLIENT_CERT quand le certificat est là");
+        assert!(adapte_cert.contains("<cert>"));
+        assert!(adapte_cert.starts_with("ignore-unknown-option"));
+        // Un profil qui dit déjà ce qu'il veut n'est pas doublé.
+        let deja = "setenv CLIENT_CERT 0\nignore-unknown-option ping-timer-rem\nclient\n";
+        assert_eq!(profil_adapte(deja), deja);
+        // Et le moteur, une fois adapté, ne réclame plus de PKI externe.
+        let resume = valider(PROFIL).expect("profil lisible");
+        assert!(!resume.external_pki, "après adaptation, plus de PKI externe");
+        assert!(!resume.autologin, "auth-user-pass : identifiants nécessaires");
     }
 }

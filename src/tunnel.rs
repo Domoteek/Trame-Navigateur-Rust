@@ -591,9 +591,12 @@ pub fn enregistrer_ovpn(
 ) -> Result<String, String> {
     let resume = crate::ovpn::valider(profil)?;
     let base = identifiant(nom);
+    // Réimporter le **même** profil met à jour son entrée au lieu d'en créer une seconde : c'est ce
+    // qui permet d'ajouter les identifiants de service après coup, sans se retrouver avec `nord-fr`
+    // puis `nord-fr-2` dans la liste.
     let mut id = base.clone();
     let mut n = 2;
-    while dossier(racine).join(&id).exists() {
+    while dossier(racine).join(&id).exists() && genre(racine, &id) != Some(Genre::OpenVpn) {
         id = format!("{base}-{n}");
         n += 1;
     }
