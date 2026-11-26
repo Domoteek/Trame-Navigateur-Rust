@@ -249,6 +249,17 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.79, publiée et installée le 2026-11-27.** Le portier ne laisse plus d'onglet **noir** et sait
+> se **défaire** tout seul. Trois corrections : (1) une navigation refusée (F5 sur un onglet déjà
+> chargé) n'abandonne plus la page — l'onglet est envoyé sur la page du tunnel, qui porte l'adresse
+> visée ; (2) dès que le portier ne bloque plus (réglage éteint, ou tunnel monté), **chaque onglet
+> bloqué repart seul** vers sa page (`onglet 1 : reprise de https://example.com` dans le journal) ;
+> (3) si aucune configuration n'est importée, la page du tunnel le dit et indique le chemin
+> (Réglages → Confidentialité → Tunnel intégré → Importer…). Preuves : `cargo test` **241/241`,
+> `tester-ui` **107/107**, et `outils/eprouver-tunnel.mjs` qui joue exactement le scénario : page
+> chargée → portier allumé → rechargement → page du tunnel ; portier éteint → l'onglet **reprend tout
+> seul**.
+>
 > **0.4.78, publiée et installée le 2026-11-27.** **Le moteur du tunnel existe, et il parle à Mullvad.**
 > `boringtun` (WireGuard en Rust, en **espace utilisateur**) est dans le binaire : `src/vpn.rs` ouvre
 > une session (clés, socket UDP, minuteries), envoie la poignée de main et la maintient. Mesure sur la
@@ -435,7 +446,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.78-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.79-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

@@ -130,7 +130,49 @@ try {
   // On revient aux réglages pour la suite.
   await saisir(PAGE_REGLAGES);
 
-  // 3. On éteint le portier par la vraie bascule des réglages, puis on rouvre l'adresse.
+  // 2 ter. Le cas de Clément : un onglet DÉJÀ chargé, qu'on recharge alors que le portier est
+  // allumé. Il ne doit pas rester noir — il doit montrer la page du tunnel, qui porte la cible.
+  const portier = async (allumer) => {
+    const cible = (await cibles(PORT)).find((t) => t.type === "page" && t.url.includes("reglages.html"));
+    if (!cible) throw new Error("page des réglages introuvable");
+    const p = await connecter(cible.webSocketDebuggerUrl);
+    await p.envoyer("Runtime.enable");
+    await pause(700);
+    const etat = await p.evaluer(`(() => {
+      const b = document.getElementById("bascule-tunnel");
+      if (!b) return "absente";
+      const allume = b.className.includes("on");
+      if (allume !== ${allumer}) b.click();
+      return b.className;
+    })()`);
+    await pause(1500);
+    p.fermer();
+    return etat;
+  };
+
+  await portier(false);
+  await saisir(ADRESSE);
+  const chargee = await pages();
+  console.log("2 ter. page chargée portier éteint :", JSON.stringify(chargee));
+  ok(chargee.some((u) => u.includes("example.com")), "la page du site est chargée avant le blocage");
+
+  await saisir(PAGE_REGLAGES);
+  await portier(true);
+  // Recharger depuis la barre : c'est ce que fait F5, sur un onglet déjà chargé.
+  await saisir(ADRESSE);
+  await pause(2500);
+  const rechargee = await pages();
+  console.log("2 ter. après rechargement, portier allumé :", JSON.stringify(rechargee));
+  ok(
+    rechargee.some((u) => u.includes("tunnel.html")),
+    `un onglet déjà chargé ne reste pas noir : il montre la page du tunnel (${JSON.stringify(rechargee)})`
+  );
+
+  // 3. On éteint le portier depuis les réglages, dans un SECOND onglet : le premier reste sur la
+  // page du tunnel, et c'est lui qui doit REPARTIR tout seul.
+  await rail.evaluer(`document.getElementById("btn-nouvel").click()`);
+  await pause(1500);
+  await saisir(PAGE_REGLAGES);
   const cibleReglages = (await cibles(PORT)).find((t) => t.type === "page" && t.url.includes("reglages.html"));
   if (!cibleReglages) throw new Error("page des réglages introuvable");
   const reglages = await connecter(cibleReglages.webSocketDebuggerUrl);
@@ -143,10 +185,20 @@ try {
     return b.className;
   })()`);
   console.log("3. bascule du portier cliquée :", bascule);
-  await pause(1500);
+  await pause(3500);
+  const repris = await pages();
+  console.log("3. portier éteint :", JSON.stringify(repris));
+  ok(
+    !repris.some((u) => u.includes("tunnel.html")),
+    `l'onglet bloqué a REPRIS tout seul (plus aucune page du tunnel : ${JSON.stringify(repris)})`
+  );
+  ok(
+    repris.some((u) => u.includes("example.com")),
+    `la page visée est revenue (${JSON.stringify(repris)})`
+  );
   await saisir(ADRESSE);
   const apres3 = await pages();
-  console.log("3. portier éteint, adresse saisie :", JSON.stringify(apres3));
+  console.log("3. adresse saisie portier éteint :", JSON.stringify(apres3));
   ok(
     apres3.some((u) => u.includes("example.com") && !u.includes("tunnel.html")),
     "portier éteint : l'adresse s'ouvre normalement"

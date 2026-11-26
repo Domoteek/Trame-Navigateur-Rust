@@ -1,6 +1,6 @@
 ﻿[package]
 name = "trame"
-version = "0.4.78"
+version = "0.4.79"
 edition = "2021"
 description = "Trame â€” navigateur a onglets tisses (Rust + WebView2)"
 license = "MIT"
@@ -46,4 +46,5 @@ winresource = "0.1"
 opt-level = "s"
 lto = "thin"
 strip = true
+
 

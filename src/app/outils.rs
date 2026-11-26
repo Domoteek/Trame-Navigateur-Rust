@@ -1438,7 +1438,7 @@ impl App {
         let geo = self.geometrie_courante();
         let proxy = self.proxy.clone();
         let id = g.id;
-        let garde = self.garde_navigation();
+        let garde = self.garde_navigation(None);
         let mut contexte = verrou_contexte();
         let resultat = self
             .habiller(WebViewBuilder::new_with_web_context(&mut contexte))

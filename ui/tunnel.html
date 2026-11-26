@@ -87,7 +87,7 @@
         Tu as demandé à Trame de <b>ne rien ouvrir sans tunnel</b>. Rien n'a été envoyé sur le réseau :
         cette page s'affiche à la place du site.
       </p>
-      <p>Monte ton VPN (WireGuard, OpenVPN, ton client habituel), puis réessaie.</p>
+      <p id="suite">Monte ton VPN (WireGuard, OpenVPN, ton client habituel), puis réessaie.</p>
       <div class="cible" id="cible">—</div>
       <div class="actions">
         <button class="principal" id="btn-reessayer">Réessayer</button>
@@ -109,6 +109,14 @@
       const cible = new URLSearchParams(location.search).get("url") || "";
       const zone = document.getElementById("cible");
       zone.textContent = cible || "Adresse non précisée.";
+
+      // Sans configuration importée (« sans=1 »), dire quoi faire : « monte ton VPN » ne sert à
+      // rien à quelqu'un qui n'a encore rien importé.
+      if (new URLSearchParams(location.search).get("sans") === "1") {
+        document.getElementById("suite").innerHTML =
+          "Aucune configuration de tunnel n'est importée : dans <b>Réglages → Confidentialité → Tunnel intégré (WireGuard)</b>, " +
+          "clique <b>Importer…</b> et choisis ton fichier <code>.conf</code>. Ou éteins « Exiger un tunnel ».";
+      }
 
       document.getElementById("btn-reessayer").onclick = () => ipc({ m: "tunnelReessayer", url: cible });
       document.getElementById("btn-reglages").onclick = () => ipc({ m: "ouvrirReglages" });

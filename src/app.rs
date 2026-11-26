@@ -103,8 +103,9 @@ pub enum UserEvent {
     /// Une navigation vers une adresse interne de Chromium a ete refusee.
     NavigationRefusee(String),
     /// Une navigation vers un site a été refusée parce qu'aucun tunnel n'est monté alors que le
-    /// portier l'exige (voir `App::verifier_tunnel`).
-    TunnelBloque(String),
+    /// portier l'exige (voir `App::verifier_tunnel`). `onglet` : l'onglet qui a tenté d'ouvrir, pour
+    /// lui montrer la page du tunnel au lieu de le laisser noir.
+    TunnelBloque { onglet: Option<TabId>, url: String },
     /// Un telechargement commence (destination choisie, suivi branche).
     TelechargementDebut {
         onglet: TabId,
@@ -1227,7 +1228,7 @@ impl App {
     /// webview sur « ERR_INVALID_URL », sans retour possible — constate le 2026-11-21 sur la
     /// popup Bitwarden ouverte dans le panneau de droite. Refuser la navigation garde la page
     /// en place et rend le refus visible.
-    fn garde_navigation(&self) -> impl Fn(String) -> bool + 'static {
+    fn garde_navigation(&self, origine: Option<TabId>) -> impl Fn(String) -> bool + 'static {
         let proxy = self.proxy.clone();
         let tunnel = self.tunnel_bloque.clone();
         move |url: String| {
@@ -1240,7 +1241,10 @@ impl App {
             // sinon on ne pourrait meme pas eteindre le reglage — et une adresse locale ne sort
             // pas de la machine, donc elle ne fuit rien.
             if tunnel.load(std::sync::atomic::Ordering::Relaxed) && !urls::interne_ou_locale(&url) {
-                let _ = proxy.send_event(UserEvent::TunnelBloque(url));
+                let _ = proxy.send_event(UserEvent::TunnelBloque {
+                    onglet: origine,
+                    url,
+                });
                 return false;
             }
             true
@@ -1292,9 +1296,30 @@ impl App {
             }
             self.tunnel = tunnel;
         }
-        self.tunnel_bloque.store(bloque, Relaxed);
+        let bloquait = self.tunnel_bloque.swap(bloque, Relaxed);
         if change {
             self.pousser_etat();
+        }
+        // Le portier vient de se lever (reglage eteint, ou tunnel monte) : les onglets restes sur
+        // la page du tunnel repartent d'eux-memes vers ce qu'ils voulaient ouvrir.
+        if bloquait && !bloque {
+            self.reprendre_pages_bloquees();
+        }
+    }
+
+    /// Reprend les onglets restés sur la page du tunnel : chacun repart vers l'adresse qu'il
+    /// voulait ouvrir. Sans cela il faudrait recliquer onglet par onglet après avoir monté le
+    /// tunnel — et un onglet laissé sur une page d'attente ne se recharge pas tout seul.
+    fn reprendre_pages_bloquees(&mut self) {
+        let a_reprendre: Vec<(TabId, String)> = self
+            .session
+            .onglets
+            .iter()
+            .filter_map(|o| urls::cible_page_tunnel(&o.url).map(|c| (o.id, c)))
+            .collect();
+        for (id, cible) in a_reprendre {
+            info!("onglet {id} : reprise de {cible} (le portier ne bloque plus)");
+            self.naviguer_dedans(id, cible);
         }
     }
 
@@ -1310,6 +1335,11 @@ impl App {
         match url::Url::parse(PAGE_TUNNEL) {
             Ok(mut u) => {
                 u.query_pairs_mut().append_pair("url", cible);
+                // Sans configuration importée, la page le dit : « monte ton VPN » n'aide pas
+                // quelqu'un qui n'a rien importé (constat de Clément, 2026-11-27).
+                if self.tunnel_conf.is_none() {
+                    u.query_pairs_mut().append_pair("sans", "1");
+                }
                 u.to_string()
             }
             Err(_) => PAGE_TUNNEL.to_string(),
@@ -1333,7 +1363,7 @@ impl App {
         let proxy = self.proxy.clone();
         let racine_handler = racine.clone();
         let url = format!("trame://localhost/chrome.html?surface={nom}");
-        let garde = self.garde_navigation();
+        let garde = self.garde_navigation(None);
         let mut contexte = verrou_contexte();
         let resultat = self
             .habiller(WebViewBuilder::new_with_web_context(&mut contexte))
@@ -1379,7 +1409,7 @@ impl App {
         let racine_handler = self.racine_ui();
         let geo = self.geometrie_courante();
         let proxy = self.proxy.clone();
-        let garde = self.garde_navigation();
+        let garde = self.garde_navigation(None);
         let mut contexte = verrou_contexte();
         let resultat = self
             .habiller(WebViewBuilder::new_with_web_context(&mut contexte))
@@ -1427,7 +1457,9 @@ impl App {
         let p_ipc = self.proxy.clone();
         let p_fenetre = self.proxy.clone();
 
-        let garde = self.garde_navigation();
+        // Ce garde sert UN onglet : c'est lui qui sera montre sur la page du tunnel si un site
+        // est refuse (un onglet laisse noir ne se recharge pas tout seul).
+        let garde = self.garde_navigation(Some(id));
         // Un fil cloisonne a son propre profil WebView2 : connexions et extensions a part.
         let cloison = self.cloison_du_fil(onglet.fil);
         let mut contexte = verrou_contexte();
@@ -2379,7 +2411,7 @@ impl App {
         let proxy = self.proxy.clone();
         let p_charge = self.proxy.clone();
         let p_fenetre = self.proxy.clone();
-        let garde = self.garde_navigation();
+        let garde = self.garde_navigation(None);
         let mut contexte = verrou_contexte();
         let builder = self.habiller(WebViewBuilder::new_with_web_context(&mut contexte));
         let builder = match &cloison {
@@ -3806,12 +3838,17 @@ impl App {
                     urls::affichage_court(&url)
                 ));
             }
-            UserEvent::TunnelBloque(url) => {
-                // Le portier a refuse un site : la page reste en place, et on dit pourquoi une
-                // fois. Reculer d'une page evite de laisser l'onglet sur une adresse fausse.
+            UserEvent::TunnelBloque { onglet, url } => {
+                // Le portier a refuse un site. On ne laisse PAS l'onglet noir : il part sur la
+                // page qui explique, laquelle porte l'adresse visee et sait reprendre toute seule
+                // des que le tunnel est la (ou que le portier est eteint).
                 info!("navigation refusee (tunnel absent) : {url}");
                 self.signaler("Tunnel absent : navigation bloquée (Réglages → Réseau).");
                 self.verifier_tunnel(true);
+                if let Some(id) = onglet.filter(|id| self.trouver(*id).is_some()) {
+                    let page = self.page_tunnel(&url);
+                    self.naviguer_dedans(id, page);
+                }
             }
             UserEvent::TelechargementDebut { onglet, telechargement } => self.telechargement_debut(onglet, telechargement),
             UserEvent::TelechargementEtat { id, termine, interrompu, reprenable, raison, recu } => {
@@ -5608,7 +5645,7 @@ impl App {
         let geo = self.geometrie_courante();
         let proxy = self.proxy.clone();
         let p_fenetre = self.proxy.clone();
-        let garde = self.garde_navigation();
+        let garde = self.garde_navigation(None);
         let mut contexte = verrou_contexte();
         let builder = self.habiller(WebViewBuilder::new_with_web_context(&mut contexte));
         let builder = match profil {

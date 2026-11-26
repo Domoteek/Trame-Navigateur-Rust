@@ -161,6 +161,22 @@ pub fn nettoyer(url: &str, garder_affiliation: bool) -> Option<String> {
     Some(u.to_string())
 }
 
+/// La cible portée par l'adresse de la page du tunnel (`trame://localhost/tunnel.html?url=…`).
+///
+/// Sert à **reprendre** une page bloquée : dès que le tunnel est là (ou que le portier est
+/// éteint), les onglets restés sur la page du tunnel repartent d'eux-mêmes vers ce qu'ils
+/// voulaient ouvrir — sans quoi il faudrait recliquer sur chaque onglet.
+pub fn cible_page_tunnel(url: &str) -> Option<String> {
+    let u = url::Url::parse(url).ok()?;
+    if !u.path().ends_with("tunnel.html") {
+        return None;
+    }
+    u.query_pairs()
+        .find(|(nom, _)| nom == "url")
+        .map(|(_, valeur)| valeur.to_string())
+        .filter(|v| !v.trim().is_empty())
+}
+
 /// Une adresse qui ne sort pas sur **Internet** : page interne de Trame, `file:`, boucle locale,
 /// **réseau local** (192.168.x, 10.x, 172.16-31.x, lien local, ULA IPv6, noms `.local`, noms sans
 /// point comme `proxmox`).
