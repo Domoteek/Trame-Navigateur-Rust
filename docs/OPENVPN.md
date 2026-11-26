@@ -50,28 +50,36 @@ cargo build --release
 
 ## Où en est l'intégration
 
-Fait, et vérifié par `cargo test` (254 tests, dont 3 nouveaux) :
+Fait, et vérifié par `cargo test` (**256 tests** au 2026-11-28) :
 
-- `src/ovpn.rs` : le moteur est **dans le binaire**, et `ovpn::valider(profil)` lit un `.ovpn` **sans
-  se connecter** — il en tire le serveur, le port, le protocole, et si des identifiants sont
-  nécessaires (`auth-user-pass`) ou si la clé du client est hors du profil (`external_pki`).
-- `ovpn::ressemble_a_un_profil` distingue un `.ovpn` d'une configuration WireGuard, pour choisir le
-  bon lecteur à l'import.
+- `src/moteur.rs` : le trait **`Tunnel`** (`etiquette`, `mtu`, `pomper`, `prendre_paquet`,
+  `envoyer_paquet`) et **`Parametres`** (adresse dans le tunnel avec son préfixe, DNS du
+  fournisseur, MTU). Le mandataire ne connaît plus qu'eux : il ne sait pas quel moteur il porte.
+- `src/ovpn.rs` : le moteur est **dans le binaire** ; `ovpn::valider(profil)` lit un `.ovpn` sans se
+  connecter (serveur, port, protocole, identifiants nécessaires) ; `ovpn::Session::connecter` ouvre
+  la session, attend le montage (`tun_up`) et **rend les paramètres poussés par le serveur** ;
+  `ovpn::ressemble_a_un_profil` distingue un `.ovpn` d'une configuration WireGuard.
+- `src/vpn.rs` : la session WireGuard implémente le même trait, et le mandataire accepte désormais
+  n'importe quel moteur (`demarrer_tunnel(preparer)`) — la préparation tourne **dans son fil**, donc
+  ni la poignée de main ni la négociation TLS ne figent la fenêtre. `demarrer(config)` reste le
+  raccourci WireGuard, le temps que l'application choisisse elle-même son moteur.
+- Sonde `TRAME_TUNNEL_ESSAI=3` (profil par `TRAME_OVPN_PROFIL`, identifiants par
+  `TRAME_OVPN_USER`/`TRAME_OVPN_PASS`). Mesurée : profil sans identifiants →
+  `ce profil demande un utilisateur et un mot de passe` ; avec identifiants factices →
+  `le tunnel n'a pas monté en 30 s — OpenVPN core 3.11.8 win x86_64 64-bit`, c'est-à-dire le vrai
+  moteur, qui tourne, et qui dit pourquoi il échoue.
 
 Reste à faire, dans cet ordre :
 
-1. **Trait `Tunnel`** (`pomper`, `prendre_paquet`, `envoyer_paquet`, `mtu`) derrière lequel se placent
-   `vpn::Session` (WireGuard) et une session OpenVPN : le mandataire cessera de dépendre d'un moteur
-   précis. La file de paquets (`ovpn::Boite`) est déjà écrite pour ça.
-2. **Stockage** : un `.ovpn` peut contenir la **clé privée du client en clair** (`<key>`), donc le
+1. **Stockage** : un `.ovpn` peut contenir la **clé privée du client en clair** (`<key>`), donc le
    profil entier est chiffré par DPAPI comme la clé WireGuard ; à côté, l'utilisateur et le mot de
    passe du fournisseur, chiffrés aussi. Le rangement `tunnels/<id>/` de la 0.4.85 accueille les deux
    sortes de configuration (un champ dit laquelle).
-3. **Interface** : accepter un `.ovpn` dans **Importer…**, demander identifiants et mot de passe quand
-   le profil les exige, afficher serveur et protocole, et garder la raison d'échec visible (0.4.86).
-4. **DNS** : OpenVPN pousse ses résolveurs (`TunSettings::dns`) ; le mandataire doit les prendre de la
-   session au lieu du `DNS =` d'une configuration WireGuard.
-5. **Bancs** : un profil Nord réel, avec ses identifiants de service, et la mesure de sortie
+2. **Interface** : accepter un `.ovpn` dans **Importer…**, demander identifiants et mot de passe quand
+   le profil les exige, afficher serveur et protocole, garder la raison d'échec visible (0.4.86).
+3. **Choix du moteur au démarrage** : l'application lit le genre de la configuration active et prépare
+   le bon moteur (`vpn` ou `ovpn`) — c'est le dernier fil à brancher dans `app.rs`.
+4. **Bancs** : un profil Nord réel, avec ses identifiants de service, et la mesure de sortie
    (`ipinfo.io`) comme pour Mullvad.
 
 ## Limites connues, dites d'avance
