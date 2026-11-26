@@ -77,7 +77,7 @@ zéro mémoire tant qu'on n'en ouvre pas un. Un fil de même nom déjà présent
 | **Le menu de la page** (`⋯` à droite de la barre, ou clic droit sur un onglet du rail) | Tout ce qui s'applique à la page affichée : favori, impression, recherche, rendez-vous, fermeture programmée, côte à côte, guetteur, mémoire de lecture. |
 | **Les favoris** (étoile dans la barre, `Ctrl+D`) | Une étoile pleine = page en favori. Ils sortent dans la barre dès qu'on tape leur nom, et en tuiles sur la page « Nouvel onglet ». Stockés dans `favoris.json`. |
 | **Ouvrir dans le fil** (`Alt+Entrée` dans la barre) | L'adresse tapée s'ouvre dans un **nouvel onglet du fil où l'on est**, juste sous la page en cours, au lieu de la remplacer. `Entrée` seul garde son comportement. |
-| **Le côte à côte** (`Maj+Entrée`, ou `Maj+clic` sur un onglet) | Deux pages dans la même fenêtre ; la séparation se fait glisser (20 à 80 %). Un clic dans une page la rend active. Option « défilement lié » pour comparer deux pages de même forme. |
+| **Le côte à côte** (`Maj+Entrée`, ou `Maj+clic` sur un onglet) | Deux pages dans la même fenêtre ; la séparation se fait glisser (20 à 80 %). La page neuve prend la place de celle qu'on **ne lit pas** : la page lue ne change jamais de côté. Le menu dit où l'on va — **« À gauche »** / **« À droite »** — et le clic droit sur un onglet du rail, pendant un côte à côte, propose **« Remplacer la page de gauche »** ou **« … de droite »**. Un clic dans une page la rend active. Option « défilement lié » pour comparer deux pages de même forme. |
 | **Les rendez-vous** (menu de la page) | « Dans 1 h », « ce soir », « demain matin », « ce week-end », « lundi » : l'onglet **quitte le rail et s'endort** (zéro mémoire), puis revient seul à l'heure dite, marqué « revenu », avec un clignotement dans la barre des tâches. Une ligne en bas du rail liste ceux qui attendent. |
 | **La fermeture programmée** | « Se ferme dans 1 h / 3 h / ce soir » : l'onglet part tout seul (`Ctrl+Maj+T` le rouvre). |
 | **Le guetteur** (menu de la page → « Guetter un élément ») | On désigne un prix, un stock, un résultat : Trame relit la page **toutes les 30 min dans une page cachée et muette**, détruite aussitôt la lecture faite, jamais quand le PC manque de mémoire. Si le texte change : message « 39,90 € → 34,90 € », clignotement dans la barre des tâches, pastille sur `⋯`. Stocké dans `guets.json`. |
@@ -249,6 +249,15 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.69, publiée et installée le 2026-11-26.** « Dès que je mets un côte à côte ça la met à
+> droite, et celle de gauche ne se remplace jamais » — mesuré : la paire était recalculée à chaque
+> fois comme `(page active, page neuve)`, donc « gauche » n'était pas un endroit mais « la page où
+> j'étais ». Désormais la page neuve prend la place de celle qu'on **ne lit pas** (la page lue ne
+> change jamais de côté), le menu dit les deux côtés — **« À gauche »** / **« À droite »** — et le
+> clic droit sur un onglet du rail propose **« Remplacer la page de gauche »** ou **« … de droite »**.
+> Les marques du rail ne s'affichent que si la paire est à l'écran. Preuves : `cargo test` **226/226**,
+> `tester-ui` **105/105**, `outils/eprouver-cote-a-cote.mjs` sur le vrai binaire.
+>
 > **0.4.68, publiée et installée le 2026-11-26.** « Quand on fait ajouter en haut, ça crée un groupe
 > et un onglet » — exact, et voilà pourquoi : un onglet neuf n'a **aucun contenu**, donc le tissage
 > (provenance, domaine, proximité, fraîcheur) ne peut pas le placer et fabriquait un fil de plus.
@@ -339,7 +348,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.68-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.69-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

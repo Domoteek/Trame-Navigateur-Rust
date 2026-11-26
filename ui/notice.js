@@ -99,12 +99,13 @@ window.NOTICE = {
     {
       "id": "cote-a-cote",
       "titre": "Côte à côte : deux pages dans la fenêtre",
-      "resume": "Maj + clic sur un onglet du rail, ou Maj + Entrée dans la barre. La séparation se glisse.",
+      "resume": "Maj + clic sur un onglet du rail, ou Maj + Entrée dans la barre. Le côté se choisit, la séparation se glisse.",
       "chapeau": "Deux pages dans la même fenêtre, pour comparer deux produits, lire en prenant des notes ou suivre une vidéo pendant que tu cherches autre chose.",
       "etapes": [
-        { "titre": "Maj + clic sur un onglet", "texte": "L'onglet s'ouvre à droite de la page que tu regardes. Le plus rapide." },
+        { "titre": "Maj + clic sur un onglet", "texte": "L'onglet s'ouvre du côté opposé à la page que tu lis : à droite si tu lis à gauche, à gauche si tu lis à droite. La page que tu lis ne change jamais de côté." },
         { "titre": "Maj + Entrée dans la barre", "texte": "Ce que tu viens de taper s'ouvre à droite, ta page reste à gauche." },
-        { "titre": "Menu ⋯ → Côte à côte", "texte": "Met à côté le dernier onglet que tu as regardé." }
+        { "titre": "Menu ⋯ → Côte à côte", "texte": "Deux lignes disent le côté : « À gauche » et « À droite ». Elles mettent à côté le dernier onglet que tu as regardé." },
+        { "titre": "Clic droit sur un onglet du rail", "texte": "Pendant un côte à côte : « Remplacer la page de gauche » ou « Remplacer la page de droite ». C'est ainsi qu'on change la page de gauche." }
       ],
       "conseils": [
         "Glisse la séparation pour changer les largeurs (20 à 80 %).",
@@ -117,7 +118,7 @@ window.NOTICE = {
       "actions": [
         { "libelle": "Essayer maintenant", "commande": "cote" }
       ],
-      "mots": ["côte à côte", "cote a cote", "split", "split view", "écran partagé", "partager l'écran", "diviser", "deux pages", "deux écrans", "écran en deux", "comparer", "séparer", "moitié", "à côté", "quitter", "défaire", "pleine page", "une seule page", "annuler"],
+      "mots": ["côte à côte", "cote a cote", "split", "split view", "écran partagé", "partager l'écran", "diviser", "deux pages", "deux écrans", "écran en deux", "comparer", "séparer", "moitié", "à côté", "quitter", "défaire", "pleine page", "une seule page", "annuler", "gauche", "droite", "remplacer", "destination", "changer de page"],
       "voir": ["video", "couture", "raccourcis"]
     },
     {

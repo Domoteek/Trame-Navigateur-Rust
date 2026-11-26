@@ -10,6 +10,7 @@
 
 use super::*;
 use crate::carnet::{self, Acces, Favori, Guet, RAIL_MAX};
+use crate::model::{placer_cote, Cote};
 use std::sync::atomic::Ordering as Atomique;
 
 /// La page cachee qui relit un guet.
@@ -274,7 +275,7 @@ impl App {
                         "navigation" | "historique" | "favori" | "lecture" => a["url"].as_str().map(|s| s.to_string()),
                         "onglet" if mode == "cote" => {
                             if let Some(id) = a["id"].as_u64() {
-                                self.cote_avec(id as TabId);
+                                self.cote_avec(id as TabId, None);
                             }
                             return true;
                         }
@@ -557,7 +558,9 @@ impl App {
             }
             "coteAvec" => {
                 if let Some(id) = v["id"].as_u64() {
-                    self.cote_avec(id as TabId);
+                    // `cote` : "gauche" / "droite" quand l'interface l'impose (menu de l'onglet,
+                    // « remplacer la page de gauche »). Absent : la regle par defaut decide.
+                    self.cote_avec(id as TabId, Cote::depuis(v["cote"].as_str()));
                 }
                 true
             }
@@ -1061,18 +1064,33 @@ impl App {
             .map(|o| o.id)
     }
 
-    /// Affiche `id` a cote de l'onglet actif (a droite). Sans onglet actif, rien.
-    pub(super) fn cote_avec(&mut self, id: TabId) {
+    /// Affiche `id` a cote de l'onglet actif. `cote` : le cote demande par l'interface (`None` =
+    /// la regle par defaut, lue dans `model::placer_cote`).
+    pub(super) fn cote_avec(&mut self, id: TabId, cote: Option<Cote>) {
         let Some(actif) = self.actif else { return };
-        let autre = if id == actif { self.onglet_precedent() } else { Some(id) };
-        let Some(autre) = autre else {
-            self.signaler("Il faut un deuxième onglet pour le côte à côte.");
-            return;
+        let nouveau = if id == actif {
+            match self.onglet_precedent() {
+                Some(p) => p,
+                None => {
+                    self.signaler("Il faut un deuxième onglet pour le côte à côte.");
+                    return;
+                }
+            }
+        } else {
+            id
         };
-        if let Some(o) = self.onglet_mut(autre) {
+        if let Some(o) = self.onglet_mut(nouveau) {
             o.rendez_vous = None;
         }
-        self.session.cote = Some((actif, autre));
+        let Some(paire) = placer_cote(self.paire_affichee(), Some(actif), nouveau, cote) else {
+            return;
+        };
+        self.session.cote = Some(paire);
+        // La page qu'on lisait peut avoir laisse sa place (« Remplacer la page de gauche » depuis
+        // cette page) : c'est alors la nouvelle qu'on lit, sinon la paire ne s'afficherait pas.
+        if Some(actif) != Some(paire.0) && Some(actif) != Some(paire.1) {
+            self.activer(nouveau);
+        }
         self.preparer_cote();
         self.appliquer_geometrie();
         self.marquer_modifie();

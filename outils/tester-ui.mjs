@@ -1971,6 +1971,116 @@ async function suite() {
     await p.close();
   });
 
+  // Mesure du 2026-11-26 : dans un côte à côte, la page neuve prenait TOUJOURS la droite et la
+  // page de gauche n'était jamais remplacée. Le menu dit désormais les deux côtés, et un onglet
+  // du rail peut prendre l'une des deux places.
+  await cas("menu de la page : « À gauche » et « À droite » remplacent la ligne unique", async () => {
+    const p = await page("chrome.html", { query: "?surface=barre" });
+    const etat = etatDeBase();
+    etat.actif = 1;
+    etat.onglets = [
+      onglet(1, 1, "Aliexpress", "https://aliexpress.com/x", { actif: true }),
+      onglet(2, 1, "Amazon", "https://amazon.fr/x"),
+    ];
+    etat.fils = [{ id: 1, nom: "Achats", onglets: [1, 2] }];
+    etat.carnet = {
+      pageWeb: true,
+      favori: false,
+      favoris: [],
+      guets: [],
+      cote: null,
+      precedent: { id: 2, titre: "Amazon" },
+    };
+    await pousser(p, etat);
+    await p.setViewportSize({ width: 1150, height: 1200 });
+    await p.click("#btn-page");
+    await p.waitForTimeout(120);
+    const texte = await p.$eval("#menu-page", (n) => n.textContent);
+    verifier(texte.includes("À gauche") && texte.includes("À droite"), `deux entrées de côté : ${texte.slice(-200)}`);
+    verifier(!texte.includes("À côté de «"), "l'ancienne ligne unique a disparu");
+    await vider(p);
+    // Par le TITRE du bouton : « text=À droite » attrapait la ligne « À gauche », dont le détail
+    // contient « à droite » (les deux libellés se citent l'un l'autre).
+    await p.click('#menu-page .menu-principal[title="À gauche"]');
+    egal(
+      (await messages(p)).filter((m) => m.m === "coteAvec"),
+      [{ m: "coteAvec", id: 2, cote: "gauche" }],
+      "« À gauche » place Amazon à gauche de la page affichée"
+    );
+    await p.evaluate(() => window.trame.menuPage({ y: 150, h: 1200 }));
+    await vider(p);
+    await p.click('#menu-page .menu-principal[title="À droite"]');
+    egal(
+      (await messages(p)).filter((m) => m.m === "coteAvec"),
+      [{ m: "coteAvec", id: 2, cote: "droite" }],
+      "« À droite » place Amazon à droite"
+    );
+    await p.close();
+  });
+
+  await cas("menu d'un onglet du rail : remplacer la page de gauche ou de droite", async () => {
+    const p = await page("chrome.html", { query: "?surface=barre" });
+    const etat = etatDeBase();
+    etat.actif = 1;
+    etat.onglets = [
+      onglet(1, 1, "Aliexpress", "https://aliexpress.com/x", { actif: true }),
+      onglet(2, 1, "Amazon", "https://amazon.fr/x"),
+      onglet(3, 1, "Une vidéo", "https://www.youtube.com/watch?v=abc"),
+    ];
+    etat.fils = [{ id: 1, nom: "Achats", onglets: [1, 2, 3] }];
+    etat.carnet = { pageWeb: true, favori: false, favoris: [], guets: [], cote: { gauche: 1, droite: 2, affiche: true, lie: false }, precedent: null };
+    await pousser(p, etat);
+    await p.setViewportSize({ width: 1150, height: 1200 });
+    await p.evaluate(() => window.trame.menuPage({ y: 150, h: 1200, cible: 3 }));
+    await p.waitForTimeout(120);
+    const texte = await p.$eval("#menu-page", (n) => n.textContent);
+    verifier(
+      texte.includes("Remplacer la page de gauche") && texte.includes("Remplacer la page de droite"),
+      `les deux places sont proposées : ${texte.slice(-260)}`
+    );
+    verifier(!texte.includes("Ajouter aux favoris"), "le menu d'un onglet ne prend pas les lignes de la page");
+    await vider(p);
+    await p.click('#menu-page .menu-principal[title="Remplacer la page de gauche"]');
+    egal(
+      (await messages(p)).filter((m) => m.m === "coteAvec"),
+      [{ m: "coteAvec", id: 3, cote: "gauche" }],
+      "remplacer la page de gauche envoie le côté demandé"
+    );
+    // Un onglet DÉJÀ dans la paire ne se « remplace » pas : seules les puces du côte à côte.
+    await p.evaluate(() => window.trame.menuPage({ y: 150, h: 1200, cible: 1 }));
+    const lignesPage = await p.$$eval("#menu-page .menu-ligne .n", (n) => n.map((x) => x.textContent));
+    verifier(
+      !lignesPage.some((t) => t.startsWith("Remplacer la page")),
+      `une page déjà affichée ne se remplace pas elle-même : ${JSON.stringify(lignesPage)}`
+    );
+    const textePage = await p.$eval("#menu-page", (n) => n.textContent);
+    verifier(textePage.includes("Inverser") && textePage.includes("Quitter"), "les puces du côte à côte sont là");
+    await p.close();
+  });
+
+  await cas("rail : les marques gauche/droite ne s'affichent que si la paire est à l'écran", async () => {
+    const p = await page("chrome.html", { query: "?surface=rail" });
+    const etat = etatDeBase();
+    etat.fils = [{ id: 1, nom: "Fil" }];
+    etat.onglets = [
+      onglet(1, 1, "A", "https://a.fr/", { actif: true }),
+      onglet(2, 1, "B", "https://b.fr/"),
+      onglet(3, 1, "C", "https://c.fr/"),
+    ];
+    etat.carnet = { cote: { gauche: 1, droite: 2, affiche: true, lie: false } };
+    await pousser(p, etat);
+    egal(
+      await p.$$eval(".onglet .marque-mini.cote", (n) => n.map((x) => x.textContent)),
+      ["gauche", "droite"],
+      "paire affichée : les deux marques sont là"
+    );
+    // L'onglet affiché n'est plus l'un des deux : la paire est en attente, les marques mentiraient.
+    etat.carnet = { cote: { gauche: 1, droite: 2, affiche: false, lie: false } };
+    await pousser(p, etat);
+    egal(await p.$$eval(".onglet .marque-mini.cote", (n) => n.length), 0, "paire en attente : aucune marque");
+    await p.close();
+  });
+
   await cas("barre : les pages lues arrivent après coup, seulement pour la bonne requête", async () => {
     const p = await page("chrome.html", { query: "?surface=barre" });
     await pousser(p, etatDeBase());

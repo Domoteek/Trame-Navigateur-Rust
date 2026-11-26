@@ -372,7 +372,9 @@ function ligneOnglet(o) {
   if (o.revenu) marques.appendChild(elem("span", "marque-mini revenu", "revenu"));
   if (o.fermeture) marques.appendChild(elem("span", "marque-mini fermeture", "ferme " + heure(o.fermeture)));
   const cote = etat && etat.carnet && etat.carnet.cote;
-  if (cote && (cote.gauche === o.id || cote.droite === o.id)) {
+  // Les marques ne disent que ce qui est A L'ECRAN : une paire en attente (l'onglet affiche
+  // n'est plus l'un des deux) laissait deux etiquettes « gauche » / « droite » trompeuses.
+  if (cote && cote.affiche && (cote.gauche === o.id || cote.droite === o.id)) {
     marques.appendChild(elem("span", "marque-mini cote", cote.gauche === o.id ? "gauche" : "droite"));
   }
   if (!o.eveille) marques.appendChild(elem("span", "marque-mini veille", "veille"));
@@ -2086,6 +2088,14 @@ function rendreMenuPage(s) {
   const actif = (cibleMenu && onglets.find((o) => o.id === cibleMenu)) || affiche;
   const surPage = actif.id === affiche.id;
   const fils = (s.fils || []).map((f) => [f.id, f.nom]);
+  // Utile des deux cotes du menu (page affichee ou onglet du rail) : le cote a cote nomme ses
+  // pages par leur titre.
+  const titreCourt = (o, max) => {
+    const t = (o && (o.titre || o.urlCourte)) || "cette page";
+    const n = max || 32;
+    return t.length > n ? t.slice(0, n - 1) + "…" : t;
+  };
+  const parId = (id) => onglets.find((o) => o.id === id) || {};
   const signature = JSON.stringify([c, actif.id, actif.fermeture, actif.titre, actif.eveille, actif.muet, actif.fil, fils, s.url, surPage, actif.ancre, actif.alire]);
   if (signature === signaturePage && zone.childElementCount) return;
   signaturePage = signature;
@@ -2187,15 +2197,40 @@ function rendreMenuPage(s) {
   colonne.appendChild(puces(fermetures));
 
   if (!surPage) {
+    // Un onglet qui n'est pas a l'ecran, pendant un cote a cote : il peut prendre L'UNE DES DEUX
+    // places. C'est le seul endroit d'ou l'on remplace la page de gauche — l'ancienne regle ne
+    // savait que remplacer la droite (mesure du 2026-11-26).
+    const paire = c.cote && c.cote.affiche ? c.cote : null;
+    if (paire && actif.id && actif.id !== paire.gauche && actif.id !== paire.droite) {
+      colonne.appendChild(elem("div", "menu-section", "Côte à côte"));
+      colonne.appendChild(
+        lignePage("Remplacer la page de gauche", `« ${titreCourt(parId(paire.gauche))} » laisse sa place`, "cote", {
+          m: "coteAvec",
+          id: actif.id,
+          cote: "gauche",
+        })
+      );
+      colonne.appendChild(
+        lignePage("Remplacer la page de droite", `« ${titreCourt(parId(paire.droite))} » laisse sa place · Maj+clic fait pareil`, "cote", {
+          m: "coteAvec",
+          id: actif.id,
+          cote: "droite",
+        })
+      );
+    }
     colonne.appendChild(elem("div", "menu-astuce", "Clic sur l'onglet pour l'afficher : favori, impression, guet et côte à côte s'y trouvent."));
     placerMenuPage();
     ajusterHauteur();
     return;
   }
 
-  // Cote a cote
+  // Cote a cote : OU arrive la page. Mesure du 2026-11-26 (sonde sur le vrai binaire) : la page
+  // neuve prenait toujours la droite, et la page de gauche n'etait jamais remplacee — elle etait
+  // « la page ou j'etais », pas un endroit. Desormais la page neuve prend la place de celle qu'on
+  // NE LIT PAS, et le menu dit les deux cotes a la main : c'est la fenetre de destination.
   colonne.appendChild(elem("div", "menu-section", "Côte à côte"));
-  if (c.cote && c.cote.affiche) {
+  const paire = c.cote && c.cote.affiche ? c.cote : null;
+  if (paire) {
     colonne.appendChild(
       puces([
         { t: "Inverser", message: { m: "coteInverser" } },
@@ -2204,10 +2239,29 @@ function rendreMenuPage(s) {
       ])
     );
     colonne.appendChild(elem("div", "menu-astuce", "Faites glisser la séparation entre les deux pages pour changer leur largeur."));
-  } else if (c.precedent) {
     colonne.appendChild(
-      lignePage("À côté de « " + c.precedent.titre + " »", "ou Maj+clic sur un onglet du rail", "cote", { m: "coteAvec", id: c.precedent.id })
+      elem("div", "menu-astuce", "Pour changer une des deux pages : clic droit sur un onglet du rail → « Remplacer la page de gauche » (ou de droite).")
     );
+  } else {
+    // Aucune paire affichee : la page a placer est l'onglet du clic droit, sinon celle qu'on a
+    // regardee juste avant. Elle prend le cote demande, l'onglet affiche garde l'autre.
+    const aPlacer = cibleMenu ? actif : c.precedent;
+    if (aPlacer && aPlacer.id && affiche.id && aPlacer.id !== affiche.id) {
+      colonne.appendChild(
+        lignePage("À gauche", `« ${titreCourt(aPlacer)} » à gauche, « ${titreCourt(affiche)} » à droite`, "cote", {
+          m: "coteAvec",
+          id: aPlacer.id,
+          cote: "gauche",
+        })
+      );
+      colonne.appendChild(
+        lignePage("À droite", `« ${titreCourt(aPlacer)} » à droite, « ${titreCourt(affiche)} » à gauche · Maj+clic fait pareil`, "cote", {
+          m: "coteAvec",
+          id: aPlacer.id,
+          cote: "droite",
+        })
+      );
+    }
   }
   colonne.appendChild(
     elem("div", "menu-astuce", "Dans la barre d'adresse : Alt+Entrée ouvre dans un nouvel onglet de ce fil, Maj+Entrée à côté de cette page.")

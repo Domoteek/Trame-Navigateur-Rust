@@ -1387,6 +1387,33 @@ fil ; celui de la tête n'en force aucun), et `outils/eprouver-nouvel-onglet-gro
 binaire : `[{"fil":1,"onglets":1}]` → après le « + » du groupe `2` onglets, après celui de la tête
 `3`, **aucun groupe créé**, et la session écrite met les trois dans le fil 1.
 
+**0.4.69 — le côte à côte demande où il met la page.** « Dès que je mets un côte à côte ça la met à
+droite ; et si je clique sur une autre fenêtre ça remplace celle de droite, mais celle de gauche ne
+se remplace jamais » (Clément, 26/11). **Mesuré avant de toucher** (sonde
+`outils/sonder-cote-a-cote.mjs`, vrai binaire, profil neuf, 3 onglets) : un Maj+clic donnait
+toujours `(actif, nouveau)` — la gauche était donc « la page où j'étais », jamais un endroit ;
+depuis la page de **gauche** le nouveau venu remplaçait la droite (la gauche intacte, d'où le
+constat), et depuis la page de **droite** il remplaçait la gauche **en échangeant les deux places**
+(`(a,b)` devenait `(b,c)` : la page lue sautait à gauche). Un clic simple sur un troisième onglet
+n'affichait plus la paire, mais le rail gardait les étiquettes « gauche » / « droite ».
+Correctifs :
+(1) `model::placer_cote(paire, actif, nouveau, cote)` — fonction **pure**, 4 tests — fait désormais
+prendre à la page neuve la place de celle qu'on **ne lit pas** : la page lue ne change **jamais** de
+côté ;
+(2) le menu dit les deux côtés, sans détour : **« À gauche »** et **« À droite »** remplacent la
+ligne unique « À côté de « … » », et le clic droit sur un onglet du rail, pendant un côte à côte,
+propose **« Remplacer la page de gauche »** et **« Remplacer la page de droite »** — c'est la
+destination, choisie à la main ;
+(3) les marques « gauche » / « droite » du rail ne s'affichent que si la paire est **à l'écran**
+(une paire en attente ne ment plus).
+Choix gardé : le clic simple continue d'afficher l'onglet **seul** (la paire reste en attente) —
+c'est le seul geste qui redonne une page pleine largeur sans passer par « Quitter », et la Notice le
+dit déjà. Preuves : `cargo test` **226/226** (+4), `tester-ui` **105/105** (+3), et
+`outils/eprouver-cote-a-cote.mjs` sur le vrai binaire : Maj+clic → `(1, 3)` ; depuis la gauche →
+`(1, 2)` ; depuis la droite → `(3, 2)`, **la page lue reste à droite** ; le menu remplace la page de
+droite → `(3, 1)` ; la session écrite garde `cote: [3,1]`. Limite : deux pages au plus, et les deux
+doivent être éveillées (le côte à côte réveille l'autre).
+
 ## 11. L'état aujourd'hui
 
 ```

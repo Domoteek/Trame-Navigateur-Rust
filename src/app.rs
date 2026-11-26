@@ -5058,7 +5058,7 @@ impl App {
             // Cote a cote avec l'onglet regarde juste avant (« Essayer » de la Notice, astuce).
             "cote" => {
                 if let Some(actif) = self.actif {
-                    self.cote_avec(actif);
+                    self.cote_avec(actif, None);
                 }
             }
             "reglages" => self.ouvrir_reglages(),

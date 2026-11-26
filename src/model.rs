@@ -1124,6 +1124,72 @@ pub fn deplacer_onglet(
     true
 }
 
+/// De quel cote d'un cote a cote une page arrive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cote {
+    Gauche,
+    Droite,
+}
+
+impl Cote {
+    /// Le cote demande par l'interface (`"gauche"`, `"droite"`), sinon `None` : c'est la regle
+    /// par defaut qui decide, et elle vaut mieux qu'un clic pedagogique.
+    pub fn depuis(texte: Option<&str>) -> Option<Cote> {
+        match texte {
+            Some("gauche") => Some(Cote::Gauche),
+            Some("droite") => Some(Cote::Droite),
+            _ => None,
+        }
+    }
+}
+
+/// La paire `(gauche, droite)` du cote a cote apres l'arrivee de `nouveau` a cote de l'onglet
+/// `actif`. Fonction pure : c'est ici, et nulle part ailleurs, que se decide **ou nait une page
+/// dans un cote a cote**.
+///
+/// La regle, et sa raison (constat de Clement, 2026-11-26 : « ca remplace celle de droite mais
+/// celle de gauche ne se remplace jamais » ; l'ancien calcul etait `(actif, nouveau)`, donc la
+/// gauche etait toujours « la page ou j'etais » et le cote droit toujours le nouveau venu) :
+///
+/// - **une paire est affichee** : la page neuve prend la place de celle qu'on **ne lit pas**.
+///   Les deux cotes redeviennent des endroits, et la page qu'on lit ne change jamais de cote.
+///   `cote` demande explicitement l'un ou l'autre, et l'emporte.
+/// - **aucune paire affichee** : la page active reste d'un cote (a gauche) et la neuve va de
+///   l'autre ; `cote` peut les inverser.
+/// - `actif` absent, ou `nouveau` = `actif` : `None` (rien a placer).
+pub fn placer_cote(
+    paire: Option<(TabId, TabId)>,
+    actif: Option<TabId>,
+    nouveau: TabId,
+    cote: Option<Cote>,
+) -> Option<(TabId, TabId)> {
+    let actif = actif?;
+    if let Some((g, d)) = paire {
+        if actif == g || actif == d {
+            // Le cote vise : celui qu'on demande, sinon celui d'en face (celui qu'on ne lit pas).
+            let vise = cote.unwrap_or(if actif == g { Cote::Droite } else { Cote::Gauche });
+            let (mut nouveau_gauche, mut nouveau_droite) = match vise {
+                Cote::Gauche => (nouveau, d),
+                Cote::Droite => (g, nouveau),
+            };
+            // La page demandee etait deja de l'autre cote : c'est un echange, pas une paire
+            // reduite a un seul onglet.
+            if nouveau_gauche == nouveau_droite {
+                nouveau_gauche = d;
+                nouveau_droite = g;
+            }
+            return Some((nouveau_gauche, nouveau_droite));
+        }
+    }
+    if nouveau == actif {
+        return None;
+    }
+    Some(match cote {
+        Some(Cote::Gauche) => (nouveau, actif),
+        _ => (actif, nouveau),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1187,6 +1253,50 @@ mod tests {
         s.cote = Some((10, 11));
         let propre = session_sans_prives(&s);
         assert_eq!(propre.cote, None);
+    }
+
+    /// Le cœur de la 0.4.69 : dans un cote a cote AFFICHE, la page neuve prend la place de celle
+    /// qu'on ne lit pas, donc la page lue ne change jamais de cote (constat de Clement : « la
+    /// gauche ne se remplace jamais », et l'ancien calcul faisait sauter la page lue a gauche).
+    #[test]
+    fn la_page_neuve_prend_la_place_qu_on_ne_lit_pas() {
+        // A gauche (1) : la neuve va a droite, la gauche ne bouge pas.
+        assert_eq!(placer_cote(Some((1, 2)), Some(1), 3, None), Some((1, 3)));
+        // A droite (2) : la neuve va a gauche, la page lue RESTE a droite (avant : (2, 3)).
+        assert_eq!(placer_cote(Some((1, 2)), Some(2), 3, None), Some((3, 2)));
+    }
+
+    /// Le cote demande par l'interface l'emporte sur la regle par defaut.
+    #[test]
+    fn le_cote_demande_l_emporte() {
+        assert_eq!(placer_cote(Some((1, 2)), Some(1), 3, Some(Cote::Gauche)), Some((3, 2)));
+        assert_eq!(placer_cote(Some((1, 2)), Some(1), 3, Some(Cote::Droite)), Some((1, 3)));
+        assert_eq!(placer_cote(None, Some(1), 3, Some(Cote::Gauche)), Some((3, 1)));
+        assert_eq!(placer_cote(None, Some(1), 3, Some(Cote::Droite)), Some((1, 3)));
+        // Sans paire affichee, la page active reste a gauche par defaut.
+        assert_eq!(placer_cote(None, Some(1), 3, None), Some((1, 3)));
+    }
+
+    /// Une page deja affichee qu'on renvoie de l'autre cote : c'est un echange, jamais une paire
+    /// reduite a un seul onglet (une paire (x, x) ne s'affiche pas).
+    #[test]
+    fn renvoyer_une_page_de_l_autre_cote_echange_les_deux() {
+        assert_eq!(placer_cote(Some((1, 2)), Some(1), 2, Some(Cote::Gauche)), Some((2, 1)));
+        assert_eq!(placer_cote(Some((1, 2)), Some(2), 1, Some(Cote::Droite)), Some((2, 1)));
+        // Sans changement demande, rien ne bouge.
+        assert_eq!(placer_cote(Some((1, 2)), Some(1), 1, Some(Cote::Gauche)), Some((1, 2)));
+    }
+
+    /// Sans onglet actif, ou avec la meme page des deux cotes, il n'y a rien a placer.
+    #[test]
+    fn sans_onglet_actif_rien_ne_se_place() {
+        assert_eq!(placer_cote(Some((1, 2)), None, 3, None), None);
+        assert_eq!(placer_cote(None, None, 3, Some(Cote::Gauche)), None);
+        assert_eq!(placer_cote(None, Some(1), 1, None), None);
+        assert_eq!(Cote::depuis(Some("gauche")), Some(Cote::Gauche));
+        assert_eq!(Cote::depuis(Some("droite")), Some(Cote::Droite));
+        assert_eq!(Cote::depuis(Some("au milieu")), None);
+        assert_eq!(Cote::depuis(None), None);
     }
 
     #[test]
