@@ -3494,15 +3494,24 @@ impl App {
             UserEvent::IconeImage { onglet, donnees } => self.icone_capturee(onglet, donnees),
             UserEvent::PleinEcran { onglet, actif } => self.sur_plein_ecran(onglet, actif),
             UserEvent::NouvelleFenetre { onglet, url } => {
-                let url = urls::normaliser_avec(&url, &self.reglages.moteur);
-                // Depuis le panneau de droite (popup d'extension), il n'y a pas d'onglet
-                // d'origine : on tisse alors sans parent plutot que sur un identifiant fictif.
-                let parent = if self.trouver(onglet).is_some() {
-                    Some(onglet)
+                // Une fenêtre demandée SANS adresse (`window.open()` ou `about:blank`) ne donne pas
+                // un onglet : le site voulait écrire dedans, et Trame a refusé la fenêtre — il ne
+                // restait donc qu'un onglet blanc, c'est-à-dire un onglet de plus sans raison.
+                // Constat de Clément, 2026-11-26 : un résultat de recherche Google lui créait un
+                // onglet de trop. Le site, lui, retombe sur la navigation de la page courante.
+                if url.trim().is_empty() || url.trim() == "about:blank" {
+                    info!("onglet {onglet} : fenêtre demandée sans adresse — aucun onglet créé");
                 } else {
-                    None
-                };
-                self.ouvrir_onglet(url, Declencheur::Lien, parent);
+                    let url = urls::normaliser_avec(&url, &self.reglages.moteur);
+                    // Depuis le panneau de droite (popup d'extension), il n'y a pas d'onglet
+                    // d'origine : on tisse alors sans parent plutot que sur un identifiant fictif.
+                    let parent = if self.trouver(onglet).is_some() {
+                        Some(onglet)
+                    } else {
+                        None
+                    };
+                    self.ouvrir_onglet(url, Declencheur::Lien, parent);
+                }
             }
             UserEvent::Log(ligne) => info!("{ligne}"),
             UserEvent::CacherDiffere(ids) => self.cacher_differe(ids),

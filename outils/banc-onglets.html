@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Banc : fenêtres et onglets</title>
+<style>
+  body { font: 16px system-ui, sans-serif; margin: 0; padding: 24px; background: #16181d; color: #e7e9ee; }
+  h1 { font-size: 18px; }
+  p { color: #9aa3b2; max-width: 720px; }
+  a, button { display: block; margin: 12px 0; width: 460px; padding: 12px; font: inherit; text-align: left;
+              background: #23262e; color: #e7e9ee; border: 1px solid #3a3f4b; border-radius: 8px; cursor: pointer; }
+  a:hover, button:hover { background: #2c3140; }
+</style>
+</head>
+<body>
+<h1>Banc : une fenêtre demandée par la page</h1>
+<p>Page de mesure pour <code>outils/eprouver-onglet-fenetre.mjs</code>. Chaque élément reproduit une
+façon dont un site demande une fenêtre. Le banc les clique pour de vrai (CDP) et compte les onglets.</p>
+
+<a id="lien-blank" href="https://example.com/?lien-blank" target="_blank">1. Lien avec target=_blank (Chrome ouvre un onglet)</a>
+
+<button id="popup-vide">2. window.open() sans adresse, puis repli sur la page courante (le cas Google)</button>
+
+<button id="popup-adresse">3. window.open(adresse) — une fenêtre avec sa propre adresse</button>
+
+<script>
+  // Cas 2 : la page demande une fenêtre VIDE, y écrit si elle l'a obtenue, et retombe sur la
+  // navigation de la page courante. C'est ce que fait un site quand son popup est refusé — et
+  // c'est ce qui laissait un onglet blanc de trop.
+  document.getElementById("popup-vide").onclick = () => {
+    const w = window.open();
+    try {
+      w.location = "https://example.com/?dans-la-fenetre";
+    } catch (e) {
+      /* fenêtre refusée : le repli ci-dessous fait le travail */
+    }
+    location.href = "https://example.com/?repli";
+  };
+
+  document.getElementById("popup-adresse").onclick = () => {
+    window.open("https://example.com/?fenetre-adresse");
+  };
+</script>
+</body>
+</html>

@@ -249,6 +249,14 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.71, publiée et installée le 2026-11-26.** « Sur une recherche Google, cliquer un résultat me
+> crée un onglet alors qu'il n'y a pas besoin ». Mesuré : un site qui demande une fenêtre **vide**
+> (`window.open()`) puis écrit dedans retombe sur la navigation de la page courante (la fenêtre est
+> refusée) — et Trame créait malgré tout un onglet blanc, inutile. Une demande **sans adresse** ne
+> crée plus d'onglet ; un lien `target=_blank` et un `window.open(adresse)`, eux, ouvrent un onglet
+> avec leur adresse, comme Chrome. Preuves : `cargo test` **226/226**, `tester-ui` **105/105**,
+> `outils/eprouver-onglet-fenetre.mjs` sur le vrai binaire.
+>
 > **0.4.70, publiée et installée le 2026-11-26.** « J'ouvre un raccourci YouTube, la flèche de retour
 > est déjà active ; retour, retour → `about:blank` ». Mesuré : l'historique de l'onglet était
 > `["about:blank", <la page>]`, parce que la webview naît sur une page blanche (c'est ce qui évite la
@@ -356,7 +364,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.70-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.71-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

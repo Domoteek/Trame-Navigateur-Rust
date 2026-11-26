@@ -1430,6 +1430,24 @@ derrière. Repli : si le document n'est pas prêt, `load_url` ordinaire (l'état
 Domain » — donc pas de page inerte) ; puis `["…/", "…/?deux"]` et le Retour ramène sur la première,
 bouton de nouveau inactif. Piège écrit dans `docs/ARCHITECTURE.md` (« Piège n° 4 »).
 
+**0.4.71 — une fenêtre demandée sans adresse ne crée plus d'onglet.** « Sur une recherche Google,
+cliquer un résultat me crée un nouvel onglet alors qu'il n'y a pas besoin » (Clément, 26/11).
+**Mesuré** : un site qui demande une fenêtre **vide** (`window.open()`, donc `about:blank`) puis
+écrit dedans retombe, la fenêtre étant refusée, sur la navigation de la page courante — et Trame
+créait malgré tout un onglet blanc, qui ne sert à rien : un onglet de trop, à côté de la page qui
+navigue. Preuve sur une page de mesure locale (`outils/banc-onglets.html`, vrais clics CDP) :
+`window.open()` + repli → **1 page avant, 2 après** (`about:blank` en trop) ; un lien `target=_blank`
+et un `window.open(adresse)` → un onglet avec **leur** adresse, ce qui est le comportement de Chrome.
+Correctif : dans le traitement de `NouvelleFenetre`, une demande **sans adresse** est journalisée et
+**ne crée aucun onglet** ; les fenêtres qui portent une adresse ouvrent un onglet comme avant.
+Preuves : `cargo test` **226/226**, `tester-ui` **105/105**, `outils/eprouver-onglet-fenetre.mjs`
+sur le vrai binaire (1 → 1 page pour la fenêtre vide, le repli navigue ; +1 onglet pour `_blank` ;
++1 pour `window.open(adresse)` ; la session écrite ne contient aucun onglet blanc).
+Limite dite franchement : le clic synthétique sur un **vrai** résultat Google n'aboutit pas (une
+couche maison avale les clics CDP), donc le cas Google est reproduit par un **équivalent** mesuré,
+pas par Google lui-même ; si un onglet de trop subsiste, c'est l'adresse de cet onglet qui dira
+lequel des deux chemins reste en cause.
+
 ## 11. L'état aujourd'hui
 
 ```
