@@ -79,7 +79,11 @@ fn main() {
     }
     let profil = profile::Profil::ouvrir();
     log::init(profil.fichier_journal());
-    info!("Trame demarre (profil {})", profil.racine().display());
+    info!(
+        "Trame demarre (profil {}, pid {})",
+        profil.racine().display(),
+        std::process::id()
+    );
 
     // Sonde de mise au point du tunnel (jamais en usage normal) : `TRAME_TUNNEL_ESSAI=1` monte le
     // tunnel configure, tente la poignee de main avec le pair, ecrit le resultat et sort. Elle
@@ -258,10 +262,10 @@ fn main() {
                     std::thread::sleep(Duration::from_secs(60));
                 }
                 application.traiter(evenement);
-                // Une restauration a ete confirmee : elle s'applique au demarrage suivant, donc
-                // on ferme proprement (la session est ecrite a la sortie, comme d'habitude).
+                // Une restauration a ete confirmee, ou l'interface demande un redemarrage : on
+                // ferme proprement (la session est ecrite a la sortie, comme d'habitude).
                 if application.a_quitter() {
-                    info!("arret demande : la restauration s'appliquera au prochain demarrage");
+                    info!("arret demande par l'interface, fermeture propre");
                     *controle = ControlFlow::Exit;
                     return;
                 }

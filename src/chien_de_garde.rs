@@ -63,25 +63,34 @@ pub fn lancer() {
     });
 }
 
+/// Lance le Trame qui prendra la suite. Il attendra la fin de ce processus (voir
+/// `attendre_l_ancien`) avant de prendre le verrou du profil. **Ne termine rien** : c'est
+/// l'appelant qui decide comment il s'arrete — le chien de garde coupe net, un redemarrage
+/// demande par l'utilisateur ferme proprement (session ecrite).
+pub fn preparer_relance() -> Result<(), String> {
+    let pid = std::process::id();
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("executable introuvable ({e})"))?;
+    let dossier = exe.parent().map(|p| p.to_path_buf());
+    let mut commande = std::process::Command::new(&exe);
+    // La sonde de blocage ne doit pas suivre : le relance se figerait a son tour.
+    commande.env(VAR_RELANCE, pid.to_string()).env_remove("TRAME_SONDE_BLOCAGE");
+    if let Some(d) = dossier {
+        commande.current_dir(d);
+    }
+    commande
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("lancement impossible ({e})"))
+}
+
 /// Relance Trame puis termine ce processus. Les webviews (processus msedgewebview2) suivent
 /// leur hote.
 fn relancer() {
     let pid = std::process::id();
-    match std::env::current_exe() {
-        Ok(exe) => {
-            let dossier = exe.parent().map(|p| p.to_path_buf());
-            let mut commande = std::process::Command::new(&exe);
-            // La sonde de blocage ne doit pas suivre : le relance se figerait a son tour.
-            commande.env(VAR_RELANCE, pid.to_string()).env_remove("TRAME_SONDE_BLOCAGE");
-            if let Some(d) = dossier {
-                commande.current_dir(d);
-            }
-            match commande.spawn() {
-                Ok(_) => alerte!("chien de garde : Trame relance, ce processus ({pid}) s'arrete"),
-                Err(e) => alerte!("chien de garde : relance impossible ({e}), arret quand meme"),
-            }
-        }
-        Err(e) => alerte!("chien de garde : executable introuvable ({e}), arret sans relance"),
+    match preparer_relance() {
+        Ok(()) => alerte!("chien de garde : Trame relance, ce processus ({pid}) s'arrete"),
+        Err(e) => alerte!("chien de garde : {e}, arret quand meme"),
     }
     std::process::exit(3);
 }
@@ -93,7 +102,7 @@ pub fn attendre_l_ancien() {
         return;
     };
     std::env::remove_var(VAR_RELANCE);
-    info!("relance par le chien de garde : attente de la fin du processus {pid}");
+    info!("relance : attente de la fin du processus {pid}");
     for _ in 0..150 {
         if !crate::profile::processus_vivant(pid) {
             return;

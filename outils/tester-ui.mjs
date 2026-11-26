@@ -3156,6 +3156,114 @@ async function suite() {
     await p.close();
   });
 
+  await cas("reglages : changer de tunnel propose de redémarrer Trame", async () => {
+    const p = await page("reglages.html");
+    const conf = { nom: "mullvad-fr", resume: "10.66.163.176/32 → 193.32.126.68:51820" };
+    const questions = [];
+    let reponse = false;
+    p.on("dialog", async (d) => {
+      questions.push(d.message());
+      if (reponse) await d.accept();
+      else await d.dismiss();
+    });
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: { astuces: true, tunnelOblige: false, tunnel: null },
+    });
+    await rubrique(p, "confidentialite");
+
+    // 1. Aucune configuration importée : rien à monter, donc aucune question — le portier se
+    //    contente de bloquer les sites.
+    await vider(p);
+    await p.click("#bascule-tunnel");
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelOblige"),
+      [{ m: "tunnelOblige", actif: true }],
+      "sans configuration, la bascule passe seule"
+    );
+    egal(questions.length, 0, "sans configuration, aucune proposition de redémarrage");
+
+    // 2. Configuration importée, proposition refusée : le réglage part, Trame reste ouvert.
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: { astuces: true, tunnelOblige: false, tunnel: null, tunnelImporte: conf },
+    });
+    await vider(p);
+    await p.click("#bascule-tunnel");
+    await p.waitForTimeout(150);
+    egal(questions.length, 1, "une configuration : la question du redémarrage est posée");
+    verifier(questions[0].includes("Redémarrer Trame"), "la question parle de redémarrer Trame");
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelOblige"),
+      [{ m: "tunnelOblige", actif: true }],
+      "le portier est allumé malgré le refus"
+    );
+    egal(
+      (await messages(p)).filter((m) => m.m === "redemarrerTrame"),
+      [],
+      "refusé : Trame ne redémarre pas"
+    );
+
+    // 3. Tunnel armé, on le coupe, proposition acceptée : le réglage part et Trame redémarre.
+    reponse = true;
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: {
+        astuces: true,
+        tunnelOblige: true,
+        tunnel: "Tunnel intégré (WireGuard)",
+        tunnelImporte: conf,
+      },
+    });
+    await vider(p);
+    await p.click("#bascule-tunnel");
+    await p.waitForTimeout(150);
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelOblige"),
+      [{ m: "tunnelOblige", actif: false }],
+      "la coupure du portier part"
+    );
+    egal(
+      (await messages(p)).filter((m) => m.m === "redemarrerTrame"),
+      [{ m: "redemarrerTrame" }],
+      "accepté : Trame redémarre pour retirer le tunnel"
+    );
+
+    // 4. Import alors que le portier est armé : c'est l'arrivée de la configuration qui
+    //    déclenche la proposition, pas le clic (le sélecteur de Windows peut être annulé).
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: { astuces: true, tunnelOblige: true, tunnel: null, tunnelImporte: conf },
+    });
+    await vider(p);
+    const avant = questions.length;
+    await p.click("#btn-tunnel-importer");
+    egal(
+      (await messages(p)).filter((m) => m.m === "tunnelImporter"),
+      [{ m: "tunnelImporter" }],
+      "Importer demande le fichier"
+    );
+    await p.waitForTimeout(150);
+    egal(questions.length, avant, "un clic sur Importer ne pose pas encore la question");
+    await pousser(p, {
+      ...etatDeBase(),
+      reglages: {
+        astuces: true,
+        tunnelOblige: true,
+        tunnel: null,
+        tunnelImporte: { nom: "mullvad-se", resume: "10.66.1.2/32 → 185.65.135.1:51820" },
+      },
+    });
+    await p.waitForTimeout(150);
+    egal(questions.length, avant + 1, "la configuration arrivée déclenche la proposition");
+    egal(
+      (await messages(p)).filter((m) => m.m === "redemarrerTrame"),
+      [{ m: "redemarrerTrame" }],
+      "accepté : Trame redémarre pour monter le nouveau tunnel"
+    );
+    await p.close();
+  });
+
   await cas("page du tunnel : elle dit l'adresse visée, et « Réessayer » la redemande", async () => {
     const p = await page("tunnel.html", { query: "?url=https%3A%2F%2Fexample.com%2Fx", sansEtat: true });
     verifier(

@@ -4772,6 +4772,27 @@ impl App {
                 }
                 self.pousser_etat();
             }
+            // Redemarrage demande par l'interface. Deux cas : le tunnel integre (son mandataire
+            // est pose sur la webview a sa creation, donc un changement ne s'applique qu'au
+            // demarrage suivant) et la restauration d'une sauvegarde. On lance le nouveau Trame
+            // — il attendra la fin de celui-ci — puis on quitte PROPREMENT : la session est
+            // ecrite comme a la fermeture, et les onglets reviennent.
+            "redemarrerTrame" => {
+                match crate::chien_de_garde::preparer_relance() {
+                    Ok(()) => {
+                        info!(
+                            "redemarrage demande : nouveau Trame lance, ce processus ({}) s'arrete",
+                            std::process::id()
+                        );
+                        self.quitter = true;
+                    }
+                    Err(e) => {
+                        alerte!("redemarrage impossible : {e}");
+                        self.signaler(&format!("Redémarrage impossible : {e}"));
+                    }
+                }
+                self.pousser_etat();
+            }
             "veilleAuto" => {
                 self.reglages.veille_auto = v["actif"].as_bool().unwrap_or(true);
                 self.profil.sauver_reglages(&self.reglages);

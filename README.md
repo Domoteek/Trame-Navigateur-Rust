@@ -249,6 +249,20 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.84, publiée et installée le 2026-11-28.** « Dès que j'active le VPN et que la configuration
+> est validée, propose-moi de redémarrer le navigateur ; et pareil quand je le coupe. » Le mandataire
+> du tunnel est posé sur la webview **à sa création** : rien ne peut changer à chaud. Trame **propose
+> donc le redémarrage** — en armant le portier, en le coupant, et à l'arrivée d'une configuration
+> importée quand le portier est déjà armé (c'est la configuration qui déclenche, pas le clic : on peut
+> annuler le sélecteur de Windows). Sans configuration importée, rien n'est proposé — redémarrer ne
+> changerait rien. Le redémarrage passe par la **fermeture propre** : la session est écrite comme à la
+> fermeture (onglets revenus), et le nouveau processus attend la fin de l'ancien avant de prendre le
+> verrou du profil. Preuves : `cargo test` **245/245**, `tester-ui` **109/109** (+1 : la proposition,
+> refusée puis acceptée, et le déclenchement par l'import), et un banc sur le **vrai binaire** en deux
+> temps — sans tunnel (arrêt propre, session écrite, nouveau pid, aucun doublon) et **avec le tunnel de
+> Clément monté** : après le redémarrage, la ligne « proxy … posé sur la webview » réapparaît, donc le
+> tunnel est bien remonté (`node outils/eprouver-redemarrage.mjs`, 25 contrôles).
+>
 > **0.4.83, publiée et installée le 2026-11-28.** « Il me faut une info si le VPN est actif » : une
 > **pastille VPN dans la barre**, à côté de la Notice. **Point vert** = les pages passent par le tunnel
 > (la bulle donne son nom : « VPN actif : toutes les pages de Trame passent par « Tunnel intégré
@@ -485,7 +499,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.83-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.84-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >
