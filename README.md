@@ -249,6 +249,19 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.88, publiée et installée le 2026-11-28.** Trois corrections nées du **banc OpenVPN** écrit le
+> même jour (`outils/eprouver-openvpn.mjs`). (1) Un profil dont la **clé du client est hors du
+> fichier** (`external_pki`, pas de section `<key>`) est désormais **refusé tout de suite**, avec la
+> raison — au lieu d'attendre trente secondes pour finir sur `Missing External PKI alias`. (2) Un
+> `tun_up` **vide** n'est plus pris pour un montage : Core en envoie un au démarrage, et le banc
+> annonçait « tunnel monté » sur un profil qui n'avait rien monté. (3) Quand la session meurt, **sa
+> raison** remplace « le tunnel n'a pas monté » (le fil de connexion la transmet). Preuves : `cargo
+> test` **260/260** (+1 : le profil sans clé est refusé avant toute tentative), et le banc, mesuré sur
+> un profil factice : import accepté et **chiffré** (profil et identifiants), puis refus net
+> `ce profil attend un certificat client hors du fichier (external PKI)`. ⚠️ Le banc a d'abord menti
+> (« monté » sur un échec) : un prédicat `async` renvoyait une promesse, donc toujours vraie — corrigé
+> et commenté.
+>
 > **0.4.87, publiée et installée le 2026-11-28.** « Il faut que ça marche avec OpenVPN » : **OpenVPN 3
 > Core** entre dans le binaire, en **espace utilisateur** — il ne crée aucun adaptateur réseau, donc
 > ni pilote ni droits administrateur — et se branche sur la pile `smoltcp` et le mandataire SOCKS5
@@ -541,7 +554,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.87-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.88-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >
