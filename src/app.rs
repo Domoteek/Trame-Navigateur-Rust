@@ -1965,6 +1965,16 @@ impl App {
             self.ouvrir_onglet(url, Declencheur::Saisie, None);
             return;
         };
+        self.naviguer_dedans(id, url);
+    }
+
+    /// Ouvre `url` **dans** l'onglet `id` (sans onglet de plus). Utilisé par la barre d'adresse, et
+    /// par une fenêtre demandée par une page : Trame refuse la fenêtre, la page s'ouvre donc dans
+    /// l'onglet d'où vient la demande plutôt que dans un onglet de plus.
+    fn naviguer_dedans(&mut self, id: TabId, url: String) {
+        if self.trouver(id).is_none() {
+            return;
+        }
         if let Some(o) = self.onglet_mut(id) {
             o.url = url.clone();
             o.titre = urls::nom_page_interne(&url).unwrap_or("").to_string();
@@ -1972,13 +1982,15 @@ impl App {
             o.defilement = 0.0;
         }
         if !self.webviews.contains_key(&id) {
+            // L'onglet dort : le réveil charge l'adresse qu'on vient d'écrire dans la session.
             self.reveiller(id);
-        }
-        if let Some(w) = self.webviews.get(&id) {
-            if let Err(e) = charger(w, &url) {
-                alerte!("navigation vers {url} impossible : {e}");
+        } else {
+            if let Some(w) = self.webviews.get(&id) {
+                if let Err(e) = charger(w, &url) {
+                    alerte!("navigation vers {url} impossible : {e}");
+                }
+                let _ = w.set_visible(!self.vue_trame);
             }
-            let _ = w.set_visible(!self.vue_trame);
         }
         self.defilement_a_restaurer.remove(&id);
         self.marquer_modifie();
@@ -3503,14 +3515,22 @@ impl App {
                     info!("onglet {onglet} : fenêtre demandée sans adresse — aucun onglet créé");
                 } else {
                     let url = urls::normaliser_avec(&url, &self.reglages.moteur);
-                    // Depuis le panneau de droite (popup d'extension), il n'y a pas d'onglet
-                    // d'origine : on tisse alors sans parent plutot que sur un identifiant fictif.
-                    let parent = if self.trouver(onglet).is_some() {
-                        Some(onglet)
-                    } else {
-                        None
-                    };
-                    self.ouvrir_onglet(url, Declencheur::Lien, parent);
+                    // Une fenêtre demandée AVEC adresse ne crée pas d'onglet non plus : elle
+                    // s'ouvre dans l'onglet d'où vient la demande. Trame refuse la fenêtre
+                    // (`Deny`), et beaucoup de sites retombent alors sur la navigation de la page
+                    // courante : en ouvrant EN PLUS un onglet, on obtenait deux pages identiques,
+                    // celle d'origine ayant même le bon historique. Constat de Clément, 2026-11-26
+                    // (deux onglets pour le même article depuis une recherche Google).
+                    match self.trouver(onglet) {
+                        Some(_) => {
+                            self.naviguer_dedans(onglet, url);
+                        }
+                        // Depuis le panneau de droite (popup d'extension) ou la vue trame, il n'y
+                        // a pas d'onglet d'origine : la seule place possible est un onglet.
+                        None => {
+                            self.ouvrir_onglet(url, Declencheur::Lien, None);
+                        }
+                    }
                 }
             }
             UserEvent::Log(ligne) => info!("{ligne}"),

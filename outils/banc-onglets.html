@@ -23,6 +23,8 @@ façon dont un site demande une fenêtre. Le banc les clique pour de vrai (CDP) 
 
 <button id="popup-adresse">3. window.open(adresse) — une fenêtre avec sa propre adresse</button>
 
+<button id="popup-repli">4. window.open(adresse) refusée, puis repli sur la page courante (le cas Google / boutique)</button>
+
 <script>
   // Cas 2 : la page demande une fenêtre VIDE, y écrit si elle l'a obtenue, et retombe sur la
   // navigation de la page courante. C'est ce que fait un site quand son popup est refusé — et
@@ -39,6 +41,14 @@ façon dont un site demande une fenêtre. Le banc les clique pour de vrai (CDP) 
 
   document.getElementById("popup-adresse").onclick = () => {
     window.open("https://example.com/?fenetre-adresse");
+  };
+
+  // Cas 4 : le motif des moteurs de recherche et des boutiques — demander une fenêtre, et si elle
+  // n'est pas venue (popup refusé), naviguer la page courante. Comme Trame REFUSAIT la fenêtre
+  // tout en ouvrant un onglet, les deux arrivaient : deux onglets sur la même page.
+  document.getElementById("popup-repli").onclick = () => {
+    const w = window.open("https://example.com/?fenetre-puis-repli");
+    if (!w) location.href = "https://example.com/?fenetre-puis-repli";
   };
 </script>
 </body>

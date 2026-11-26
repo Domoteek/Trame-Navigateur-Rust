@@ -249,6 +249,16 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.72, publiée et installée le 2026-11-26.** Depuis une recherche Google, le même article
+> s'ouvrait dans **deux** onglets (celui d'origine ayant même le bon historique). Mesuré : le motif
+> des moteurs et des boutiques est `window.open(url)` puis, la fenêtre étant refusée, `location.href =
+> url` — le site navigue donc lui-même, et Trame ouvrait **en plus** un onglet. Une fenêtre demandée
+> par une page ne crée plus d'onglet : elle s'ouvre **dans l'onglet d'où vient la demande**, et une
+> demande sans adresse ne fait rien. Conséquence assumée : un lien `target="_blank"` remplace la page
+> courante (Retour y ramène) au lieu d'ouvrir un onglet. Preuves : `cargo test` **226/226**,
+> `tester-ui` **105/105**, `outils/eprouver-onglet-fenetre.mjs` (4 motifs, 1 seul onglet, aucun
+> doublon).
+>
 > **0.4.71, publiée et installée le 2026-11-26.** « Sur une recherche Google, cliquer un résultat me
 > crée un onglet alors qu'il n'y a pas besoin ». Mesuré : un site qui demande une fenêtre **vide**
 > (`window.open()`) puis écrit dedans retombe sur la navigation de la page courante (la fenêtre est
@@ -364,7 +374,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.71-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.72-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >

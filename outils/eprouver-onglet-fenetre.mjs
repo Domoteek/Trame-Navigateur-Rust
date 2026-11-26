@@ -2,16 +2,16 @@
 /**
  * Banc d'essai des FENÊTRES DEMANDÉES PAR UNE PAGE, sur le vrai binaire.
  *
- * Constat de Clément (2026-11-26) : cliquer un résultat d'une recherche Google créait un onglet de
- * plus, sans besoin. Un site qui demande une fenêtre VIDE (`window.open()`, donc `about:blank`) puis
- * écrit dedans retombe, quand la fenêtre est refusée, sur la navigation de la page courante : Trame
- * créait malgré tout un onglet blanc, qui ne sert à rien.
+ * Deux constats de Clément (2026-11-26), la même famille :
+ *   - un site qui demande une fenêtre VIDE (`window.open()`, donc `about:blank`) laissait un onglet
+ *     blanc qui ne servait à rien ;
+ *   - un site qui demande une fenêtre AVEC adresse puis retombe sur la navigation de la page
+ *     courante (le motif des moteurs de recherche et des boutiques) donnait DEUX onglets pour la
+ *     même page, celui d'origine ayant en plus l'historique.
  *
- * La page de mesure est `outils/banc-onglets.html` (ouverte en `file:`), et les clics sont de VRAIS
- * clics CDP. Vérifie :
- *   1. une fenêtre demandée SANS adresse ne crée aucun onglet, et la page courante navigue ;
- *   2. un lien `target=_blank` crée un onglet, avec SON adresse (comme Chrome) ;
- *   3. `window.open(adresse)` crée un onglet, avec cette adresse.
+ * Règle vérifiée ici : une fenêtre demandée par une page ne crée pas d'onglet — elle s'ouvre dans
+ * l'onglet d'où vient la demande (et une demande sans adresse ne fait rien). Page de mesure :
+ * `outils/banc-onglets.html`, clics réels par CDP.
  *
  * Usage : node outils/eprouver-onglet-fenetre.mjs
  */
@@ -64,8 +64,8 @@ const pages = async () =>
     .map((t) => t.url);
 
 /** Session CDP de la page dont l'adresse contient `contient`. */
-async function pageDe(contient) {
-  for (let i = 0; i < 90; i++) {
+async function pageDe(contient, essais = 90) {
+  for (let i = 0; i < essais; i++) {
     const c = (await cibles(PORT)).find((t) => t.type === "page" && t.url.includes(contient));
     if (c) {
       const cdp = await connecter(c.webSocketDebuggerUrl);
@@ -79,7 +79,7 @@ async function pageDe(contient) {
 }
 
 /** Un vrai clic au centre de l'élément (CDP Input, pas un `.click()` synthétique). */
-async function cliquerLespace(page, selecteur) {
+async function cliquerLaPage(page, selecteur) {
   const point = await page.evaluer(`(() => {
     const el = document.querySelector(${JSON.stringify(selecteur)});
     if (!el) return null;
@@ -96,14 +96,9 @@ async function cliquerLespace(page, selecteur) {
   }
 }
 
-try {
-  const rail = await connecter((await attendreCible(PORT, "surface=rail")).webSocketDebuggerUrl);
-  await rail.envoyer("Runtime.enable");
-  const barre = await connecter((await attendreCible(PORT, "surface=barre")).webSocketDebuggerUrl);
-  await barre.envoyer("Runtime.enable");
-  await pause(3000);
-
-  // On ouvre la page de mesure dans l'onglet courant, comme une adresse tapée.
+let barre;
+/** Retour sur la page de mesure, par la barre d'adresse (comme un utilisateur). */
+async function retourAuBanc() {
   await barre.evaluer(`(() => {
     const c = document.getElementById("couture");
     c.focus();
@@ -111,62 +106,78 @@ try {
     c.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", altKey: false, bubbles: true, cancelable: true }));
   })()`);
   const page = await pageDe("banc-onglets.html");
-  await pause(2500);
-  const depart = await pages();
-  console.log("pages au départ :", JSON.stringify(depart));
+  await pause(2000);
+  return page;
+}
 
-  // 1. Fenêtre VIDE : aucun onglet ne doit naître, et la page courante doit naviguer.
-  const avant1 = (await pages()).length;
-  await cliquerLespace(page, "#popup-vide");
+try {
+  const rail = await connecter((await attendreCible(PORT, "surface=rail")).webSocketDebuggerUrl);
+  await rail.envoyer("Runtime.enable");
+  barre = await connecter((await attendreCible(PORT, "surface=barre")).webSocketDebuggerUrl);
+  await barre.envoyer("Runtime.enable");
+  await pause(3000);
+
+  const nbOnglets = () => rail.evaluer(`document.querySelectorAll("#fils .fil .onglet").length`);
+  const page = await retourAuBanc();
+  console.log("pages au départ :", JSON.stringify(await pages()));
+
+  // 1. Fenêtre VIDE : aucun onglet, et la page courante navigue (repli du site).
+  const o1 = await nbOnglets();
+  await cliquerLaPage(page, "#popup-vide");
   await pause(5000);
   const apres1 = await pages();
   console.log("\n1. window.open() sans adresse");
   console.log("   pages :", JSON.stringify(apres1));
-  ok(apres1.length === avant1, `aucun onglet créé (${avant1} -> ${apres1.length})`);
-  ok(
-    apres1.some((u) => u.includes("?repli")),
-    `la page courante a navigué vers le repli (${JSON.stringify(apres1)})`
-  );
+  ok((await nbOnglets()) === o1, `aucun onglet créé (${o1} -> ${await nbOnglets()})`);
+  ok(apres1.some((u) => u.includes("?repli")), `la page courante a navigué vers le repli (${JSON.stringify(apres1)})`);
 
-  // On revient sur la page de mesure pour la suite.
-  await barre.evaluer(`(() => {
-    const c = document.getElementById("couture");
-    c.focus();
-    c.value = ${JSON.stringify(PAGE)};
-    c.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", altKey: false, bubbles: true, cancelable: true }));
-  })()`);
-  await pause(2500);
-  const page2 = await pageDe("banc-onglets.html");
-
-  // 2. Lien target=_blank : un onglet, avec son adresse (comportement de Chrome).
-  const avant2 = (await pages()).length;
-  await cliquerLespace(page2, "#lien-blank");
+  // 2. Lien target=_blank : la page s'ouvre dans l'onglet courant, sans onglet de plus.
+  const page2 = await retourAuBanc();
+  const o2 = await nbOnglets();
+  await cliquerLaPage(page2, "#lien-blank");
   await pause(5000);
   const apres2 = await pages();
   console.log("\n2. lien target=_blank");
   console.log("   pages :", JSON.stringify(apres2));
-  ok(apres2.length === avant2 + 1, `un onglet de plus (${avant2} -> ${apres2.length})`);
-  ok(apres2.some((u) => u.includes("?lien-blank")), "l'onglet porte bien l'adresse du lien");
+  ok((await nbOnglets()) === o2, `aucun onglet de plus (${o2} -> ${await nbOnglets()})`);
+  ok(apres2.some((u) => u.includes("?lien-blank")), "la page du lien est ouverte");
+  ok(!apres2.some((u) => u.includes("banc-onglets.html")), "la page de mesure a bien laissé sa place");
 
-  // 3. window.open(adresse) : un onglet, avec cette adresse.
-  const page3 = await pageDe("banc-onglets.html");
-  const avant3 = (await pages()).length;
-  await cliquerLespace(page3, "#popup-adresse");
+  // 3. window.open(adresse) : même règle.
+  const page3 = await retourAuBanc();
+  const o3 = await nbOnglets();
+  await cliquerLaPage(page3, "#popup-adresse");
   await pause(5000);
   const apres3 = await pages();
   console.log("\n3. window.open(adresse)");
   console.log("   pages :", JSON.stringify(apres3));
-  ok(apres3.length === avant3 + 1, `un onglet de plus (${avant3} -> ${apres3.length})`);
-  ok(apres3.some((u) => u.includes("?fenetre-adresse")), "l'onglet porte l'adresse demandée");
+  ok((await nbOnglets()) === o3, `aucun onglet de plus (${o3} -> ${await nbOnglets()})`);
+  ok(apres3.some((u) => u.includes("?fenetre-adresse")), "la page demandée est ouverte");
 
-  // La session écrite ne doit pas contenir d'onglet blanc non plus.
+  // 4. Fenêtre AVEC adresse puis repli (le motif Google / boutique) : le doublon constaté.
+  const page4 = await retourAuBanc();
+  const o4 = await nbOnglets();
+  await cliquerLaPage(page4, "#popup-repli");
+  await pause(5000);
+  const apres4 = await pages();
+  console.log("\n4. window.open(adresse) + repli sur la page courante");
+  console.log("   pages :", JSON.stringify(apres4));
+  ok((await nbOnglets()) === o4, `aucun onglet de plus (${o4} -> ${await nbOnglets()})`);
+  ok(
+    apres4.filter((u) => u.includes("?fenetre-puis-repli")).length === 1,
+    `une seule page pour l'adresse demandée (${apres4.filter((u) => u.includes("?fenetre-puis-repli")).length})`
+  );
+
+  // La session écrite ne doit contenir ni onglet blanc ni doublon.
   tuer();
   ok(await fini(), "le processus a quitté");
   const session = JSON.parse(readFileSync(join(profil, "session.json"), "utf8").replace(/^\uFEFF/, ""));
-  const blancs = session.onglets.filter((o) => !o.url || o.url === "about:blank");
-  console.log(`\nsession écrite : ${session.onglets.length} onglet(s), ${blancs.length} blanc(s)`);
-  console.log("  " + JSON.stringify(session.onglets.map((o) => o.url)));
-  ok(blancs.length === 0, "aucun onglet blanc écrit dans la session");
+  const url = session.onglets.map((o) => o.url);
+  console.log(`\nsession écrite : ${session.onglets.length} onglet(s)`);
+  console.log("  " + JSON.stringify(url));
+  ok(session.onglets.length === 1, `un seul onglet en session (${session.onglets.length})`);
+  ok(!url.some((u) => !u || u === "about:blank"), "aucun onglet blanc");
+  ok(!(url.length > 1 && new Set(url).size < url.length), "aucune page en double");
 
   page.fermer();
   barre.fermer();
@@ -181,5 +192,5 @@ try {
   }
 }
 
-console.log(echecs === 0 ? "\nFenêtres demandées : aucun onglet de trop." : `\n${echecs} vérification(s) en échec.`);
+console.log(echecs === 0 ? "\nFenêtres demandées : aucun onglet de trop, aucun doublon." : `\n${echecs} vérification(s) en échec.`);
 process.exitCode = echecs === 0 ? 0 : 1;

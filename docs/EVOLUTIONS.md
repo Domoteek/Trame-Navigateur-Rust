@@ -1448,6 +1448,24 @@ couche maison avale les clics CDP), donc le cas Google est reproduit par un **é
 pas par Google lui-même ; si un onglet de trop subsiste, c'est l'adresse de cet onglet qui dira
 lequel des deux chemins reste en cause.
 
+**0.4.72 — une fenêtre demandée par une page ne crée plus d'onglet.** Deux captures de Clément
+(26/11) : depuis une recherche Google, le même article s'ouvre dans **deux** onglets, et celui
+d'origine a même le bon historique (« le premier onglet peut revenir en arrière, mais cliquer le lien
+m'a créé aussi un nouvel onglet que je ne veux pas »). **Mesuré** sur une page de mesure locale
+(`outils/banc-onglets.html`, clics réels CDP) : le motif des moteurs et des boutiques est
+`const w = window.open(url); if (!w) location.href = url;` — la fenêtre est refusée (`w` nul), le site
+navigue donc lui-même, et Trame ouvrait **en plus** un onglet : `?fenetre-puis-repli` apparaissait
+**deux fois**. Correctif : `NouvelleFenetre` **ne crée plus d'onglet** quand il y a un onglet
+d'origine — la page s'ouvre dedans (`App::naviguer_dedans`, extrait de `naviguer_actif`, donc la barre
+d'adresse et cette règle ne peuvent plus diverger) ; une demande **sans adresse** ne fait rien
+(0.4.71) ; sans onglet d'origine (panneau d'extension, vue trame), un onglet reste la seule place
+possible. Preuves : `cargo test` **226/226**, `tester-ui` **105/105**, et le banc :
+`window.open()` → 1 onglet ; lien `target=_blank` → 1 onglet, la page s'ouvre dedans ;
+`window.open(adresse)` → 1 onglet ; `window.open(adresse)` + repli → **1 page, pas 2** ; session
+écrite : **1 onglet, aucun blanc, aucun doublon**. Conséquence assumée et écrite dans
+`docs/ARCHITECTURE.md` (« Piège n° 5 ») : un lien `target="_blank"` remplace la page courante (le
+Retour y ramène) au lieu d'ouvrir un onglet.
+
 ## 11. L'état aujourd'hui
 
 ```

@@ -280,7 +280,8 @@ Trois garde-fous, chacun à un étage différent :
 |---|---|---|
 | `urls::interne_chromium` | reconnaît `chrome-search:`, `chrome://`, `chrome-untrusted:`, `devtools:`, `edge:`, `view-source:` (mais **pas** `chrome-extension://`) | décision unique, testée |
 | `App::garde_navigation` | `with_navigation_handler` **refuse** la navigation, sur les quatre surfaces et sur les onglets | la page reste en place, le refus part au journal |
-| popup d'extension dans le panneau | `with_new_window_req_handler` → `NouvelleFenetre` → onglet Trame, `Deny` | `window.open` ouvre un onglet |
+| popup d'extension dans le panneau | `with_new_window_req_handler` → `NouvelleFenetre` → onglet Trame, `Deny` | `window.open` d'une extension ouvre un onglet |
+| fenêtre demandée par une page | `Deny`, puis la page s'ouvre **dans l'onglet d'où vient la demande** (`naviguer_dedans`) ; une demande sans adresse ne fait rien | pas d'onglet de trop, pas de doublon (voir « Piège n° 5 ») |
 | `ouvrir_onglet` / `restaurer` | toute adresse interne devient l'accueil | rien de mort ne se restaure |
 
 Preuve mesurée : `TRAME_NAV=chrome-search://local-ntp/local-ntp.html` →
@@ -302,6 +303,27 @@ CDP `Page.getNavigationHistory`) : `["https://example.com/"]`, position 0, bouto
 `["https://example.com/", "https://example.com/?deux"]`, et un Retour ramène sur la première.
 Si `evaluate_script` échoue (document pas prêt), on retombe sur un `load_url` ordinaire : c'est
 l'état d'avant, pas une régression.
+
+## 9 ter. Piège n° 5 : une fenêtre refusée, puis le repli du site
+
+Trame n'a pas de fenêtres : `with_new_window_req_handler` répond toujours `Deny`. Or un site qui
+demande une fenêtre **prévoit** souvent ce refus et retombe sur la navigation de la page courante :
+
+```js
+const w = window.open(url);   // refusée -> w est nul
+if (!w) location.href = url;  // le site navigue donc lui-même
+```
+
+En ouvrant **en plus** un onglet pour la fenêtre demandée, on obtenait **deux pages identiques** —
+celle d'origine, avec en prime le bon historique. Constat de Clément le 2026-11-26 : deux onglets
+pour le même article depuis une recherche Google. Et une demande **sans adresse** (`window.open()`)
+laissait carrément un onglet blanc, qui ne pouvait rien afficher.
+
+La règle est donc : **une fenêtre demandée par une page ne crée pas d'onglet**. Elle s'ouvre dans
+l'onglet d'où vient la demande (`App::naviguer_dedans`), et une demande sans adresse ne fait rien.
+Conséquence assumée : un lien `target="_blank"` remplace la page courante (Retour y ramène) au lieu
+d'ouvrir un onglet. Preuve : `outils/eprouver-onglet-fenetre.mjs` sur `outils/banc-onglets.html`
+(clics réels) — les quatre motifs donnent **un seul onglet**, aucune page en double.
 
 ## 10. L'icône
 
