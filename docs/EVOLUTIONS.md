@@ -1561,6 +1561,21 @@ le tunnel) — c'est l'étape suivante, et elle se mesurera avec deux pairs loca
 configuration de fournisseur. Note : `tunnel.cle` n'est **pas** dans les sauvegardes, volontairement
 (une clé DPAPI ne se déchiffre pas sur une autre machine : on réimporte le `.conf` après restauration).
 
+**0.4.77 — le portier laisse passer le réseau local.** Clément a importé sa vraie configuration
+Mullvad (`fr-par-wg-003`, `10.66.163.176/32 → 193.32.126.68:51820`, DNS `100.64.0.63`) et allumé le
+portier : le journal a immédiatement montré le défaut —
+`navigation refusee (tunnel absent) : https://192.168.1.5:8006/#v1:0:=node%2Fproxmox` puis
+`https://www.amazon.fr/gp/css/order-history`. Bloquer un site public est voulu ; bloquer **Proxmox**
+ne l'est pas : une adresse du réseau local ne traverse pas le tunnel, elle n'a rien à y faire.
+`urls::interne_ou_locale` accepte donc désormais, en plus des pages internes et de la boucle locale :
+`10/8`, `172.16/12`, `192.168/16`, `169.254/16`, l'IPv6 **ULA** `fc00::/7` et **lien-local** `fe80::/10`,
+les noms en `.local`/`.lan`/`.home`/`.internal`/`.localdomain`, et les **noms sans point** (`proxmox`,
+`nas`). Preuves : `cargo test` **239/239** (le test des adresses locales couvre maintenant les seize
+cas), et `outils/eprouver-tunnel.mjs` sur le vrai binaire avec une étape de plus : portier allumé,
+`http://10.255.255.1:9/` **n'est pas** remplacée par la page du tunnel. Au passage, la vraie
+configuration importée confirme la chaîne : `tunnel.json` (303 octets) **sans** clé privée,
+`tunnel.cle` (262 octets) chiffrée, et l'interface affiche le résumé.
+
 ## 11. L'état aujourd'hui
 
 ```

@@ -161,23 +161,45 @@ pub fn nettoyer(url: &str, garder_affiliation: bool) -> Option<String> {
     Some(u.to_string())
 }
 
-/// Une adresse qui ne sort pas de la machine : page interne de Trame, `file:`, boucle locale.
+/// Une adresse qui ne sort pas sur **Internet** : page interne de Trame, `file:`, boucle locale,
+/// **réseau local** (192.168.x, 10.x, 172.16-31.x, lien local, ULA IPv6, noms `.local`, noms sans
+/// point comme `proxmox`).
 ///
-/// Le portier « tunnel obligatoire » laisse passer ces adresses : elles ne peuvent rien laisser
-/// fuir sur le réseau, et sans elles on ne pourrait plus atteindre les réglages pour éteindre le
-/// portier.
+/// Le portier « tunnel obligatoire » laisse passer ces adresses : elles ne traversent pas le tunnel
+/// parce qu'elles n'ont rien à y faire — et sans elles on ne pourrait plus joindre son propre
+/// réseau (constat de Clément, 2026-11-27 : Proxmox et le tableau de bord du home lab bloqués) ni
+/// les réglages pour éteindre le portier.
 pub fn interne_ou_locale(url: &str) -> bool {
     let bas = url.trim().to_ascii_lowercase();
     if bas.starts_with("trame:") || bas.starts_with("about:") || bas.starts_with("file:") {
         return true;
     }
     let Ok(u) = url::Url::parse(&bas) else { return false };
-    match u.host_str() {
-        // `localhost` et tout ce qui finit par `.localhost` (dont `trame.localhost`, la forme que
-        // WebView2 donne aux pages internes) sont la boucle locale : rien ne sort de la machine.
-        Some(h) => h == "localhost" || h.ends_with(".localhost") || h == "127.0.0.1" || h == "[::1]" || h == "::1",
-        None => false,
+    let Some(h) = u.host_str() else { return false };
+    // `localhost` et tout ce qui finit par `.localhost` (dont `trame.localhost`, la forme que
+    // WebView2 donne aux pages internes).
+    if h == "localhost" || h.ends_with(".localhost") || h == "[::1]" || h == "::1" {
+        return true;
     }
+    // Un nom sans point ne peut pas être un domaine public (`proxmox`, `nas`, `maison`).
+    if !h.contains('.') && !h.contains(':') {
+        return h.chars().any(|c| c.is_ascii_alphanumeric());
+    }
+    // mDNS et suffixes de réseau local.
+    for suffixe in [".local", ".lan", ".home", ".internal", ".localdomain"] {
+        if h.ends_with(suffixe) {
+            return true;
+        }
+    }
+    let nu = h.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = nu.parse::<std::net::Ipv4Addr>() {
+        return ip.is_loopback() || ip.is_private() || ip.is_link_local();
+    }
+    if let Ok(ip) = nu.parse::<std::net::Ipv6Addr>() {
+        // `is_unique_local` couvre fc00::/7, `is_unicast_link_local` couvre fe80::/10.
+        return ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local();
+    }
+    false
 }
 
 /// Raccourci pour les tests : moteur par defaut.
@@ -411,10 +433,11 @@ mod tests {
         assert!(!super::meme_fichier("pas une adresse", "autre chose"));
     }
 
-    /// Le portier « tunnel obligatoire » laisse passer ce qui ne sort pas de la machine — sans quoi
-    /// on ne pourrait plus atteindre les réglages pour l'éteindre.
+    /// Le portier « tunnel obligatoire » laisse passer ce qui ne sort **pas sur Internet** — sans
+    /// quoi on ne pourrait plus atteindre les réglages pour l'éteindre, ni son propre réseau
+    /// (le 27/11 : Proxmox et le tableau de bord du home lab étaient bloqués).
     #[test]
-    fn une_adresse_locale_ne_sort_pas_de_la_machine() {
+    fn une_adresse_locale_ne_sort_pas_sur_internet() {
         for locale in [
             "trame://localhost/reglages.html",
             "trame://localhost/tunnel.html?url=https%3A%2F%2Fexample.com",
@@ -423,11 +446,21 @@ mod tests {
             "http://127.0.0.1:19481/gros.exe",
             "file:///D:/LIFE/x.html",
             "about:blank",
+            // Le réseau de la maison : il ne traverse pas le tunnel, il n'a rien à y faire.
+            "https://192.168.1.5:8006/#v1:0",
+            "http://192.168.1.11:8720/",
+            "http://10.66.0.1/",
+            "http://172.20.0.5/",
+            "http://169.254.10.1/",
+            "http://[fd00::1]/",
+            "http://[fe80::1]/",
+            "http://proxmox/",
+            "http://nas.local/",
         ] {
-            assert!(super::interne_ou_locale(locale), "« {locale} » ne sort pas de la machine");
+            assert!(super::interne_ou_locale(locale), "« {locale} » ne sort pas sur Internet");
         }
-        for distante in ["https://example.com", "http://192.168.1.11:8720/", "https://google.fr"] {
-            assert!(!super::interne_ou_locale(distante), "« {distante} » sort sur le réseau");
+        for distante in ["https://example.com", "https://8.8.8.8/", "https://google.fr", "https://cdn.discordapp.com/x.exe"] {
+            assert!(!super::interne_ou_locale(distante), "« {distante} » sort sur Internet");
         }
     }
 }

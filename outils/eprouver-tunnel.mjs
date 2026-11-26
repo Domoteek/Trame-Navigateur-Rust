@@ -118,6 +118,18 @@ try {
     `les réglages restent accessibles (${JSON.stringify(apres2)})`
   );
 
+  // 2 bis. Le RÉSEAU LOCAL aussi : il ne traverse pas le tunnel, il n'a rien à y faire.
+  // (Constat de Clément le 27/11 : Proxmox et le tableau de bord du home lab bloqués.)
+  await saisir("http://10.255.255.1:9/");
+  const apres2bis = await pages();
+  console.log("2 bis. adresse du réseau local :", JSON.stringify(apres2bis));
+  ok(
+    !apres2bis.some((u) => u.includes("tunnel.html")),
+    `une adresse privée n'est pas remplacée par la page du tunnel (${JSON.stringify(apres2bis)})`
+  );
+  // On revient aux réglages pour la suite.
+  await saisir(PAGE_REGLAGES);
+
   // 3. On éteint le portier par la vraie bascule des réglages, puis on rouvre l'adresse.
   const cibleReglages = (await cibles(PORT)).find((t) => t.type === "page" && t.url.includes("reglages.html"));
   if (!cibleReglages) throw new Error("page des réglages introuvable");

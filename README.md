@@ -249,6 +249,14 @@ signature est horodatée (DigiCert) et `Get-AuthenticodeSignature` répond **Val
 `CN=CAHAGNE CLEMENT`. L'ordre compte : **l'exécutable est signé avant la compilation du setup**,
 sinon le client installe un exe non signé sous un setup signé.
 
+> **0.4.77, publiée et installée le 2026-11-27.** Le portier « tunnel obligatoire » ne bloque plus le
+> **réseau local** : Proxmox (`192.168.1.5:8006`), le tableau de bord du home lab
+> (`192.168.1.11:8720`), `10.x`, `172.16-31.x`, les adresses lien-local, l'IPv6 ULA `fc00::/7` et
+> lien-local `fe80::/10`, les noms en `.local` et les noms sans point (`proxmox`, `nas`) passent
+> toujours — ils ne traversent pas le tunnel, ils n'ont rien à y faire. Constat immédiat après le
+> premier vrai `.conf` importé. Preuves : `cargo test` **239/239**, `outils/eprouver-tunnel.mjs`
+> (une adresse privée n'est plus remplacée par la page du tunnel).
+>
 > **0.4.76, publiée et installée le 2026-11-27.** **Tunnel intégré, étape 1** : la configuration.
 > Réglages → Confidentialité → **Tunnel intégré (WireGuard)** → « Importer… » lit un fichier `.conf`
 > de n'importe quel fournisseur, le **valide** (clés 32 octets en base64 — une clé nulle est refusée,
@@ -418,7 +426,7 @@ sinon le client installe un exe non signé sous un setup signé.
 > octet** celui qui a été signé.
 >
 > ```powershell
-> dist\Trame-0.4.76-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
+> dist\Trame-0.4.77-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /TASKS= `
 >   "/DIR=%LOCALAPPDATA%\Programs\Trame"
 > ```
 >
