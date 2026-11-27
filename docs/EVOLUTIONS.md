@@ -1593,6 +1593,29 @@ de la configuration active, Trame caché, 45 requêtes HTTPS **en même temps** 
 30 Mo) : version 0.4.92 installée **14/45** (exactement une par site), 0.4.93 **90/90** en deux tours
 et **30 000 000/30 000 000 octets à 66 Mbit/s**. `cargo test` 260/260.
 
+**0.4.94 (2026-11-27) — plus de fuite par WebRTC, et un tunnel qui se remonte seul.** Bilan demandé
+par Clément après la journée du 26. (1) **Fuite mesurée** : tunnel Nord monté, une page voyait
+l'adresse du VPN par HTTP mais la **vraie adresse du poste** par WebRTC (candidat STUN `srflx`). Le
+proxy ne couvre pas l'UDP de WebRTC. `app::arguments_navigateur_tunnel` pose désormais, avec le
+proxy, `--webrtc-ip-handling-policy=disable_non_proxied_udp` — piège : WebView2 **ignore** le nom de
+Chrome `--force-webrtc-ip-handling-policy` (essayé, fuite intacte, ligne de commande du moteur à
+l'appui). Après : **0 candidat**. (2) **Le tunnel WireGuard mourait sur un paquet refusé** :
+`NoCurrentSession` trois fois le 26 (15 h 29, 15 h 49, 17 h 14), le fil du mandataire s'arrêtait et
+plus rien ne sortait, pastille toujours verte. `vpn.rs` jette maintenant ces datagrammes comme
+WireGuard (compteur `refuses`, une ligne de journal par minute), relance une poignée de main sur
+`ConnectionExpired`, ignore le `WSAECONNRESET` d'un ICMP. (3) **Reprise automatique** : le fil du
+mandataire garde son écoute (le port est inscrit dans WebView2), refuse vite les connexions pendant
+la coupure, rappelle la préparation (`Fn`, plus `FnOnce`) toutes les 2 → 30 s ;
+`Mandataire::en_service()` fait passer la pastille au rouge et fermer le portier, messages « Tunnel
+coupé » / « Tunnel rétabli ». Sonde `TRAME_SONDE_COUPURE_S=N` (une coupure, N s après le montage).
+Banc nouveau `outils/eprouver-fuites.mjs` : HTTP ≠ vraie adresse, WebRTC sans la vraie adresse ni
+candidat STUN, puis coupure → rien ne sort (59 ms), retour seul sur le même port, page rechargée
+par le tunnel — **tout vert**. `cargo test` 262/262 (dont « un datagramme refusé ne fait pas
+tomber le tunnel »), `tester-ui` 114/114, banc de charge 135/135 sur 0.4.93 comme sur 0.4.94.
+**Reste à surveiller** : de rares requêtes figées jusqu'au délai de curl (3 sur 270 au banc de
+charge, microsoft.com surtout), vues sur 0.4.94 mais pas expliquées par ses changements (le relais
+n'a pas bougé) ; piste : l'assembleur de smoltcp (4 trous au plus) quand des paquets se perdent.
+
 ## 11. L'état aujourd'hui
 
 ```

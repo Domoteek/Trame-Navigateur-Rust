@@ -121,6 +121,7 @@ Comparer avec un navigateur sans VPN : l'adresse n'est pas la même. C'est la se
 | Ce qu'on voit | Ce qu'il faut faire |
 |---|---|
 | « Tunnel refusé : … » à l'import | Le fichier n'est pas une configuration WireGuard exploitable (souvent une configuration **OpenVPN** téléchargée par erreur). Recommencer l'étape 2 en choisissant bien **WireGuard®**. |
+| Message « Tunnel coupé », pastille rouge un moment | Le tunnel est tombé (réseau perdu, veille, serveur relancé). Depuis la **0.4.94**, Trame le remonte seul, sans redémarrer : rien ne sort pendant la coupure, puis « Tunnel rétabli » et les pages repartent. Il réessaie toutes les 2 à 30 s ; la raison de la coupure s'affiche dans les réglages tant qu'il n'est pas revenu. |
 | Pastille **rouge**, sites bloqués | Le tunnel n'a pas pu se monter : pas de réseau, endpoint filtré, ou configuration oubliée. Réglages → Confidentialité → **Relire**, puis consulter le journal (voir plus bas). |
 | Les pages tournent mais rien ne s'ouvre | Le tunnel est monté mais la sortie ne répond pas : la configuration a pu être révoquée côté fournisseur (une nouvelle configuration en génère une autre, l'ancienne cesse alors de marcher). Retélécharger un `.conf` et le réimporter. |
 | Un site précis refuse de s'ouvrir | Certains services bloquent les adresses de VPN. Changer de serveur (nouveau `.conf`). |
@@ -187,9 +188,11 @@ le mandataire. Il ne dit jamais les identifiants.
 1. **Il ne couvre que Trame**, pas les autres applications du PC.
 2. **Un seul tunnel monté à la fois** — la configuration active. Les autres attendent leur tour
    (voir la limite 5).
-3. **WebRTC (voix et visioconférence) n'est pas encore forcé dans le tunnel** : un site peut, dans
-   certains cas, apprendre l'adresse réelle. Pour les appels sensibles, préférer l'application du
-   fournisseur.
+3. **WebRTC (voix et visioconférence) ne sort plus à côté du tunnel** depuis la **0.4.94** : avant,
+   une page lisait l'adresse réelle par un serveur STUN (mesuré). Contrepartie : WebRTC n'a plus
+   d'UDP direct, donc une visio dans Trame passe par le tunnel en TCP, ou pas du tout si le service
+   n'offre pas de relais TCP. Pour une visio qui refuse de démarrer, l'application du service fait
+   l'affaire. Le banc `node outils/eprouver-fuites.mjs` le revérifie.
 4. **UDP en dehors du DNS n'est pas relayé** : les jeux en UDP ne passent pas par ce tunnel.
 5. **Les configurations ne permutent pas toutes seules** : on garde autant de pays qu'on veut, mais
    c'est **Utiliser** (et un redémarrage) qui bascule de l'un à l'autre. Il n'y a pas de bascule

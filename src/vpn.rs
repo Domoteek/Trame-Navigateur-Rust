@@ -11,6 +11,7 @@
 
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 
+use boringtun::noise::errors::WireGuardError;
 use boringtun::noise::{Tunn, TunnResult};
 
 /// Taille maximale d'un paquet IP qui sort du tunnel (`AllowedIPs` peut inclure l'IPv6).
@@ -32,6 +33,11 @@ pub struct Session {
     /// ou d'un réseau qui bloque l'UDP.
     pub envoyes: u64,
     pub recus: u64,
+    /// Datagrammes que le moteur a refusés (paquet en retard, rejoué, d'une session déjà
+    /// remplacée…). WireGuard les jette sans rien dire ; les compter suffit.
+    pub refuses: u64,
+    /// Dernière fois qu'un refus est parti au journal (un par minute au plus).
+    refus_note_le: u64,
     /// Paquets IP sortis du tunnel, en attente de la pile TCP/IP (`src/mandataire.rs`).
     recueillis: std::collections::VecDeque<Vec<u8>>,
     /// MTU annoncée par la configuration (`None` : 1420, la valeur de WireGuard).
@@ -77,6 +83,8 @@ impl Session {
             travail: vec![0u8; MAX_PAQUET],
             envoyes: 0,
             recus: 0,
+            refuses: 0,
+            refus_note_le: 0,
             recueillis: std::collections::VecDeque::new(),
             mtu: config.mtu.map(|m| m as usize),
         })
@@ -134,7 +142,18 @@ impl Session {
                     true
                 }
                 TunnResult::Done => false,
-                TunnResult::Err(e) => return Err(format!("minuterie du tunnel : {e:?}")),
+                // Session expirée (aucune poignée de main réussie depuis trop longtemps, après une
+                // veille par exemple) : on en relance une au lieu d'abandonner le tunnel.
+                TunnResult::Err(WireGuardError::ConnectionExpired) => {
+                    self.sortie = copie;
+                    crate::info!("tunnel : session expirée, nouvelle poignée de main");
+                    return self.demarrer();
+                }
+                TunnResult::Err(e) => {
+                    self.sortie = copie;
+                    self.noter_refus(&format!("minuterie : {e:?}"));
+                    return Ok(());
+                }
                 _ => false,
             };
             self.sortie = copie;
@@ -156,6 +175,12 @@ impl Session {
                 Ok(n) => n,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(()),
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                // Windows rend une erreur sur un socket UDP « connecté » quand un ICMP « port
+                // injoignable » est revenu (WSAECONNRESET) : ce n'est pas la fin du tunnel.
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionRefused) => {
+                    self.noter_refus(&format!("réseau : {e}"));
+                    continue;
+                }
                 Err(e) => return Err(format!("lecture du tunnel impossible : {e}")),
             };
             self.recus += 1;
@@ -180,9 +205,12 @@ impl Session {
                         resultat = self.tunnel.decapsulate(None, &[], &mut courant);
                     }
                     TunnResult::Done => break,
+                    // Un datagramme refusé (`NoCurrentSession` au changement de clé, compteur
+                    // rejoué, MAC invalide…) se JETTE, comme le fait WireGuard. Avant la 0.4.94,
+                    // un seul suffisait à arrêter le tunnel (trois fois le 2026-11-26).
                     TunnResult::Err(e) => {
-                        self.travail = courant;
-                        return Err(format!("tunnel : {e:?}"));
+                        self.noter_refus(&format!("{e:?}"));
+                        break;
                     }
                 }
             }
@@ -339,6 +367,16 @@ pub fn essai(racine: &std::path::Path) -> Result<String, String> {
 }
 
 impl Session {
+    /// Compte un datagramme refusé ; le journal en garde un par minute, avec le total.
+    fn noter_refus(&mut self, raison: &str) {
+        self.refuses += 1;
+        let maintenant = crate::log::maintenant_ms();
+        if maintenant.saturating_sub(self.refus_note_le) > 60_000 {
+            self.refus_note_le = maintenant;
+            crate::info!("tunnel : datagramme jeté ({raison}), {} depuis le début", self.refuses);
+        }
+    }
+
     /// Le prochain paquet IP sorti du tunnel, pour la pile (`src/mandataire.rs`).
     pub fn prendre_paquet(&mut self) -> Option<Vec<u8>> {
         self.recueillis.pop_front()
@@ -351,9 +389,11 @@ impl Session {
         let a_envoyer = match resultat {
             TunnResult::WriteToNetwork(sortant) => Some(sortant.to_vec()),
             TunnResult::Done => None,
+            // Paquet jeté : la pile TCP le renverra.
             TunnResult::Err(e) => {
                 self.sortie = copie;
-                return Err(format!("chiffrement impossible : {e:?}"));
+                self.noter_refus(&format!("chiffrement : {e:?}"));
+                return Ok(());
             }
             _ => None,
         };
@@ -421,6 +461,28 @@ mod tests {
         let adresses = resoudre_toutes("127.0.0.1:51820").expect("adresse");
         assert_eq!(adresses.len(), 1);
         assert_eq!(adresses[0].port(), 51820);
+    }
+
+    /// Des datagrammes que le moteur refuse (données d'une session inconnue — le cas
+    /// `NoCurrentSession` du 2026-11-26 —, paquet tronqué) sont JETÉS : le tunnel continue.
+    #[test]
+    fn un_datagramme_refuse_ne_fait_pas_tomber_le_tunnel() {
+        let pair = UdpSocket::bind("127.0.0.1:0").expect("banc : faux pair");
+        let mut client = ouvrir(&config(&pair.local_addr().unwrap().to_string()));
+        let adresse_client = client.udp.local_addr().unwrap();
+        // Type 4 (données) vers un index que le client n'a jamais ouvert, puis un débris.
+        let mut donnees = vec![4u8, 0, 0, 0, 0x78, 0x56, 0x34, 0x12];
+        donnees.extend_from_slice(&[0u8; 8 + 32]);
+        pair.send_to(&donnees, adresse_client).unwrap();
+        pair.send_to(&[1u8, 2, 3], adresse_client).unwrap();
+        let debut = std::time::Instant::now();
+        while client.recus < 2 && debut.elapsed() < std::time::Duration::from_secs(3) {
+            client.pomper().expect("le tunnel survit aux datagrammes refusés");
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert_eq!(client.recus, 2, "les deux datagrammes sont arrivés");
+        assert_eq!(client.refuses, 2, "et ont été jetés, comptés");
+        client.pomper().expect("la passe suivante marche toujours");
     }
 
     /// Deux pairs locaux : la poignée de main aboutit, et les compteurs le disent. C'est le banc

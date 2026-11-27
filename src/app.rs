@@ -475,6 +475,24 @@ fn rect_physique(r: wry::Rect) -> (i32, i32, i32, i32) {
     (x, y, l, h)
 }
 
+/// Les arguments du moteur quand le tunnel intégré tourne.
+///
+/// Le proxy seul ne suffit pas : WebRTC sort en UDP **à côté** du proxy, et une page lisait la
+/// vraie adresse du poste par un serveur STUN alors que tout le reste passait par le VPN (mesure
+/// du 2026-11-26, `outils/eprouver-fuites.mjs`). `disable_non_proxied_udp` interdit à WebRTC tout
+/// UDP hors proxy : les visios passent alors par le tunnel, en TCP. On reprend aussi les arguments
+/// par défaut de wry, que `with_additional_browser_args` remplace.
+///
+/// Piège mesuré : WebView2 **ignore** `--force-webrtc-ip-handling-policy` (le nom de Chrome, la
+/// fuite restait) et n'obéit qu'à `--webrtc-ip-handling-policy`.
+pub fn arguments_navigateur_tunnel(port: u16) -> String {
+    format!(
+        "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
+         --proxy-server=socks5://127.0.0.1:{port} \
+         --webrtc-ip-handling-policy=disable_non_proxied_udp"
+    )
+}
+
 /// Delai avant la mise en pause d'un onglet cache (5 min ; `TRAME_PAUSE_APRES_S` pour les tests).
 fn pause_apres_ms() -> u64 {
     std::env::var("TRAME_PAUSE_APRES_S")
@@ -1209,7 +1227,9 @@ impl App {
             crate::tunnel::Configuration::OpenVpn { profil, identifiants, .. } => {
                 let prepare = (profil, identifiants);
                 crate::mandataire::demarrer_tunnel(move || {
-                    let (profil, identifiants) = prepare;
+                    // Cloné à chaque montage : le fil du mandataire rappelle cette préparation
+                    // pour remonter un tunnel tombé.
+                    let (profil, identifiants) = prepare.clone();
                     let session = crate::ovpn::Session::connecter(
                         &profil,
                         identifiants,
@@ -1274,12 +1294,8 @@ impl App {
         // démarrage du mandataire dans `creer_surfaces`, avant le rail et la barre.
         match &self.mandataire {
             Some(mandataire) => {
-                use wry::ProxyConfig;
                 info!("tunnel : proxy {} posé sur la webview", mandataire.adresse());
-                builder.with_proxy_config(ProxyConfig::Socks5(wry::ProxyEndpoint {
-                    host: "127.0.0.1".to_string(),
-                    port: mandataire.port().to_string(),
-                }))
+                builder.with_additional_browser_args(&arguments_navigateur_tunnel(mandataire.port()))
             }
             None => builder,
         }
@@ -1394,15 +1410,32 @@ impl App {
         // le moteur reellement employe — annoncer « WireGuard » a quelqu'un qui tourne en OpenVPN
         // ferait douter de ce qui est monte.
         let tunnel = match self.mandataire.as_ref() {
-            Some(_) => {
+            Some(mandataire) if mandataire.en_service() => {
                 let moteur = match self.tunnel_actif.as_ref() {
                     Some(crate::tunnel::Configuration::OpenVpn { .. }) => "OpenVPN",
                     _ => "WireGuard",
                 };
                 Some(format!("Tunnel intégré ({moteur})"))
             }
+            // Le tunnel intégré est tombé et son fil le remonte : pastille rouge, portier fermé,
+            // et la raison affichée. Un VPN de Windows n'y changerait rien (les pages passent par
+            // le mandataire), donc on ne le cherche pas.
+            Some(_) => None,
             None => crate::reseau::tunnel_actif(),
         };
+        if let Some(mandataire) = self.mandataire.as_ref() {
+            let erreur = if mandataire.en_service() { None } else { mandataire.erreur() };
+            let tombe = erreur.is_some() && self.tunnel_erreur.is_none();
+            let revenu = erreur.is_none() && self.tunnel_erreur.is_some() && tunnel.is_some();
+            if erreur != self.tunnel_erreur && (erreur.is_some() || revenu) {
+                self.tunnel_erreur = erreur.clone();
+            }
+            if tombe {
+                self.signaler("Tunnel coupé : Trame le remonte, rien ne sort en attendant");
+            } else if revenu {
+                self.signaler("Tunnel rétabli");
+            }
+        }
         let bloque = self.reglages.tunnel_oblige && tunnel.is_none();
         let change = tunnel != self.tunnel || bloque != self.tunnel_bloque.load(Relaxed);
         if tunnel != self.tunnel {
@@ -8154,6 +8187,16 @@ mod tests {
             SuiteTelechargement::Ordinaire
         );
         let _ = std::fs::remove_dir_all(&dossier);
+    }
+
+    /// Sous tunnel : le proxy ET le verrou de WebRTC (sinon la vraie adresse fuit par STUN).
+    #[test]
+    fn sous_tunnel_webrtc_ne_sort_pas_a_cote_du_proxy() {
+        let a = arguments_navigateur_tunnel(51234);
+        assert!(a.contains("--proxy-server=socks5://127.0.0.1:51234"));
+        assert!(a.contains(" --webrtc-ip-handling-policy=disable_non_proxied_udp"), "le nom que WebView2 écoute");
+        assert!(!a.contains("--force-webrtc"), "le nom de Chrome est ignoré par WebView2");
+        assert!(a.contains("msSmartScreenProtection"), "les arguments par défaut de wry restent");
     }
 
     #[test]

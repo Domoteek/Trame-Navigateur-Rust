@@ -28,6 +28,25 @@ use smoltcp::wire::{HardwareAddress, IpAddress, IpCidr, IpEndpoint};
 pub struct Mandataire {
     port: u16,
     arret: Arc<AtomicBool>,
+    etat: Arc<EtatTunnel>,
+}
+
+/// Ce que le fil du mandataire dit de lui-même à l'application.
+#[derive(Default)]
+struct EtatTunnel {
+    /// Le tunnel tourne et les pages passent.
+    en_service: AtomicBool,
+    /// Pourquoi il ne tourne plus (pendant une reprise).
+    erreur: std::sync::Mutex<Option<String>>,
+}
+
+impl EtatTunnel {
+    fn noter(&self, en_service: bool, erreur: Option<String>) {
+        self.en_service.store(en_service, Ordering::Relaxed);
+        if let Ok(mut e) = self.erreur.lock() {
+            *e = erreur;
+        }
+    }
 }
 
 impl Mandataire {
@@ -38,6 +57,17 @@ impl Mandataire {
 
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    /// Le tunnel tourne-t-il en ce moment ? `false` pendant une reprise après coupure : la
+    /// pastille passe alors au rouge (avant la 0.4.94, elle restait verte sur un tunnel mort).
+    pub fn en_service(&self) -> bool {
+        self.etat.en_service.load(Ordering::Relaxed)
+    }
+
+    /// La raison de la dernière coupure, tant que le tunnel n'est pas revenu.
+    pub fn erreur(&self) -> Option<String> {
+        self.etat.erreur.lock().ok().and_then(|e| e.clone())
     }
 }
 
@@ -68,7 +98,7 @@ pub fn demarrer(config: crate::tunnel::Config) -> Result<Mandataire, String> {
 /// à la pile — l'adresse dans le tunnel, le DNS du fournisseur, le MTU.
 pub fn demarrer_tunnel<F>(preparer: F) -> Result<Mandataire, String>
 where
-    F: FnOnce() -> Result<(Box<dyn crate::moteur::Tunnel>, crate::moteur::Parametres), String> + Send + 'static,
+    F: Fn() -> Result<(Box<dyn crate::moteur::Tunnel>, crate::moteur::Parametres), String> + Send + 'static,
 {
     let ecoute = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("écoute SOCKS5 impossible : {e}"))?;
     let port = ecoute.local_addr().map_err(|e| e.to_string())?.port();
@@ -77,29 +107,70 @@ where
     let (tx, rx) = mpsc::channel::<Result<(), String>>();
     let arret = Arc::new(AtomicBool::new(false));
     let jeton = arret.clone();
+    let etat = Arc::new(EtatTunnel::default());
+    let etat_fil = etat.clone();
 
     std::thread::Builder::new()
         .name("trame-mandataire".into())
         .spawn(move || {
             // La préparation rend le détail de l'échec : c'est cette phrase que l'interface
             // affichera quand rien ne monte (0.4.86).
-            let (tunnel, parametres) = match preparer() {
-                Ok(pret) => pret,
+            let mut courant = match preparer() {
+                Ok(pret) => Some(pret),
                 Err(e) => {
                     let _ = tx.send(Err(e));
                     return;
                 }
             };
-            crate::info!("mandataire : tunnel établi avec {}", tunnel.etiquette());
+            etat_fil.noter(true, None);
             let _ = tx.send(Ok(()));
-            if let Err(e) = boucle(tunnel, ecoute, parametres, &jeton) {
-                crate::alerte!("mandataire : {e}");
+            // Le tunnel peut tomber (réseau perdu, veille, serveur relancé). Avant la 0.4.94, le
+            // fil s'arrêtait là et plus aucune page ne sortait jusqu'au redémarrage de Trame. On
+            // garde l'écoute — son port est inscrit dans WebView2 — et on remonte le tunnel.
+            let mut attente_ms = 2_000u64;
+            while !jeton.load(Ordering::Relaxed) {
+                if let Some((tunnel, parametres)) = courant.take() {
+                    crate::info!("mandataire : tunnel établi avec {}", tunnel.etiquette());
+                    etat_fil.noter(true, None);
+                    match boucle(tunnel, &ecoute, parametres, &jeton) {
+                        Ok(()) => break,
+                        Err(e) => {
+                            crate::alerte!("mandataire : tunnel coupé ({e}), reprise dans 2 s");
+                            etat_fil.noter(false, Some(e));
+                            attente_ms = 2_000;
+                        }
+                    }
+                }
+                // Pendant la coupure : les connexions du navigateur sont refusées tout de suite
+                // (une page dit « impossible » au lieu de tourner dans le vide), rien ne sort.
+                let fin = crate::log::maintenant_ms() + attente_ms;
+                while crate::log::maintenant_ms() < fin && !jeton.load(Ordering::Relaxed) {
+                    while let Ok((flux, _)) = ecoute.accept() {
+                        drop(flux);
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                if jeton.load(Ordering::Relaxed) {
+                    break;
+                }
+                match preparer() {
+                    Ok(pret) => {
+                        crate::info!("mandataire : tunnel rétabli");
+                        courant = Some(pret);
+                    }
+                    Err(e) => {
+                        crate::info!("mandataire : reprise ratée ({e}), nouvel essai dans {} s", (attente_ms * 2).min(30_000) / 1000);
+                        etat_fil.noter(false, Some(e));
+                        attente_ms = (attente_ms * 2).min(30_000);
+                    }
+                }
             }
+            etat_fil.noter(false, None);
         })
         .map_err(|e| format!("fil du mandataire impossible : {e}"))?;
 
     match rx.recv_timeout(std::time::Duration::from_secs(60)) {
-        Ok(Ok(())) => Ok(Mandataire { port, arret }),
+        Ok(Ok(())) => Ok(Mandataire { port, arret, etat }),
         Ok(Err(e)) => Err(e),
         Err(_) => Err("le tunnel n'a pas répondu en 60 s".to_string()),
     }
@@ -395,7 +466,7 @@ const ACCORD: [u8; 10] = [0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0];
 
 fn boucle(
     mut tunnel: Box<dyn crate::moteur::Tunnel>,
-    ecoute: TcpListener,
+    ecoute: &TcpListener,
     parametres: crate::moteur::Parametres,
     arret: &AtomicBool,
 ) -> Result<(), String> {
@@ -451,10 +522,24 @@ fn boucle(
         dns.map(|d| d.to_string()).unwrap_or_else(|| "aucun".into())
     );
 
+    // Sonde de mise au point (jamais en usage normal) : `TRAME_SONDE_COUPURE_S=N` fait tomber le
+    // tunnel UNE fois, N secondes après son montage, pour éprouver la reprise
+    // (`outils/eprouver-fuites.mjs`).
+    static COUPURE_FAITE: AtomicBool = AtomicBool::new(false);
+    let coupure_a = std::env::var("TRAME_SONDE_COUPURE_S")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|_| !COUPURE_FAITE.load(Ordering::Relaxed))
+        .map(|s| crate::log::maintenant_ms() + s * 1000);
+
     while !arret.load(Ordering::Relaxed) {
         let maintenant = crate::log::maintenant_ms();
         let temps = instant(maintenant);
         let mut actif = false;
+        if coupure_a.is_some_and(|t| maintenant > t) {
+            COUPURE_FAITE.store(true, Ordering::Relaxed);
+            return Err("coupure simulée (TRAME_SONDE_COUPURE_S)".to_string());
+        }
 
         // 1. Le tunnel : ce qui arrive, ce qui part.
         tunnel.pomper()?;
