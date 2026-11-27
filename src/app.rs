@@ -349,6 +349,8 @@ pub struct App {
     /// Le panneau droit montre (ou a montre) la fenetre d'une extension, pas les regles.
     zap_montre_extension: bool,
     apercu_url: String,
+    /// Heure du dernier lien ouvert a cote (`ouvrir_lien_a_cote`) : pas de rafale d'onglets.
+    dernier_lien_a_cote: u64,
     ombre_apercu: Option<crate::ombre::Ombre>,
     /// Onglets mis en pause par le moteur, et ceux pour lesquels la demande est faite.
     en_pause: std::collections::HashSet<TabId>,
@@ -883,6 +885,7 @@ impl App {
             par_defaut: None,
             zap_montre_extension: false,
             apercu_url: String::new(),
+            dernier_lien_a_cote: 0,
             ombre_apercu: None,
             pause_demandee: std::collections::HashSet::new(),
             budget_memoire: None,
@@ -2886,9 +2889,17 @@ impl App {
             self.actif = Some(nouvel);
             self.reveiller(nouvel);
         } else if self.actif == Some(id) {
-            // Ordre de choix : voisin suivant du meme fil, puis precedent du meme fil, puis
-            // precedent dans la liste, puis suivant, puis le premier onglet.
-            let voisin = suivant_fil
+            // Ordre de choix : l'onglet d'ou il a ete ouvert s'il est encore la et du meme fil
+            // (fermer la page ouverte depuis une video ramene a la video), puis le voisin suivant
+            // du meme fil, le precedent du meme fil, le precedent dans la liste, le suivant, le
+            // premier onglet.
+            let origine = onglet.parent.filter(|p| {
+                self.trouver(*p)
+                    .map(|o| o.fil == onglet.fil && o.rendez_vous.is_none())
+                    .unwrap_or(false)
+            });
+            let voisin = origine
+                .or(suivant_fil)
                 .or(precedent_fil)
                 .or(precedent)
                 .or(suivant)
@@ -4264,7 +4275,7 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
         let astuce_affichee = self.aide.proposee.is_some() && matches!(m, "astuceFaire" | "astuceVue" | "astucesCouper");
         let autorise = match m {
             "extCall" | "defilement" | "raccourci" | "pret" | "hello" | "clicPage" | "zapChoisi"
-            | "zapCompte" | "coupDoeil" | "flottant" | "couleur" => !matches!(source, Source::Apercu),
+            | "zapCompte" | "coupDoeil" | "flottant" | "couleur" | "lienACote" => !matches!(source, Source::Apercu),
             // L'apercu n'a droit qu'a ses deux boutons.
             "apercuOuvrir" | "apercuFermer" => true,
             _ => (!matches!(source, Source::Onglet(_) | Source::Apercu) || interne) || popup_mise_a_jour || astuce_affichee,
@@ -5644,6 +5655,16 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
                 let url = v["url"].as_str().unwrap_or("").to_string();
                 if url.starts_with("http://") || url.starts_with("https://") {
                     self.ouvrir_apercu(&url);
+                }
+            }
+            "lienACote" => {
+                // Lien vers un autre site, Ctrl+clic ou clic du milieu (`ui/raccourcis.js`).
+                let url = v["url"].as_str().unwrap_or("").to_string();
+                let premier_plan = !v["arrierePlan"].as_bool().unwrap_or(false);
+                if let Source::Onglet(id) = source {
+                    if url.starts_with("http://") || url.starts_with("https://") {
+                        self.ouvrir_lien_a_cote(id, url, premier_plan);
+                    }
                 }
             }
             "flottant" => self.traiter_ipc_flottant(source, &v),
@@ -7046,6 +7067,44 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
         let nouveau = self.ouvrir_onglet_dans(url, Declencheur::Lien, Some(id), Some(fil));
         info!("onglet {id} duplique en {nouveau} (fil {fil})");
         self.signaler("Onglet dupliqué — même fil, juste à côté.");
+    }
+
+    /// Ouvre un lien de l'onglet `origine` dans un **nouvel onglet juste a cote** : meme fil
+    /// (donc meme profil, prive ou cloisonne compris), apres l'origine et les onglets deja ouverts
+    /// depuis elle. C'est le geste « je quitte le site » (`lienACote` de `ui/raccourcis.js`).
+    fn ouvrir_lien_a_cote(&mut self, origine: TabId, url: String, premier_plan: bool) {
+        let maintenant = maintenant_ms();
+        // Une page ne peut pas ouvrir des onglets en rafale : un toutes les 300 ms au plus.
+        if maintenant.saturating_sub(self.dernier_lien_a_cote) < 300 {
+            return;
+        }
+        self.dernier_lien_a_cote = maintenant;
+        let Some(fil) = self.trouver(origine).map(|o| o.fil) else {
+            return;
+        };
+        let id = self.ouvrir_onglet_mode(url, Declencheur::Lien, Some(origine), Some(fil), premier_plan);
+        if let Some(pos) = self.session.onglets.iter().position(|o| o.id == id) {
+            let onglet = self.session.onglets.remove(pos);
+            let mut apres = self
+                .session
+                .onglets
+                .iter()
+                .position(|o| o.id == origine)
+                .map(|p| p + 1)
+                .unwrap_or(self.session.onglets.len());
+            // Deux liens ouverts depuis la meme page se rangent dans l'ordre des clics.
+            while apres < self.session.onglets.len() && self.session.onglets[apres].parent == Some(origine) {
+                apres += 1;
+            }
+            self.session.onglets.insert(apres, onglet);
+        }
+        info!(
+            "onglet {origine} : lien vers {} ouvert a cote ({id}, {})",
+            urls::affichage_court(&self.trouver(id).map(|o| o.url.clone()).unwrap_or_default()),
+            if premier_plan { "premier plan" } else { "arriere-plan" }
+        );
+        self.marquer_modifie();
+        self.pousser_etat();
     }
 
     /// Ferme tous les onglets du **meme fil**, sauf celui-ci.

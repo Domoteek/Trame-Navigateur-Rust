@@ -24,7 +24,7 @@ import { pathToFileURL } from "node:url";
 import { attendreCible, cibles, connecter, pause } from "./cdp.mjs";
 
 const PORT = 19477;
-const BINAIRE = join(process.cwd(), "target", "release", "trame.exe");
+const BINAIRE = process.env.TRAME_BINAIRE || join(process.cwd(), "target", "release", "trame.exe");
 const profil = mkdtempSync(join(tmpdir(), "trame-onglet-fenetre-"));
 const PAGE = pathToFileURL(resolve("outils/banc-onglets.html")).href;
 

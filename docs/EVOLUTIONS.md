@@ -1672,6 +1672,20 @@ justesse). L'erreur « Identifier 'ipc' has already been declared » venait d'un
 construction (dossier `en-developpement`, chrome.js de 17 Ko) : rien à corriger. Banc
 `eprouver-fuites.mjs --tunnel-absent` ajouté ; tout vert, comme le banc complet sur Mullvad.
 
+**Liens vers un autre site : un onglet juste à côté (2026-11-27, choix de Clément).** Depuis 0.4.72,
+tout lien `target="_blank"` remplaçait la page courante : cliquer un lien de la description d'une
+vidéo YouTube faisait perdre la vidéo. Règle voulue : même site → même onglet ; autre site → nouvel
+onglet à côté. La décision se prend **au clic** (`ui/raccourcis.js`, écoute en capture sur `window`),
+pas sur la fenêtre demandée : couper le clic coupe aussi le `window.open` du site, donc pas de repli
+et pas de doublon (le piège de 0.4.72 reste fermé). Message `lienACote` → `App::ouvrir_lien_a_cote` :
+même fil, juste après l'origine (et après ses autres « enfants »), `parent` = l'origine ; fermer
+l'onglet ramène à l'origine (`fermer_onglet` la préfère désormais). Exceptions : pages des moteurs de
+recherche (le résultat reste dans l'onglet), pages de connexion (`accounts.`, `login.`…). Ctrl+clic
+et clic du milieu ouvrent toujours à côté, en arrière-plan (avant : ils remplaçaient la page, effet
+de bord de 0.4.72). Redirections `youtube.com/redirect`, `google.*/url`, `l.facebook.com` lues jusqu'à
+la destination. Garde-fous : un onglet par 400 ms côté page, par 300 ms côté hôte. Bancs : cas
+« liens » de `tester-ui`, `outils/eprouver-liens-a-cote.mjs` (vrai binaire, `127.0.0.1` ≠ `localhost`).
+
 ## 11. L'état aujourd'hui
 
 ```

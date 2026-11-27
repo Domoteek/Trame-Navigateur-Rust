@@ -1839,6 +1839,105 @@ async function suite() {
     await p.close();
   });
 
+  // ---------------------------------------------------------------- liens vers un autre site
+
+  // Une page servie sous une vraie adresse (interceptee, rien ne sort) : la regle compare le site
+  // de la page a celui du lien, il faut donc un `location.hostname` realiste.
+  const pageSur = async (adresse, corps) => {
+    const p = await navigateur.newPage({ viewport: { width: 1280, height: 800 } });
+    p.on("pageerror", (e) => {
+      throw new Error(`erreur JS sur ${adresse} : ${e.message}`);
+    });
+    await p.addInitScript(() => {
+      window.__ipc = [];
+      window.ipc = { postMessage: (brut) => window.__ipc.push(JSON.parse(brut)) };
+    });
+    await p.route("**/*", (r) =>
+      r.request().url() === adresse
+        ? r.fulfill({ contentType: "text/html; charset=utf-8", body: corps })
+        : r.fulfill({ contentType: "text/html", body: "<p>ailleurs</p>" })
+    );
+    await p.goto(adresse);
+    await p.addScriptTag({ path: path.join(UI, "raccourcis.js") });
+    return p;
+  };
+  const LIENS = `<body>
+    <a id="meme" href="https://www.youtube.com/watch?v=autre">même site</a>
+    <a id="mobile" href="https://m.youtube.com/@chaine">même site (m.)</a>
+    <a id="court" href="https://youtu.be/abc">youtu.be</a>
+    <a id="ext" href="https://exemple.fr/article">autre site</a>
+    <a id="redir" href="https://www.youtube.com/redirect?event=video_description&amp;q=https%3A%2F%2Fboutique.fr%2Fproduit">redirection</a>
+    <a id="connexion" href="https://accounts.google.com/ServiceLogin">se connecter</a>
+    <a id="mail" href="mailto:x@y.fr">mail</a>
+    <a id="dl" href="https://exemple.fr/f.zip" download>fichier</a>
+    <iframe name="cadre"></iframe><a id="cadre" href="https://exemple.fr/c" target="cadre">dans le cadre</a>
+    <div id="ombre"></div>
+    <script>
+      const r = document.getElementById("ombre").attachShadow({ mode: "open" });
+      r.innerHTML = '<a id="dedans" href="https://exemple.fr/ombre"><span id="sous">dans l\\'ombre</span></a>';
+      // Le site veut ouvrir lui-même (window.open puis repli) : il ne doit jamais s'en apercevoir.
+      document.addEventListener("click", (e) => { window.__siteAVu = (window.__siteAVu || 0) + 1; });
+    </script></body>`;
+
+  await cas("liens : meme site dans l'onglet, autre site a cote, redirections lues jusqu'au bout", async () => {
+    const p = await pageSur("https://www.youtube.com/watch?v=x", LIENS);
+    const aCote = async (sel, attendu, options = {}) => {
+      // Deux clics à moins de 400 ms ne font qu'un onglet (double-clic) : on espace.
+      await new Promise((r) => setTimeout(r, 450));
+      await vider(p);
+      const avant = p.url();
+      // Le clic reel suivrait le lien : on le bloque apres coup pour ne garder que la decision.
+      await p.evaluate(() => {
+        window.__navigue = false;
+        document.addEventListener("click", (e) => { if (!e.defaultPrevented) { window.__navigue = true; e.preventDefault(); } }, { once: true });
+      });
+      if (options.milieu) await p.click(sel, { button: "middle" });
+      else await p.click(sel, options.ctrl ? { modifiers: ["Control"] } : {});
+      const recus = (await messages(p)).filter((m) => m.m === "lienACote");
+      if (attendu) {
+        egal(recus.length, 1, `${sel} : un seul onglet demandé (${JSON.stringify(recus)})`);
+        egal(recus[0].url, attendu, `${sel} : adresse ouverte`);
+        egal(recus[0].arrierePlan, !!(options.ctrl || options.milieu), `${sel} : premier plan / arrière-plan`);
+        egal(p.url(), avant, `${sel} : la page d'origine reste`);
+      } else {
+        egal(recus.length, 0, `${sel} : pas d'onglet à côté (${JSON.stringify(recus)})`);
+      }
+    };
+    await aCote("#meme", null);
+    await aCote("#mobile", null);
+    await aCote("#court", null);
+    await aCote("#ext", "https://exemple.fr/article");
+    await aCote("#redir", "https://boutique.fr/produit");
+    await aCote("#connexion", null);
+    await aCote("#mail", null);
+    await aCote("#dl", null);
+    await aCote("#cadre", null);
+    await aCote("#sous", "https://exemple.fr/ombre");
+    // Ctrl+clic et clic du milieu : toujours à côté, même sur le même site, en arrière-plan.
+    await aCote("#meme", "https://www.youtube.com/watch?v=autre", { ctrl: true });
+    await aCote("#meme", "https://www.youtube.com/watch?v=autre", { milieu: true });
+    // Le site n'a pas vu le clic qui part à côté : pas de window.open, donc pas de repli en double.
+    await vider(p);
+    await new Promise((r) => setTimeout(r, 450));
+    const vuAvant = await p.evaluate(() => window.__siteAVu || 0);
+    await p.click("#ext");
+    egal(await p.evaluate(() => window.__siteAVu || 0), vuAvant, "le site ne reçoit pas le clic vers l'autre site");
+    await p.close();
+  });
+
+  await cas("liens : sur un moteur de recherche, un resultat reste dans l'onglet", async () => {
+    const p = await pageSur("https://www.google.fr/search?q=essai", `<body><a id="r" href="https://exemple.fr/resultat">résultat</a></body>`);
+    await vider(p);
+    await p.evaluate(() => document.addEventListener("click", (e) => e.preventDefault(), { once: true }));
+    await p.click("#r");
+    egal((await messages(p)).filter((m) => m.m === "lienACote").length, 0, "pas d'onglet à côté depuis Google");
+    await new Promise((r) => setTimeout(r, 450));
+    await vider(p);
+    await p.click("#r", { modifiers: ["Control"] });
+    egal((await messages(p)).filter((m) => m.m === "lienACote").length, 1, "Ctrl+clic ouvre quand même à côté");
+    await p.close();
+  });
+
   await cas("coup d'oeil : la barre de l'apercu garde, ferme, et repond a Echap", async () => {
     const p = await page("newtab.html");
     await p.setContent("<body style='background:#fff'><p>page apercue</p></body>");

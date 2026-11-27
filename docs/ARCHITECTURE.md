@@ -282,6 +282,7 @@ Trois garde-fous, chacun à un étage différent :
 | `App::garde_navigation` | `with_navigation_handler` **refuse** la navigation, sur les quatre surfaces et sur les onglets | la page reste en place, le refus part au journal |
 | popup d'extension dans le panneau | `with_new_window_req_handler` → `NouvelleFenetre` → onglet Trame, `Deny` | `window.open` d'une extension ouvre un onglet |
 | fenêtre demandée par une page | `Deny`, puis la page s'ouvre **dans l'onglet d'où vient la demande** (`naviguer_dedans`) ; une demande sans adresse ne fait rien | pas d'onglet de trop, pas de doublon (voir « Piège n° 5 ») |
+| clic sur un lien vers un autre site | coupé au clic (`ui/raccourcis.js`), puis `lienACote` → `ouvrir_lien_a_cote` : nouvel onglet à côté | la page d'origine reste (voir « Piège n° 5 ») |
 | `ouvrir_onglet` / `restaurer` | toute adresse interne devient l'accueil | rien de mort ne se restaure |
 
 Preuve mesurée : `TRAME_NAV=chrome-search://local-ntp/local-ntp.html` →
@@ -324,6 +325,27 @@ l'onglet d'où vient la demande (`App::naviguer_dedans`), et une demande sans ad
 Conséquence assumée : un lien `target="_blank"` remplace la page courante (Retour y ramène) au lieu
 d'ouvrir un onglet. Preuve : `outils/eprouver-onglet-fenetre.mjs` sur `outils/banc-onglets.html`
 (clics réels) — les quatre motifs donnent **un seul onglet**, aucune page en double.
+
+**Sauf un lien vers un autre site** (choix de Clément, 2026-11-27) : quitter le site, c'est vouloir
+garder la page d'où l'on part (un lien de la description d'une vidéo YouTube). La décision se prend
+**au clic**, dans `ui/raccourcis.js`, avant que le site ne réagisse : `preventDefault` coupe à la fois
+la navigation du lien et le `window.open` du site, donc il n'y a ni fenêtre demandée ni repli. Le
+script envoie `lienACote`, et `App::ouvrir_lien_a_cote` ouvre un onglet dans le même fil, juste
+après l'origine (`parent` = l'origine ; le fermer ramène à elle). Règles :
+
+| Clic | Résultat |
+|---|---|
+| lien du même site (domaine enregistrable, `www.`/`m.`, `youtu.be` = `youtube.com`) | dans l'onglet |
+| lien vers un autre site | nouvel onglet au premier plan, juste à côté |
+| page d'un moteur de recherche (Google, Bing, DuckDuckGo, Qwant…) | dans l'onglet, comme Chrome |
+| lien vers une page de connexion (`accounts.`, `login.`…) | dans l'onglet (elle revient sur le site) |
+| Ctrl+clic, clic du milieu | toujours un nouvel onglet, en arrière-plan |
+
+Les redirections connues (`youtube.com/redirect?q=`, `google.*/url?q=`, `l.facebook.com/l.php?u=`)
+sont lues jusqu'à leur destination : c'est elle qui décide, et c'est elle qu'on ouvre. Une page
+`file://` (le banc ci-dessus) n'a pas de site : la règle ne s'y applique pas. Preuve :
+`outils/eprouver-liens-a-cote.mjs` (deux « sites » locaux, `127.0.0.1` et `localhost`) et les cas
+« liens » de `outils/tester-ui.mjs`.
 
 ## 10. L'icône
 

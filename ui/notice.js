@@ -48,13 +48,15 @@ window.NOTICE = {
       "conseils": [
         "Un onglet dont tu ne te sers plus s'endort : il ne prend plus de mémoire, et un clic le réveille là où tu en étais.",
         "Ancrer un onglet (clic droit) l'empêche de s'endormir.",
-        "Ctrl+Maj+T rouvre le dernier onglet fermé. Ctrl+1 à Ctrl+9 vont à l'onglet n° 1 à 9."
+        "Ctrl+Maj+T rouvre le dernier onglet fermé. Ctrl+1 à Ctrl+9 vont à l'onglet n° 1 à 9.",
+        "Un lien du même site s'ouvre dans l'onglet. Un lien vers un autre site (la description d'une vidéo, par exemple) s'ouvre dans un nouvel onglet juste à côté : la page d'où tu viens reste là, et fermer le nouvel onglet t'y ramène. Les résultats d'un moteur de recherche restent dans l'onglet.",
+        "Ctrl+clic ou clic du milieu sur un lien : nouvel onglet à côté, sans quitter ta page."
       ],
       "actions": [
         { "libelle": "Rouvrir le dernier fermé", "commande": "rouvrir" },
         { "libelle": "Nouvel onglet", "commande": "nouvel-onglet" }
       ],
-      "mots": ["onglet", "onglets", "fil", "fils", "groupe", "renommer", "ranger", "veille", "endormi", "dormir", "ancrer", "rouvrir", "fermé", "dupliquer", "réveiller"],
+      "mots": ["onglet", "onglets", "fil", "fils", "groupe", "lien", "liens", "autre site", "nouvel onglet", "clic du milieu", "renommer", "ranger", "veille", "endormi", "dormir", "ancrer", "rouvrir", "fermé", "dupliquer", "réveiller"],
       "voir": ["rail-acces", "trame", "rendez-vous"]
     },
     {
@@ -314,6 +316,7 @@ window.NOTICE = {
     { "groupe": "Pages", "touche": "Ctrl+ + / -", "effet": "Zoom avant / arrière", "action": "zoomPlus" },
     { "groupe": "Pages", "touche": "Ctrl+0", "effet": "Zoom à 100 %", "action": "zoomZero" },
     { "groupe": "Pages", "touche": "Alt+clic (lien)", "effet": "Coup d'œil sur le lien" },
+    { "groupe": "Pages", "touche": "Ctrl+clic / clic du milieu (lien)", "effet": "Ouvrir le lien dans un onglet à côté" },
     { "groupe": "Pages", "touche": "Alt+P", "effet": "Vidéo seule, par-dessus tout" },
     { "groupe": "Pages", "touche": "Alt+Maj+P", "effet": "Vidéo dans une fenêtre à part" },
 

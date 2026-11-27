@@ -303,6 +303,117 @@
     true
   );
 
+  // Liens vers un AUTRE site : un nouvel onglet, juste a cote (choix de Clement, 2026-11-27).
+  //
+  // Depuis 0.4.72, une fenetre demandee par une page s'ouvre dans l'onglet d'ou elle vient (le
+  // repli `window.open(...) || location.href = ...` des sites faisait sinon DEUX pages). Mais
+  // quitter le site, c'est vouloir garder la page d'ou l'on part : un lien de la description
+  // d'une video YouTube vers un autre site doit laisser la video en place.
+  //
+  // La decision se prend ICI, au clic, avant que le site ne reagisse : `preventDefault` coupe a
+  // la fois la navigation du lien et le `window.open` que le site aurait lance — donc pas de
+  // repli, pas de doublon. Regles :
+  //  - meme site (domaine enregistrable, `www.`/`m.` compris) : on laisse faire, meme onglet ;
+  //  - autre site : nouvel onglet au premier plan, juste apres celui-ci ;
+  //  - page d'un moteur de recherche : on laisse faire (un resultat mene toujours ailleurs ; Trame
+  //    le garde dans l'onglet, comme Chrome) ;
+  //  - Ctrl+clic et clic du milieu : toujours un nouvel onglet, en arriere-plan ;
+  //  - les redirections connues (youtube.com/redirect, google.*/url, l.facebook.com…) sont lues
+  //    jusqu'a leur vraie destination : c'est elle qui decide, et c'est elle qu'on ouvre.
+  const SUFFIXES_DOUBLES = [
+    "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "co.nz", "co.jp", "com.br",
+    "co.za", "gouv.fr", "asso.fr",
+  ];
+  // Plusieurs noms pour un meme site.
+  const FAMILLES = { "youtu.be": "youtube.com", "youtube-nocookie.com": "youtube.com", "twitter.com": "x.com", "redd.it": "reddit.com" };
+  // Meme regle que `urls::domaine_enregistrable` (Rust), plus les familles.
+  const domaine = (hote) => {
+    let h = String(hote || "").toLowerCase().replace(/^www\./, "");
+    if (!h || /^[\d.]+$/.test(h) || h.includes(":")) return h;
+    const p = h.split(".");
+    if (p.length > 2) {
+      const deux = p.slice(-2).join(".");
+      h = SUFFIXES_DOUBLES.includes(deux) ? p.slice(-3).join(".") : deux;
+    }
+    return FAMILLES[h] || h;
+  };
+  const MOTEURS = /^(google\.[a-z.]+|bing\.com|duckduckgo\.com|qwant\.com|ecosia\.org|startpage\.com|yahoo\.com|brave\.com|yandex\.[a-z]+|lilo\.org)$/;
+  // Une page de connexion (« Se connecter » de YouTube vers accounts.google.com…) revient d'elle-meme
+  // sur le site : l'ouvrir a cote laisserait l'onglet d'origine deconnecte.
+  const CONNEXION = /^(accounts|login|signin|auth|sso|id)\./i;
+  const destination = (adresse) => {
+    try {
+      const u = new URL(adresse);
+      const d = domaine(u.hostname);
+      let cle = null;
+      if (d === "youtube.com" && u.pathname === "/redirect") cle = "q";
+      else if (/^google\./.test(d) && u.pathname === "/url") cle = u.searchParams.has("q") ? "q" : "url";
+      else if ((d === "facebook.com" || d === "instagram.com") && /^(l|lm)\./.test(u.hostname)) cle = "u";
+      const v = cle && u.searchParams.get(cle);
+      if (v && /^https?:\/\//i.test(v)) return v;
+    } catch (e) {
+      /* adresse illisible : on la garde telle quelle */
+    }
+    return adresse;
+  };
+  const lienSous = (e) => {
+    // `composedPath` traverse les arbres d'ombre (YouTube, composants web), `closest` non.
+    const chemin = e.composedPath ? e.composedPath() : [e.target];
+    for (const n of chemin) {
+      if (!n || !n.tagName) continue;
+      const tag = n.tagName.toUpperCase();
+      if (tag === "A" || tag === "AREA") {
+        const href = typeof n.href === "string" ? n.href : n.href && n.href.baseVal;
+        if (href) return { n, href: String(href) };
+      }
+    }
+    return null;
+  };
+  let dernierACote = 0;
+  const ouvrirACote = (e, force) => {
+    const lien = lienSous(e);
+    if (!lien || lien.n.hasAttribute("download")) return;
+    if (!/^https?:/i.test(lien.href)) return;
+    const cible = destination(lien.href);
+    if (!force) {
+      // Un lien qui vise un cadre nomme de la page reste a la page.
+      const t = (lien.n.getAttribute("target") || "").toLowerCase();
+      if (t && !["_blank", "_self", "_top", "_parent"].includes(t)) return;
+      let ici, la, hoteCible;
+      try {
+        ici = domaine(location.hostname);
+        hoteCible = new URL(cible).hostname;
+        la = domaine(hoteCible);
+      } catch (err) {
+        return;
+      }
+      if (!ici || !la || ici === la) return;
+      if (MOTEURS.test(ici) || CONNEXION.test(hoteCible)) return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    // Un double-clic ne fait qu'un onglet.
+    const t = Date.now();
+    if (t - dernierACote < 400) return;
+    dernierACote = t;
+    envoi({ m: "lienACote", url: cible, arrierePlan: !!force });
+  };
+  window.addEventListener(
+    "click",
+    (e) => {
+      if (e.button !== 0 || e.altKey || e.shiftKey) return;
+      ouvrirACote(e, e.ctrlKey || e.metaKey);
+    },
+    true
+  );
+  window.addEventListener(
+    "auxclick",
+    (e) => {
+      if (e.button === 1) ouvrirACote(e, true);
+    },
+    true
+  );
+
   // Un clic dans la page ferme le panneau de la barre : le changement de focus entre deux
   // webviews voisines ne produit pas de `blur` cote barre.
   let dernierClic = 0;
