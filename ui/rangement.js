@@ -144,9 +144,14 @@
         ext.value = c.extensions.join(", ");
         ext.title = "Extensions, séparées par des virgules";
         const ok = el("button", "principal", "Enregistrer");
+        // On referme la tuile TOUT DE SUITE : tant qu'un de ses champs (ou son bouton) a le focus,
+        // `rendre` refuse de redessiner les tuiles pour ne pas couper une saisie — l'état renvoyé par
+        // Trame n'arrivait donc jamais à l'écran, et la tuile restait ouverte sur les anciennes
+        // valeurs, comme si rien n'était enregistré (constat de Clément, 2026-11-27).
         const valider = () => {
           ipc({ m: "rangementCategorie", id: c.id, dossier: dossier.value, extensions: ext.value });
           catEditee = "";
+          rendreCats();
         };
         ok.onclick = valider;
         for (const champ of [dossier, ext]) {
@@ -241,14 +246,21 @@
         id: g.id || 0, actif: g.id ? g.actif : true,
         sites: sites.value, types: types.value, nomContient: nom.value, dossier: dossier.value, renommer: renommer.value,
       } });
+      // Une règle que Trame refusera (aucune condition, aucun dossier) garde le formulaire et la
+      // saisie : Trame dit pourquoi dans un message, on corrige sans tout retaper.
+      const condition = [sites.value, types.value, nom.value].some((x) => x.trim());
+      if (!condition || !dossier.value.trim()) return;
+      // Même raison que pour les tuiles : refermer tout de suite, sinon le formulaire garde le focus
+      // et l'état renvoyé par Trame n'est jamais redessiné.
       regleEditee = null;
+      rendreRegles();
     };
     ok.onclick = valider;
     annuler.onclick = () => { regleEditee = null; rendreRegles(); };
     boutons.append(ok, annuler);
     if (g.id) {
       const retirer = el("button", "danger", "Supprimer");
-      retirer.onclick = () => { ipc({ m: "rangementRegleRetirer", id: g.id }); regleEditee = null; };
+      retirer.onclick = () => { ipc({ m: "rangementRegleRetirer", id: g.id }); regleEditee = null; rendreRegles(); };
       boutons.append(retirer);
     }
     f.append(boutons);

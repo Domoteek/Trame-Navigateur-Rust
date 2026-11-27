@@ -3107,6 +3107,68 @@ async function suite() {
     await p.close();
   });
 
+  // Constat de Clément (2026-11-27) : après « Enregistrer » ou Entrée, la tuile restait ouverte sur
+  // les anciennes valeurs — le focus restait dans la tuile, et `rendre` ne la redessinait jamais.
+  await cas("reglages : modifier un type ou une règle s'enregistre et se voit tout de suite", async () => {
+    const p = await page("reglages.html");
+    const etat = etatDeBase();
+    etat.reglages = { ...(etat.reglages || {}), rangement: rangementDeBase() };
+    await pousser(p, etat);
+    await rubrique(p, "telechargements");
+    const pousserRangement = async (modifier) => {
+      const r = rangementDeBase();
+      modifier(r);
+      await pousser(p, { ...etat, reglages: { ...etat.reglages, rangement: r } });
+    };
+    for (const geste of ["bouton", "Entrée"]) {
+      // Un type : dossier et extensions (plus de 20, rien ne doit être coupé côté page).
+      await p.click(".rg-cat:nth-child(1) .modifier");
+      const [dossier, ext] = await p.$$(".rg-cat:nth-child(1) input");
+      const extensions = Array.from({ length: 25 }, (_, i) => "e" + i).join(", ");
+      await dossier.fill("Photos");
+      await ext.fill(extensions);
+      await vider(p);
+      if (geste === "bouton") await p.click(".rg-cat:nth-child(1) button.principal");
+      else await ext.press("Enter");
+      const envoi = (await messages(p)).find((m) => m.m === "rangementCategorie");
+      verifier(envoi && envoi.id === "images" && envoi.dossier === "Photos" && envoi.extensions === extensions, `${geste} : envoi ${JSON.stringify(envoi)}`);
+      egal(await p.$$eval(".rg-cat input", (n) => n.length), 0, `${geste} : la tuile se referme`);
+      // Trame renvoie l'état enregistré : la tuile le montre.
+      await pousserRangement((r) => {
+        r.categories[0].dossier = "Photos";
+        r.categories[0].extensions = extensions.split(", ");
+      });
+      egal(await p.$eval(".rg-cat:nth-child(1) .vers code", (n) => n.textContent), "Photos\\", `${geste} : nouveau dossier affiché`);
+      egal(await p.$eval(".rg-cat:nth-child(1) .rg-puce.plus", (n) => n.textContent), "+21", `${geste} : toutes les extensions comptées`);
+      await pousserRangement(() => {});
+    }
+    // Une règle existante : modifier, Entrée, l'état revient, la phrase suit.
+    const modifierRegle = async () => {
+      for (const b of await p.$$(".rg-regle:nth-child(1) button")) if ((await b.textContent()) === "Modifier") return b.click();
+      throw new Error("bouton Modifier de la règle absent");
+    };
+    await modifierRegle();
+    let champs = await p.$$(".rg-edition input");
+    await champs[3].fill("Scolarité");
+    await vider(p);
+    await champs[3].press("Enter");
+    const regle = (await messages(p)).find((m) => m.m === "rangementRegle");
+    verifier(regle && regle.regle.id === 11 && regle.regle.dossier === "Scolarité", `règle : ${JSON.stringify(regle)}`);
+    egal(await p.$$eval(".rg-edition", (n) => n.length), 0, "le formulaire de la règle se referme");
+    await pousserRangement((r) => (r.regles[0].dossier = "Scolarité"));
+    const phrase = await p.$eval(".rg-regle:nth-child(1) .phrase", (n) => n.textContent);
+    verifier(phrase.includes("Scolarité"), `phrase mise à jour : ${phrase}`);
+    // Une règle sans condition : Trame la refusera, le formulaire garde la saisie.
+    await p.click("#rg-ajouter");
+    champs = await p.$$(".rg-edition input");
+    await champs[3].fill("Divers");
+    await champs[3].press("Enter");
+    await pousserRangement((r) => (r.regles[0].dossier = "Scolarité"));
+    egal(await p.$$eval(".rg-edition", (n) => n.length), 1, "règle refusée : le formulaire reste");
+    egal(await p.$eval(".rg-edition input:nth-of-type(1)", () => [...document.querySelectorAll(".rg-edition input")][3].value), "Divers", "règle refusée : la saisie reste");
+    await p.close();
+  });
+
   await cas("telechargements : un fichier rangé dit où, et se remet à la racine", async () => {
     const p = await page("telechargements.html");
     const d = {

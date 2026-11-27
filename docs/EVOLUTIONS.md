@@ -1722,6 +1722,19 @@ les fichiers sans type, cachés ou en cours, ne touche à aucun sous-dossier exi
 `rangement-journal.json` ; « Défaire » rend **exactement** l'arbre de départ. `cargo test` 283/283,
 `tester-ui` 122/122, bancs du rangement à l'arrivée, des liens et des fenêtres verts.
 
+**Édition du rangement qui « ne s'enregistrait pas » (2026-11-27, constat de Clément).** Après
+« Enregistrer » ou Entrée sur un type de fichier (ou une règle), la tuile restait ouverte sur les
+anciennes valeurs. La modification partait pourtant bien et était enregistrée, mais `TrameRangement.rendre`
+ne redessine pas les tuiles tant que le focus est dedans (pour ne pas couper une saisie) : le bouton ou
+le champ gardait le focus, l'état renvoyé par Trame n'arrivait donc jamais à l'écran. Correctif dans
+`ui/rangement.js` : la tuile et le formulaire se referment eux-mêmes à la validation (et à la
+suppression d'une règle). Une règle que Trame refusera (aucune condition, aucun dossier) garde
+maintenant le formulaire et la saisie. Deuxième défaut au passage : `liste` coupait à 20 les
+extensions d'un type, sans rien dire → `liste_bornee(…, 200)`. Preuves : cas « modifier un type ou
+une règle s'enregistre » de `tester-ui` (échoue sur l'ancien fichier, passe sur le nouveau) et banc
+`outils/eprouver-rangement-edition.mjs` (vraies Réglages, vrais clics et frappes, `reglages.json`
+relu, Trame relancé) — vert.
+
 ## 11. L'état aujourd'hui
 
 ```

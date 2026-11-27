@@ -15,6 +15,12 @@ thread_local! {
 
 /// Une liste de mots tapee par l'utilisateur (`pronote.fr, ameli.fr`) ou deja en tableau.
 fn liste(v: &Value) -> Vec<String> {
+    liste_bornee(v, 20)
+}
+
+/// Comme `liste`, avec sa propre borne : une catégorie peut avoir bien plus de 20 extensions (la
+/// borne commune les coupait sans rien dire).
+fn liste_bornee(v: &Value, max: usize) -> Vec<String> {
     let brut: Vec<String> = match v {
         Value::Array(a) => a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect(),
         Value::String(s) => s.split([',', ';', ' ']).map(str::to_string).collect(),
@@ -26,7 +32,7 @@ fn liste(v: &Value) -> Vec<String> {
             vus.push(m);
         }
     }
-    vus.truncate(20);
+    vus.truncate(max);
     vus
 }
 
@@ -98,7 +104,7 @@ impl App {
                     c.dossier = if sur.as_os_str().is_empty() { c.nom.clone() } else { sur.to_string_lossy().to_string() };
                 }
                 if v.get("extensions").is_some() {
-                    c.extensions = liste(&v["extensions"])
+                    c.extensions = liste_bornee(&v["extensions"], 200)
                         .into_iter()
                         .map(|e| e.trim_start_matches('.').to_ascii_lowercase())
                         .filter(|e| !e.is_empty() && e.chars().all(|c| c.is_ascii_alphanumeric()))
@@ -237,5 +243,8 @@ mod tests {
         assert_eq!(liste(&json!("pronote.fr, ameli.fr  ameli.fr")), vec!["pronote.fr", "ameli.fr"]);
         assert_eq!(liste(&json!(["pdf", " ", "pdf"])), vec!["pdf"]);
         assert!(liste(&Value::Null).is_empty());
+        // Une catégorie garde toutes ses extensions, au-delà de 20.
+        let beaucoup: String = (0..30).map(|i| format!("e{i}")).collect::<Vec<_>>().join(", ");
+        assert_eq!(liste_bornee(&json!(beaucoup), 200).len(), 30);
     }
 }
