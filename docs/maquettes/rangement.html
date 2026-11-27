@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="color-scheme" content="dark" />
+<title>Maquette — Rangement des téléchargements</title>
+<style>
+  :root {
+    --fond: #080b11; --surface: #101521; --bord: rgba(255,255,255,.08); --bord-fort: rgba(255,255,255,.16);
+    --texte: #e9eefa; --texte-2: #97a4bb; --texte-3: #616e85; --vif: #5eead4;
+    --accent: #60a5fa; --accent-rgb: 96,165,250; --accent-2-rgb: 167,139,250; --ambre: #fbbf24; --danger: #f87171;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background:
+      radial-gradient(55% 40% at 12% 0%, rgba(var(--accent-rgb),.10), transparent 62%),
+      radial-gradient(50% 35% at 92% 4%, rgba(var(--accent-2-rgb),.09), transparent 60%), var(--fond);
+    background-attachment: fixed; color: var(--texte);
+    font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+    font-size: 13px; font-variant-numeric: tabular-nums;
+  }
+  code, .chemin { font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+  .chemin { color: var(--texte-3); }
+
+  /* bandeau de la maquette */
+  .bandeau { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 14px; padding: 10px 18px;
+    background: rgba(8,11,17,.92); border-bottom: 1px solid var(--bord); backdrop-filter: blur(8px); }
+  .bandeau b { font-size: 13px; }
+  .bandeau .aide { color: var(--texte-3); font-size: 11.5px; margin-left: auto; }
+  .segments { display: inline-flex; border: 1px solid var(--bord-fort); border-radius: 9px; overflow: hidden; }
+  .segments button { border: 0; border-radius: 0; border-right: 1px solid var(--bord); background: transparent; padding: 7px 14px; }
+  .segments button:last-child { border-right: 0; }
+  .segments button.choisi { background: rgba(var(--accent-rgb),.2); color: #fff; }
+
+  .appli { display: grid; grid-template-columns: 256px minmax(0,1fr); min-height: calc(100vh - 47px); }
+  aside { border-right: 1px solid var(--bord); padding: 26px 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+  .marque { display: flex; align-items: baseline; gap: 8px; padding: 0 8px; }
+  .marque h1 { font-size: 19px; margin: 0; font-weight: 600; }
+  .version { color: var(--texte-3); font-size: 11.5px; }
+  nav { display: flex; flex-direction: column; gap: 2px; }
+  nav a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent;
+    color: var(--texte-2); text-decoration: none; white-space: nowrap; }
+  nav a.actif { background: rgba(var(--accent-rgb),.12); border-color: rgba(var(--accent-rgb),.35); color: var(--texte); }
+  nav a .neuf { margin-left: auto; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--vif);
+    border: 1px solid rgba(94,234,212,.4); border-radius: 5px; padding: 1px 5px; }
+
+  main { padding: 36px 40px 70px; min-width: 0; }
+  .rubrique { max-width: 860px; margin: 0 auto; }
+  h2.titre-rubrique { font-size: 24px; font-weight: 600; margin: 0; letter-spacing: -.015em; }
+  .chapo { color: var(--texte-3); margin: 6px 0 24px; font-size: 12.5px; }
+  .groupe { margin-bottom: 22px; }
+  .groupe > h3 { font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--texte-3); margin: 0 0 10px; font-weight: 600;
+    display: flex; align-items: center; gap: 10px; }
+  .groupe > h3 .droite { margin-left: auto; letter-spacing: 0; text-transform: none; font-weight: 400; }
+  .carte { border: 1px solid var(--bord); border-radius: 14px; background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.010)); padding: 4px 18px; }
+  .carte.pleine { padding: 16px 18px; }
+  .note { color: var(--texte-3); font-size: 11.5px; line-height: 1.5; margin: 10px 0 14px; }
+
+  .ligne { display: flex; align-items: center; gap: 14px; padding: 12px 2px; border-bottom: 1px solid var(--bord); }
+  .ligne:last-child { border-bottom: 0; }
+  .ligne .libelle { flex: 1; min-width: 0; }
+  .ligne .libelle b { display: block; font-weight: 600; font-size: 12.5px; }
+  .ligne .libelle span { color: var(--texte-3); font-size: 11px; line-height: 1.45; }
+  .bascule { width: 38px; height: 20px; border-radius: 11px; background: rgba(255,255,255,.10); position: relative; cursor: pointer; flex: 0 0 auto; transition: background .18s; }
+  .bascule::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #8c9ab1; transition: transform .18s, background .18s; }
+  .bascule.on { background: rgba(94,234,212,.28); }
+  .bascule.on::after { transform: translateX(18px); background: var(--vif); }
+  select, button, input { font: inherit; font-size: 12px; color: var(--texte); background: rgba(255,255,255,.06);
+    border: 1px solid var(--bord); border-radius: 8px; padding: 6px 11px; }
+  button { cursor: pointer; }
+  button:hover { background: rgba(255,255,255,.10); border-color: var(--bord-fort); }
+  button.principal { background: rgba(var(--accent-rgb),.18); border-color: rgba(var(--accent-rgb),.5); }
+  button.leger { background: transparent; border-color: transparent; color: var(--texte-3); padding: 4px 8px; }
+  button.leger:hover { color: var(--texte); background: rgba(255,255,255,.06); }
+  input:focus, select:focus { outline: none; border-color: rgba(var(--accent-rgb),.55); }
+
+  /* tête de la rubrique : interrupteur général */
+  .maitre { display: flex; align-items: center; gap: 16px; padding: 16px 18px; border-radius: 14px; margin-bottom: 24px;
+    border: 1px solid rgba(94,234,212,.25); background: rgba(94,234,212,.04); }
+  .maitre .libelle { flex: 1; }
+  .maitre b { font-size: 14px; display: block; }
+  .maitre span { color: var(--texte-2); font-size: 11.5px; }
+  body.coupe .selon-maitre { opacity: .35; pointer-events: none; filter: saturate(.4); }
+
+  /* catégories (tuiles) */
+  .cats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  @media (max-width: 1150px) {
+    .appli { grid-template-columns: 200px minmax(0,1fr); }
+    main { padding: 28px 24px 60px; }
+    #mise-en-page { grid-template-columns: minmax(0,1fr) !important; }
+    .arbre { position: static; }
+  }
+  .cat { border: 1px solid var(--bord); border-radius: 12px; padding: 12px 13px; background: rgba(255,255,255,.025);
+    display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .cat.eteinte { opacity: .45; }
+  .cat .tete { display: flex; align-items: center; gap: 9px; }
+  .cat .ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex: 0 0 auto; }
+  .cat .nom { font-weight: 600; font-size: 12.5px; flex: 1; }
+  .cat .vers { font-size: 11px; color: var(--texte-2); display: flex; align-items: center; gap: 5px; }
+  .cat .vers code { color: var(--texte); }
+  .puces { display: flex; flex-wrap: wrap; gap: 4px; }
+  .puce { font-size: 10.5px; padding: 1px 6px; border-radius: 5px; background: rgba(255,255,255,.06); color: var(--texte-2); font-family: ui-monospace, Consolas, monospace; }
+  .puce.plus { color: var(--texte-3); background: transparent; border: 1px dashed var(--bord-fort); font-family: inherit; }
+
+  /* règles */
+  .regle { display: grid; grid-template-columns: 18px minmax(0,1fr) auto auto; align-items: center; gap: 12px; padding: 11px 2px; border-bottom: 1px solid var(--bord); }
+  .regle:last-child { border-bottom: 0; }
+  .regle .poignee { color: var(--texte-3); cursor: grab; text-align: center; }
+  .regle .phrase { line-height: 1.7; }
+  .mot { color: var(--texte-3); }
+  .jeton { display: inline-block; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--bord-fort); background: rgba(255,255,255,.04); margin: 0 2px; }
+  .jeton.site { border-color: rgba(167,139,250,.45); background: rgba(167,139,250,.08); }
+  .jeton.type { border-color: rgba(96,165,250,.45); background: rgba(96,165,250,.08); }
+  .jeton.dest { border-color: rgba(94,234,212,.45); background: rgba(94,234,212,.08); font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; }
+  .jeton.var { color: var(--ambre); }
+  .compte { font-size: 10.5px; color: var(--texte-3); white-space: nowrap; }
+
+  /* essai */
+  .essai { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; }
+  .essai label { display: block; font-size: 10.5px; color: var(--texte-3); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .08em; }
+  .essai input { width: 100%; }
+  .resultat { margin-top: 12px; padding: 11px 13px; border-radius: 10px; background: rgba(0,0,0,.25); border: 1px solid var(--bord);
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .resultat .fleche { color: var(--vif); }
+  .resultat .pourquoi { color: var(--texte-3); font-size: 11px; width: 100%; }
+
+  /* arborescence (variante 3) */
+  .deux { display: grid; grid-template-columns: minmax(0,1fr) 270px; gap: 18px; align-items: start; }
+  .arbre { position: sticky; top: 70px; border: 1px solid var(--bord); border-radius: 14px; padding: 14px 16px; background: rgba(255,255,255,.02); }
+  .arbre h4 { margin: 0 0 10px; font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--texte-3); font-weight: 600; }
+  .arbre ul { list-style: none; margin: 0; padding-left: 14px; border-left: 1px solid var(--bord); }
+  .arbre > ul { padding-left: 0; border-left: 0; }
+  .arbre li { padding: 3px 0; font-size: 12px; }
+  .arbre li .n { color: var(--texte-3); font-size: 10.5px; margin-left: 4px; }
+  .arbre li.f { color: var(--texte-2); font-size: 11.5px; }
+  .arbre li.neuf > span:first-child { color: var(--vif); }
+
+  /* page des téléchargements après rangement */
+  .dl { display: flex; align-items: center; gap: 12px; padding: 11px 2px; border-bottom: 1px solid var(--bord); }
+  .dl:last-child { border-bottom: 0; }
+  .dl .fic { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; background: rgba(255,255,255,.06); font-size: 10px; font-weight: 700; color: var(--texte-2); }
+  .dl .infos { flex: 1; min-width: 0; }
+  .dl .infos b { display: block; font-size: 12.5px; font-weight: 600; }
+  .dl .infos span { font-size: 11px; color: var(--texte-3); }
+  .range { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: rgba(94,234,212,.09); border: 1px solid rgba(94,234,212,.35); color: var(--vif); }
+  .doublon { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.35); color: var(--ambre); }
+
+  .variante { display: none; }
+  body[data-v="1"] .v1, body[data-v="2"] .v2, body[data-v="3"] .v3 { display: block; }
+  body[data-v="1"] .v1.grille, body[data-v="3"] .v3.grille { display: grid; }
+  .pastille-v { font-size: 10px; color: var(--ambre); border: 1px solid rgba(251,191,36,.4); border-radius: 5px; padding: 1px 6px; margin-left: 8px; letter-spacing: .04em; vertical-align: middle; }
+</style>
+</head>
+<body data-v="3">
+
+<div class="bandeau">
+  <b>Maquette · Rangement des téléchargements</b>
+  <div class="segments" id="variantes">
+    <button data-v="1">1 · Par type</button>
+    <button data-v="2">2 · Par règles</button>
+    <button data-v="3" class="choisi">3 · Les deux + aperçu</button>
+  </div>
+  <span class="aide">Tout est cliquable : interrupteurs, tuiles, essai d'un fichier.</span>
+</div>
+
+<div class="appli">
+  <aside>
+    <div class="marque"><h1>Réglages</h1><span class="version">0.4.95</span></div>
+    <nav>
+      <a>Général</a>
+      <a>Apparence</a>
+      <a>Onglets et mémoire</a>
+      <a class="actif">Téléchargements<span class="neuf">neuf</span></a>
+      <a>Confidentialité</a>
+      <a>Extensions</a>
+      <a>Données et sauvegarde</a>
+    </nav>
+  </aside>
+
+  <main>
+    <section class="rubrique">
+      <h2 class="titre-rubrique">Téléchargements</h2>
+      <p class="chapo">Où arrivent les fichiers, et comment Trame les range au moment où ils arrivent, sans rien déplacer après coup.</p>
+
+      <div class="groupe">
+        <h3>Dossier</h3>
+        <div class="carte">
+          <div class="ligne">
+            <div class="libelle"><b>Dossier des téléchargements</b><span class="chemin">C:\Users\Clément\Downloads</span></div>
+            <button>Ouvrir</button><button>Changer…</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="maitre">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#5eead4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 14h8M8 17h5"/></svg>
+        <div class="libelle">
+          <b>Ranger les téléchargements</b>
+          <span>Chaque fichier va directement dans le bon sous-dossier. Coupé, Trame fait comme aujourd'hui : tout à la racine.</span>
+        </div>
+        <div class="bascule on" id="maitre"></div>
+      </div>
+
+      <div class="selon-maitre">
+        <div class="deux" id="mise-en-page">
+          <div>
+
+            <!-- ======= CATÉGORIES (variantes 1 et 3) ======= -->
+            <div class="groupe variante v1 v3">
+              <h3>Par type de fichier <span class="droite"><button class="leger">+ Catégorie</button></span></h3>
+              <div class="cats" id="cats"></div>
+              <p class="note">Le type est lu sur l'extension du nom, puis sur ce que le site annonce (<code>Content-Type</code>) quand le nom n'en a pas. Un fichier d'un type coupé, ou d'aucun type connu, reste à la racine.</p>
+            </div>
+
+            <!-- ======= RÈGLES (variantes 2 et 3) ======= -->
+            <div class="groupe variante v2 v3">
+              <h3>Règles <span class="pastille-v v3-seul">passent avant les types</span><span class="droite"><button class="principal">+ Règle</button></span></h3>
+              <div class="carte">
+                <div class="regle">
+                  <span class="poignee">⋮⋮</span>
+                  <div class="phrase"><span class="mot">Si ça vient de</span> <span class="jeton site">pronote.fr</span> <span class="mot">→</span> <span class="jeton dest">École\</span></div>
+                  <span class="compte">31 fichiers</span>
+                  <div class="bascule on"></div>
+                </div>
+                <div class="regle">
+                  <span class="poignee">⋮⋮</span>
+                  <div class="phrase"><span class="mot">Si ça vient de</span> <span class="jeton site">impots.gouv.fr</span> <span class="mot">ou</span> <span class="jeton site">ameli.fr</span> <span class="mot">et que c'est un</span> <span class="jeton type">PDF</span> <span class="mot">→</span> <span class="jeton dest">Papiers\<span class="jeton var" style="border:0;padding:0;margin:0;background:none">{année}</span>\</span></div>
+                  <span class="compte">12 fichiers</span>
+                  <div class="bascule on"></div>
+                </div>
+                <div class="regle">
+                  <span class="poignee">⋮⋮</span>
+                  <div class="phrase"><span class="mot">Si le nom contient</span> <span class="jeton">facture</span> <span class="mot">→</span> <span class="jeton dest">Papiers\Factures\</span> <span class="mot">et renommer en</span> <span class="jeton dest">{date} {nom}</span></div>
+                  <span class="compte">8 fichiers</span>
+                  <div class="bascule on"></div>
+                </div>
+                <div class="regle">
+                  <span class="poignee">⋮⋮</span>
+                  <div class="phrase"><span class="mot">Si c'est une</span> <span class="jeton type">Image</span> <span class="mot">de</span> <span class="jeton site">discord.com</span> <span class="mot">→</span> <span class="jeton dest">Images\Discord\</span></div>
+                  <span class="compte">—</span>
+                  <div class="bascule"></div>
+                </div>
+              </div>
+              <p class="note">De haut en bas, la première règle qui convient gagne. Glisser une règle par sa poignée, à gauche, pour changer l'ordre. <span class="v2-seul">Un fichier qu'aucune règle ne prend reste à la racine.</span></p>
+            </div>
+
+            <!-- ======= OPTIONS ======= -->
+            <div class="groupe">
+              <h3>Options</h3>
+              <div class="carte">
+                <div class="ligne">
+                  <div class="libelle"><b>Un sous-dossier par mois</b><span>Images\2026-11\…, pour que rien ne redevienne un vrac de 2 000 fichiers.</span></div>
+                  <div class="bascule"></div>
+                </div>
+                <div class="ligne">
+                  <div class="libelle"><b>Prévenir des doublons</b><span>Si le même fichier (même contenu) est déjà rangé, Trame le dit sur la page des téléchargements et propose de jeter le nouveau.</span></div>
+                  <div class="bascule on"></div>
+                </div>
+                <div class="ligne">
+                  <div class="libelle"><b>Demander à chaque fois</b><span>Une petite bulle « Ranger dans Images ? » au début du téléchargement, avec un autre choix possible.</span></div>
+                  <div class="bascule"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ======= ESSAI ======= -->
+            <div class="groupe">
+              <h3>Essayer</h3>
+              <div class="carte pleine">
+                <div class="essai">
+                  <div><label>Nom du fichier</label><input id="e-nom" value="facture-edf-novembre.pdf" /></div>
+                  <div><label>Site d'origine</label><input id="e-site" value="edf.fr" /></div>
+                </div>
+                <div class="resultat" id="e-res"></div>
+              </div>
+            </div>
+
+            <!-- ======= RANGER L'EXISTANT ======= -->
+            <div class="groupe">
+              <h3>Ce qui est déjà en vrac</h3>
+              <div class="carte">
+                <div class="ligne">
+                  <div class="libelle"><b>Ranger la racine du dossier</b><span>347 fichiers à la racine. Trame montre d'abord où chacun irait, puis range sur « Valider ». Tout peut être remis en place pendant 30 jours.</span></div>
+                  <button>Voir l'aperçu…</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ======= ARBORESCENCE (variante 3) ======= -->
+          <div class="arbre variante v3">
+            <h4>Ce que ça donne</h4>
+            <ul>
+              <li><span>📁 Downloads</span>
+                <ul>
+                  <li><span>📁 Documents</span><span class="n">64</span></li>
+                  <li class="neuf"><span>📁 École</span><span class="n">31</span></li>
+                  <li><span>📁 Images</span><span class="n">212</span></li>
+                  <li><span>📁 Installeurs</span><span class="n">18</span></li>
+                  <li><span>📁 Papiers</span><span class="n">20</span>
+                    <ul>
+                      <li><span>📁 2026</span><span class="n">12</span></li>
+                      <li><span>📁 Factures</span><span class="n">8</span></li>
+                    </ul>
+                  </li>
+                  <li><span>📁 Vidéos</span><span class="n">9</span></li>
+                  <li><span>📁 Archives</span><span class="n">15</span></li>
+                  <li class="f">devoir-maths.odt</li>
+                  <li class="f">… 4 fichiers sans type</li>
+                </ul>
+              </li>
+            </ul>
+            <p class="note" style="margin-bottom:0">Les nombres comptent ce que Trame a rangé. Rien n'est lu dans les fichiers eux-mêmes.</p>
+          </div>
+        </div>
+
+        <!-- ======= PAGE DES TÉLÉCHARGEMENTS ======= -->
+        <div class="groupe" style="max-width:860px;margin-top:34px">
+          <h3>Et sur la page des téléchargements</h3>
+          <div class="carte">
+            <div class="dl">
+              <div class="fic" style="color:#f87171">PDF</div>
+              <div class="infos"><b>2026-11-27 facture-edf-novembre.pdf</b><span>edf.fr · 184 Ko · à l'instant</span></div>
+              <span class="range">→ Papiers\Factures</span>
+              <button class="leger" title="Remettre à la racine du dossier">Annuler</button>
+              <button class="leger">Montrer</button>
+            </div>
+            <div class="dl">
+              <div class="fic" style="color:#a78bfa">PNG</div>
+              <div class="infos"><b>capture-fortnite.png</b><span>discord.com · 1,2 Mo · il y a 5 min</span></div>
+              <span class="doublon">Déjà dans Images</span>
+              <button class="leger">Garder les deux</button>
+              <button class="leger">Jeter celui-ci</button>
+            </div>
+            <div class="dl">
+              <div class="fic" style="color:#5eead4">EXE</div>
+              <div class="infos"><b>SteamSetup.exe</b><span>steampowered.com · 2,4 Mo · il y a 1 h</span></div>
+              <span class="range">→ Installeurs</span>
+              <button class="leger">Annuler</button>
+              <button class="leger">Montrer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  const CATS = [
+    { nom: "Images", dossier: "Images", coul: "#a78bfa", ext: ["jpg","jpeg","png","gif","webp","heic","svg"], on: true,
+      ico: '<path d="M4 5h16v14H4z"/><path d="m4 16 5-5 4 4 3-3 4 4"/><circle cx="15.5" cy="8.5" r="1.3"/>' },
+    { nom: "Vidéos", dossier: "Vidéos", coul: "#f472b6", ext: ["mp4","mkv","webm","mov","avi"], on: true,
+      ico: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/>' },
+    { nom: "Musique", dossier: "Musique", coul: "#fbbf24", ext: ["mp3","flac","wav","ogg","m4a"], on: true,
+      ico: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>' },
+    { nom: "Documents", dossier: "Documents", coul: "#60a5fa", ext: ["pdf","docx","odt","xlsx","pptx","txt"], on: true,
+      ico: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>' },
+    { nom: "Archives", dossier: "Archives", coul: "#fb923c", ext: ["zip","rar","7z","tar","gz"], on: true,
+      ico: '<path d="M4 7h16v13H4zM3 4h18v3H3z"/><path d="M10 11h4"/>' },
+    { nom: "Installeurs", dossier: "Installeurs", coul: "#5eead4", ext: ["exe","msi","msix","apk"], on: true,
+      ico: '<path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v3h16v-3"/>' },
+  ];
+  const REGLES = [
+    { site: ["pronote.fr"], dest: "École" },
+    { site: ["impots.gouv.fr", "ameli.fr"], ext: ["pdf"], dest: "Papiers\\" + new Date().getFullYear() },
+    { nom: "facture", dest: "Papiers\\Factures", renomme: true },
+  ];
+  const $ = (id) => document.getElementById(id);
+
+  function dessinerCats() {
+    $("cats").innerHTML = "";
+    CATS.forEach((c, i) => {
+      const d = document.createElement("div");
+      d.className = "cat" + (c.on ? "" : " eteinte");
+      const montres = c.ext.slice(0, 4).map((e) => `<span class="puce">.${e}</span>`).join("");
+      const reste = c.ext.length > 4 ? `<span class="puce plus">+${c.ext.length - 4}</span>` : "";
+      d.innerHTML = `
+        <div class="tete">
+          <span class="ico" style="background:${c.coul}22"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c.coul}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${c.ico}</svg></span>
+          <span class="nom">${c.nom}</span>
+          <div class="bascule ${c.on ? "on" : ""}" data-cat="${i}"></div>
+        </div>
+        <div class="vers">→ <code>${c.dossier}\\</code></div>
+        <div class="puces">${montres}${reste}</div>`;
+      $("cats").appendChild(d);
+    });
+  }
+
+  function extension(nom) { const m = /\.([a-z0-9]+)$/i.exec(nom); return m ? m[1].toLowerCase() : ""; }
+  function dateDuJour() { return new Date().toISOString().slice(0, 10); }
+
+  function ou(nom, site) {
+    const v = document.body.dataset.v;
+    const ext = extension(nom);
+    site = site.trim().toLowerCase().replace(/^www\./, "");
+    if (v !== "1") {
+      for (const r of REGLES) {
+        if (r.site && !r.site.some((s) => site === s || site.endsWith("." + s))) continue;
+        if (r.ext && !r.ext.includes(ext)) continue;
+        if (r.nom && !nom.toLowerCase().includes(r.nom)) continue;
+        const final = r.renomme ? `${dateDuJour()} ${nom}` : nom;
+        const pourquoi = r.site ? `Règle « ${r.site.join(" ou ")} »` : `Règle « le nom contient ${r.nom} »`;
+        return { dossier: r.dest, final, pourquoi };
+      }
+      if (v === "2") return { dossier: "", final: nom, pourquoi: "Aucune règle ne le prend : il reste à la racine." };
+    }
+    const c = CATS.find((c) => c.on && c.ext.includes(ext));
+    if (c) return { dossier: c.dossier, final: nom, pourquoi: `Type ${c.nom} (.${ext})` };
+    return { dossier: "", final: nom, pourquoi: ext ? `.${ext} n'est dans aucun type allumé : il reste à la racine.` : "Pas d'extension connue : il reste à la racine." };
+  }
+
+  function essayer() {
+    const r = ou($("e-nom").value, $("e-site").value);
+    const chemin = "Downloads\\" + (r.dossier ? r.dossier + "\\" : "") + r.final;
+    $("e-res").innerHTML = `<span class="fleche">→</span><code style="font-size:12px">${chemin}</code><span class="pourquoi">${r.pourquoi}</span>`;
+  }
+
+  function choisirVariante(v) {
+    document.body.dataset.v = v;
+    document.querySelectorAll("#variantes button").forEach((b) => b.classList.toggle("choisi", b.dataset.v === v));
+    $("mise-en-page").style.gridTemplateColumns = v === "3" ? "minmax(0,1fr) 270px" : "minmax(0,1fr)";
+    document.querySelectorAll(".v3-seul").forEach((e) => (e.style.display = v === "3" ? "" : "none"));
+    document.querySelectorAll(".v2-seul").forEach((e) => (e.style.display = v === "2" ? "" : "none"));
+    essayer();
+  }
+
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest(".bascule");
+    if (b) {
+      b.classList.toggle("on");
+      if (b.id === "maitre") document.body.classList.toggle("coupe", !b.classList.contains("on"));
+      if (b.dataset.cat !== undefined) { CATS[+b.dataset.cat].on = b.classList.contains("on"); dessinerCats(); essayer(); }
+      return;
+    }
+    const v = e.target.closest("#variantes button");
+    if (v) choisirVariante(v.dataset.v);
+  });
+  $("e-nom").addEventListener("input", essayer);
+  $("e-site").addEventListener("input", essayer);
+  dessinerCats();
+  choisirVariante("3");
+</script>
+</body>
+</html>
