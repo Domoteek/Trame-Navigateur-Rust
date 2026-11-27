@@ -16,7 +16,13 @@
  * Trame utilise au même moment (une même clé sur deux pairs se dispute la session) ; une
  * configuration OpenVPN ne pose pas ce souci.
  *
+ *   3. `--tunnel-absent` (configuration WireGuard seulement) : le même tunnel, mais vers un serveur
+ *      injoignable. Le portier bloque les pages ; le moteur et les extensions (Bitwarden) ne
+ *      doivent ouvrir AUCUNE connexion vers Internet — avant la 0.4.96, Bitwarden et
+ *      config.edge.skype.com sortaient en direct.
+ *
  * Usage : node outils/eprouver-fuites.mjs [--tunnel <id du dossier dans tunnels\>] [--sans-coupure]
+ *         node outils/eprouver-fuites.mjs --tunnel <dossier WireGuard> --tunnel-absent
  */
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -52,6 +58,20 @@ if (!id || !existsSync(join(REEL, "tunnels", id))) {
 const profil = mkdtempSync(join(tmpdir(), "trame-fuites-"));
 cpSync(join(REEL, "tunnels", id), join(profil, "tunnels", id), { recursive: true });
 writeFileSync(join(profil, "tunnels", "actif.txt"), id);
+const tunnelAbsent = args.includes("--tunnel-absent");
+if (tunnelAbsent) {
+  const f = join(profil, "tunnels", id, "tunnel.json");
+  if (!existsSync(f)) {
+    console.error("--tunnel-absent demande une configuration WireGuard (tunnel.json).");
+    process.exit(2);
+  }
+  // 192.0.2.1 : adresse de documentation, personne n'y répond. Bitwarden est copié pour vérifier
+  // que l'extension, elle aussi, reste enfermée.
+  const conf = JSON.parse(readFileSync(f, "utf8"));
+  conf.endpoint = "192.0.2.1:51820";
+  writeFileSync(f, JSON.stringify(conf));
+  if (existsSync(join(REEL, "extensions-chrome"))) cpSync(join(REEL, "extensions-chrome"), join(profil, "extensions-chrome"), { recursive: true });
+}
 writeFileSync(join(profil, "reglages.json"), JSON.stringify({ tunnel_oblige: true, astuces: false }, null, 2));
 const JOURNAL = join(profil, "trame.log");
 const journal = () => (existsSync(JOURNAL) ? readFileSync(JOURNAL, "utf8") : "");
@@ -84,6 +104,41 @@ const parProxy = (proxy, url = "https://api.ipify.org") => {
   const r = spawnSync("curl.exe", ["-s", "--max-time", "20", "--socks5-hostname", proxy, url], { encoding: "utf8" });
   return { sortie: (r.stdout || "").trim(), ms: Date.now() - debut };
 };
+
+/** Les connexions TCP que Trame et SON moteur ont ouvertes vers autre chose que la machine. */
+const connexionsExterieures = () => {
+  const script = `$pids = @(${enfant.pid}) + @(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | ? { $_.CommandLine -like '*${profil.split("\\").pop()}*' } | % { $_.ProcessId }); Get-NetTCPConnection -ErrorAction SilentlyContinue | ? { $pids -contains $_.OwningProcess -and $_.RemoteAddress -notmatch '^(127\\.|::1|0\\.0\\.0\\.0|::$)' } | % { "$($_.RemoteAddress):$($_.RemotePort)" }`;
+  const r = spawnSync("powershell", ["-NoProfile", "-Command", script], { encoding: "utf8" });
+  return (r.stdout || "").split(/\r?\n/).filter(Boolean);
+};
+
+if (tunnelAbsent) {
+  try {
+    console.log("3. Tunnel exigé mais injoignable");
+    ok(await attendre(/démarrage impossible/, 40_000), "le montage échoue (serveur injoignable)");
+    ok(await attendre(/toast : Tunnel : démarrage impossible .*Trame réessaie/, 15_000), "Trame le dit, et réessaie");
+    const vues = new Set();
+    for (let i = 0; i < 100; i++) {
+      for (const c of connexionsExterieures()) vues.add(c);
+      await pause(300);
+    }
+    ok(vues.size === 0, `ni le moteur ni Bitwarden ne sortent en direct (${vues.size ? [...vues].join(", ") : "aucune connexion"})`);
+    ok(/réessai|reprise ratée|nouvel essai/.test(journal()), "le mandataire retente le montage");
+  } catch (e) {
+    console.error(`\nECHEC du banc : ${e.message}`);
+    echecs += 1;
+  } finally {
+    try {
+      execFileSync("taskkill", ["/PID", String(enfant.pid), "/T", "/F"], { stdio: "ignore" });
+    } catch {
+      /* déjà parti */
+    }
+    await pause(1000);
+    if (!process.env.TRAME_BANC_GARDE) rmSync(profil, { recursive: true, force: true });
+  }
+  console.log(echecs === 0 ? "\nTunnel absent : rien ne sort." : `\n${echecs} contrôle(s) en échec.`);
+  process.exit(echecs === 0 ? 0 : 1);
+}
 
 try {
   ok(await attendre(/écoute SOCKS5/, 60_000), "le tunnel monte");

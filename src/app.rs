@@ -763,6 +763,12 @@ impl App {
         //  3. le contexte WebView2 est cree sur ce dossier, une fois pour toutes.
         ressources::au_demarrage(profil.racine());
         let webview2 = profil.rapatrier_webview2();
+        // Le moteur d'une instance qui vient de fermer tient encore le dossier : on l'attend,
+        // sinon la barre et le rail ne se creent pas (0x8007139F, voir `attendre_moteur_libre`).
+        let attendu = crate::profile::attendre_moteur_libre(&webview2);
+        if attendu > 0 {
+            info!("moteur precedent encore present : {attendu} ms d'attente avant de demarrer");
+        }
         // AVANT `preparer_contexte` : des que le moteur demarre, il lit la liste des profils de
         // `Local State`, rouvre celui d'une navigation privee precedente et en tient les
         // fichiers — la purge echouerait alors sur « fichier utilise par un autre processus »
@@ -1195,6 +1201,16 @@ impl App {
         // proxy de tout l'environnement WebView2, et ca ne se change plus apres.
         self.demarrer_tunnel_integre();
         self.rail = self.creer_surface("rail", Source::Rail);
+        // Filet : si le moteur refuse encore (ancienne instance pas tout a fait partie), on
+        // reessaie plutot que de laisser une application muette.
+        for essai in 1..=3 {
+            if self.rail.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1_500));
+            info!("surface rail : nouvel essai {essai}/3");
+            self.rail = self.creer_surface("rail", Source::Rail);
+        }
         self.barre = self.creer_surface("barre", Source::Barre);
         self.appliquer_anti_pistage(None);
         self.appliquer_geometrie();
@@ -1299,6 +1315,14 @@ impl App {
             Some(mandataire) => {
                 info!("tunnel : proxy {} posé sur la webview", mandataire.adresse());
                 builder.with_additional_browser_args(&arguments_navigateur_tunnel(mandataire.port()))
+            }
+            // Tunnel exigé mais aucune configuration lisible : le moteur est branché sur un port
+            // fermé, pour que rien ne sorte — ni les pages, ni les extensions (Bitwarden), ni le
+            // moteur lui-même (avant la 0.4.96, ils sortaient en direct).
+            None if self.reglages.tunnel_oblige => {
+                let port = crate::mandataire::port_ferme();
+                info!("tunnel : exigé mais absent, le moteur est coupé d'Internet (port fermé {port})");
+                builder.with_additional_browser_args(&arguments_navigateur_tunnel(port))
             }
             None => builder,
         }
@@ -1433,7 +1457,10 @@ impl App {
             if erreur != self.tunnel_erreur && (erreur.is_some() || revenu) {
                 self.tunnel_erreur = erreur.clone();
             }
-            if tombe {
+            if tombe && !mandataire.a_deja_servi() {
+                let raison = erreur.clone().unwrap_or_default();
+                self.signaler(&format!("Tunnel : démarrage impossible ({raison}). Trame réessaie, rien ne sort en attendant"));
+            } else if tombe {
                 self.signaler("Tunnel coupé : Trame le remonte, rien ne sort en attendant");
             } else if revenu {
                 self.signaler("Tunnel rétabli");

@@ -24,8 +24,6 @@ pub struct Session {
     pair: SocketAddr,
     /// Tampon d'envoi vers le réseau.
     sortie: Vec<u8>,
-    /// Tampon de réception du réseau.
-    entree: Vec<u8>,
     /// Tampon de travail pour `decapsulate`.
     travail: Vec<u8>,
     /// Combien de datagrammes sont partis vers le pair, et combien en sont revenus. Un tunnel qui
@@ -79,7 +77,6 @@ impl Session {
             udp,
             pair,
             sortie: vec![0u8; MAX_PAQUET],
-            entree: vec![0u8; MAX_PAQUET],
             travail: vec![0u8; MAX_PAQUET],
             envoyes: 0,
             recus: 0,
@@ -99,7 +96,8 @@ impl Session {
         self.tunnel.stats().0.is_some()
     }
 
-    /// Secondes depuis la dernière poignée de main, si elle a eu lieu.
+    /// Secondes depuis la dernière poignée de main, si elle a eu lieu (sert aux tests).
+    #[cfg(test)]
     pub fn age_handshake(&self) -> Option<std::time::Duration> {
         self.tunnel.stats().0
     }

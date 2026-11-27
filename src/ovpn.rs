@@ -182,8 +182,13 @@ pub struct Session {
     boite: Boite,
     reglages: TunSettings,
     resume: Resume,
-    /// Les derniers messages du moteur, gardés courts : c'est ce qu'on lit quand ça ne monte pas.
+    /// Les derniers messages du moteur, gardés courts : c'est ce qu'on lit quand ça ne monte pas,
+    /// ou quand la session tombe en cours de route.
     journal: Arc<Mutex<VecDeque<String>>>,
+    /// Levé par le moteur sur DISCONNECTED : la session est finie, le mandataire doit le savoir.
+    arret: Arc<AtomicBool>,
+    /// La raison donnée par `connect` quand il rend la main en erreur.
+    fin: Arc<Mutex<Option<String>>>,
 }
 
 /// Les événements du moteur pendant une vraie connexion : il pousse les paquets dans la boîte,
@@ -193,9 +198,6 @@ struct Pont {
     monte: Arc<Mutex<Option<Result<TunSettings, String>>>>,
     journal: Arc<Mutex<VecDeque<String>>>,
     arret: Arc<AtomicBool>,
-    /// La raison de la fin, quand `connect` rend la main en erreur : c'est elle qu'on veut lire,
-    /// pas « le tunnel n'a pas monté ».
-    fin: Arc<Mutex<Option<String>>>,
 }
 
 impl Pont {
@@ -269,7 +271,6 @@ impl Session {
             monte: monte.clone(),
             journal: journal.clone(),
             arret: arret.clone(),
-            fin: fin.clone(),
         });
         let moteur = Arc::new(Engine::new(pont).map_err(|e| format!("moteur OpenVPN indisponible : {e}"))?);
         let (config, identifiants) = config_de_connexion(profil, identifiants);
@@ -316,6 +317,8 @@ impl Session {
                         reglages,
                         resume,
                         journal,
+                        arret,
+                        fin,
                     });
                 }
             }
@@ -368,9 +371,20 @@ impl crate::moteur::Tunnel for Session {
         self.reglages.mtu.map(|m| m as usize)
     }
 
-    /// Rien à faire : les paquets arrivent par le rappel `packet`, ils sont déjà dans la boîte.
+    /// Les paquets arrivent par le rappel `packet` (ils sont déjà dans la boîte) : il reste à
+    /// dire si la session vit. Une session que le serveur a fermée (DISCONNECTED) rend une
+    /// erreur tout de suite, avec sa raison : le mandataire la remonte sans attendre qu'une page
+    /// essaie d'envoyer un paquet (avant la 0.4.96, une session morte au repos passait inaperçue).
     fn pomper(&mut self) -> Result<(), String> {
-        Ok(())
+        if !self.arret.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        let raison = self.fin.lock().ok().and_then(|f| f.clone());
+        let quoi = match raison {
+            Some(r) => format!("session OpenVPN terminée ({r})"),
+            None => "session OpenVPN terminée".to_string(),
+        };
+        Err(echec(&self.journal, &quoi))
     }
 
     fn prendre_paquet(&mut self) -> Option<Vec<u8>> {
@@ -381,7 +395,7 @@ impl crate::moteur::Tunnel for Session {
         if self.moteur.send_packet(paquet) {
             Ok(())
         } else {
-            Err("le moteur OpenVPN n'accepte pas ce paquet (session terminée ?)".to_string())
+            Err(echec(&self.journal, "le moteur OpenVPN n'accepte plus de paquet"))
         }
     }
 }

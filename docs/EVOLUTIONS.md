@@ -1648,6 +1648,30 @@ Pas encore fait : une page de gestion des favoris (recherche, tri, glisser), ni 
 souris ; `favoris-dossiers.json` n'est pas dans la sauvegarde du profil (pas plus que
 `acces-groupes.json`), mais les dossiers portés par les favoris y sont.
 
+**0.4.96 (2026-11-27) — tunnel exigé mais absent : rien ne sort, plus d'application muette.**
+Suite du bilan du 26. (1) **Fuite mesurée** : tunnel exigé vers un serveur injoignable, pages bien
+bloquées par le portier, mais le journal réseau du moteur (`--log-net-log`) montrait
+`api.bitwarden.com`, `fillassist.bitwarden.com` et `config.edge.skype.com` **en direct** — sans
+mandataire, l'environnement WebView2 démarrait sans proxy. Désormais le mandataire **démarre même
+si le premier montage échoue** : son écoute reste ouverte, le moteur passe par elle, et le fil
+réessaie (2 → 30 s) ; message « Tunnel : démarrage impossible (…). Trame réessaie, rien ne sort en
+attendant » (`Mandataire::a_deja_servi`). Sans configuration lisible du tout, le moteur est branché
+sur un port fermé (`mandataire::port_ferme`, choisi UNE fois : toutes les webviews d'un
+environnement doivent avoir les mêmes arguments). Après : **0 connexion vers l'extérieur** en 40 s.
+(2) **Barre et rail impossibles à créer** (0x8007139F, 26/11 à 10:02 et 10:08, application muette) :
+Trame relancé une seconde après sa fermeture, le moteur de l'ancienne instance tenait encore le
+dossier. `profile::attendre_moteur_libre` attend (8 s au plus) qu'aucun `msedgewebview2.exe` n'ait
+ce `--user-data-dir`, et le rail est retenté trois fois (1,5 s). Relance immédiate éprouvée : 180 ms
+d'attente puis surfaces créées (l'échec d'origine n'a pas été reproduit, faute d'arguments
+différents en 0.4.94 ; il le serait désormais, le proxy dépendant du tunnel). (3) OpenVPN : une
+session fermée par le serveur (DISCONNECTED) se voit à la passe suivante (`pomper`, avant toujours
+`Ok`), avec les dernières lignes du moteur dans la raison — les champs `journal` et `fin`, jusque-là
+inutilisés, servent à ça. (4) Ménage : `entree` (vpn.rs) retiré, `age_handshake` réservé aux tests,
+plus aucun avertissement de compilation ; `clippy` installé (37 remarques de style, aucune de
+justesse). L'erreur « Identifier 'ipc' has already been declared » venait d'une très ancienne
+construction (dossier `en-developpement`, chrome.js de 17 Ko) : rien à corriger. Banc
+`eprouver-fuites.mjs --tunnel-absent` ajouté ; tout vert, comme le banc complet sur Mullvad.
+
 ## 11. L'état aujourd'hui
 
 ```

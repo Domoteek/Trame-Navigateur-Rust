@@ -757,6 +757,35 @@ pub fn processus_vivant(pid: u32) -> bool {
         .unwrap_or(false)
 }
 
+/// Attend (8 s au plus) que le moteur d'une instance PRECEDENTE lache le dossier WebView2.
+///
+/// Un Trame relance juste apres sa fermeture (redemarrage propose apres un changement de tunnel,
+/// mise a jour) trouvait encore les `msedgewebview2.exe` de l'ancienne instance sur le meme
+/// dossier : WebView2 refusait alors de creer la barre et le rail (0x8007139F, « le groupe ou la
+/// ressource n'est pas dans l'etat correct »), et l'application restait muette (2026-11-26, 10:02
+/// et 10:08, une seconde apres « fermeture demandee »). Rend le nombre de millisecondes attendues.
+pub fn attendre_moteur_libre(dossier_webview2: &Path) -> u64 {
+    let cible = dossier_webview2.to_string_lossy().to_ascii_lowercase();
+    let debut = std::time::Instant::now();
+    let genre = sysinfo::ProcessRefreshKind::nothing().with_cmd(sysinfo::UpdateKind::Always);
+    let mut systeme = sysinfo::System::new();
+    loop {
+        systeme.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, genre);
+        let occupe = systeme.processes().values().any(|p| {
+            p.name().to_string_lossy().eq_ignore_ascii_case("msedgewebview2.exe")
+                && p.cmd().iter().any(|a| {
+                    let a = a.to_string_lossy().to_ascii_lowercase();
+                    a.starts_with("--user-data-dir=") && a.trim_matches('"').contains(&cible)
+                })
+        });
+        let attendu = debut.elapsed().as_millis() as u64;
+        if !occupe || attendu > 8_000 {
+            return attendu;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+}
+
 /// Ecarte un fichier illisible **sans le detruire** : il est renomme a cote.
 ///
 /// Un profil casse est un fait rare et penible : le garder permet de retrouver ses onglets a

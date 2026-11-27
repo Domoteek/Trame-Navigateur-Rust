@@ -38,11 +38,32 @@ struct EtatTunnel {
     en_service: AtomicBool,
     /// Pourquoi il ne tourne plus (pendant une reprise).
     erreur: std::sync::Mutex<Option<String>>,
+    /// Le tunnel a tourné au moins une fois (sinon : il n'a jamais pu monter).
+    deja_servi: AtomicBool,
+}
+
+/// Un port local où personne n'écoute : le proxy du moteur quand le tunnel est exigé mais
+/// qu'aucune configuration n'a pu être lue. Toute connexion y est refusée sur-le-champ, donc rien
+/// ne sort (ni les pages, ni les extensions, ni le moteur lui-même).
+///
+/// Choisi UNE fois par session : toutes les webviews d'un même environnement WebView2 doivent
+/// recevoir exactement les mêmes arguments, sinon la création échoue (0x8007139F).
+pub fn port_ferme() -> u16 {
+    static PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
+    *PORT.get_or_init(|| {
+        TcpListener::bind("127.0.0.1:0")
+            .and_then(|e| e.local_addr())
+            .map(|a| a.port())
+            .unwrap_or(9)
+    })
 }
 
 impl EtatTunnel {
     fn noter(&self, en_service: bool, erreur: Option<String>) {
         self.en_service.store(en_service, Ordering::Relaxed);
+        if en_service {
+            self.deja_servi.store(true, Ordering::Relaxed);
+        }
         if let Ok(mut e) = self.erreur.lock() {
             *e = erreur;
         }
@@ -63,6 +84,11 @@ impl Mandataire {
     /// pastille passe alors au rouge (avant la 0.4.94, elle restait verte sur un tunnel mort).
     pub fn en_service(&self) -> bool {
         self.etat.en_service.load(Ordering::Relaxed)
+    }
+
+    /// Le tunnel a-t-il déjà tourné ? `false` : il n'a jamais pu monter depuis le démarrage.
+    pub fn a_deja_servi(&self) -> bool {
+        self.etat.deja_servi.load(Ordering::Relaxed)
     }
 
     /// La raison de la dernière coupure, tant que le tunnel n'est pas revenu.
@@ -115,14 +141,21 @@ where
         .spawn(move || {
             // La préparation rend le détail de l'échec : c'est cette phrase que l'interface
             // affichera quand rien ne monte (0.4.86).
+            // Un premier montage raté ne fait plus renoncer (0.4.96) : avant, Trame démarrait alors
+            // SANS proxy, et Bitwarden comme le moteur Edge sortaient en direct pendant que les
+            // pages restaient bloquées (mesuré au journal réseau du moteur). Désormais l'écoute
+            // reste ouverte — le moteur passe par elle, donc rien ne sort — et le fil réessaie.
             let mut courant = match preparer() {
-                Ok(pret) => Some(pret),
+                Ok(pret) => {
+                    etat_fil.noter(true, None);
+                    Some(pret)
+                }
                 Err(e) => {
-                    let _ = tx.send(Err(e));
-                    return;
+                    crate::alerte!("mandataire : démarrage impossible ({e}), nouvel essai dans 2 s");
+                    etat_fil.noter(false, Some(e));
+                    None
                 }
             };
-            etat_fil.noter(true, None);
             let _ = tx.send(Ok(()));
             // Le tunnel peut tomber (réseau perdu, veille, serveur relancé). Avant la 0.4.94, le
             // fil s'arrêtait là et plus aucune page ne sortait jusqu'au redémarrage de Trame. On
