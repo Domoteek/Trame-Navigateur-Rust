@@ -1713,6 +1713,15 @@ fichier sans extension annoncé `image/webp` → `Images\`, puis « Remettre à 
 liste. **Pas encore fait** : doublons, « demander à chaque fois », ranger ce qui est déjà en vrac
 (aperçu puis déplacement annulable) — dessinés dans la maquette, laissés pour une suite.
 
+**0.4.99 (2026-11-27) — ranger l'existant et les doublons.** Version du travail 6750920 (rangement :
+doublons, « ranger l'existant » avec aperçu et « Défaire » pendant 30 jours, crédit FolderFresh, bouton
+Installer lisible en teinte dynamique). Banc nouveau `outils/eprouver-ranger-existant.mjs` (vrai
+binaire caché, dossier jetable) : l'aperçu ne déplace rien ; ranger sort de la racine ce qui a un type
+ou une règle, garde les deux exemplaires d'un conflit de nom (`conflit (2).png`), laisse à la racine
+les fichiers sans type, cachés ou en cours, ne touche à aucun sous-dossier existant, écrit
+`rangement-journal.json` ; « Défaire » rend **exactement** l'arbre de départ. `cargo test` 283/283,
+`tester-ui` 122/122, bancs du rangement à l'arrivée, des liens et des fenêtres verts.
+
 ## 11. L'état aujourd'hui
 
 ```
