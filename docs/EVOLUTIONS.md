@@ -1669,7 +1669,7 @@ Page des téléchargements : pastille « → dossier » (raison au survol) et «
 (le sous-dossier vidé est retiré). Fiche dans la Notice.
 
 Preuves : `cargo test` 276/276 (13 nouveaux), `tester-ui` 118/118 (2 nouveaux), et
-`outils/eprouver-rangement.mjs` sur le vrai binaire caché : `photo.png` → `Images\`,
+`outils/eprouver-rangement-telechargements.mjs` sur le vrai binaire caché : `photo.png` → `Images\`,
 `facture-edf.pdf` → `Papiers\Factures\2026-11-27 facture-edf.pdf`, `plan.sh3d` à la racine,
 fichier sans extension annoncé `image/webp` → `Images\`, puis « Remettre à la racine » suivi par la
 liste. **Pas encore fait** : doublons, « demander à chaque fois », ranger ce qui est déjà en vrac
