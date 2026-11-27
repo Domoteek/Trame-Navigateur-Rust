@@ -742,22 +742,32 @@ pub fn exporter_favoris_html(favoris: &[Favori], cible: &Path) -> Result<usize, 
     s.push_str("<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n");
     s.push_str("<TITLE>Favoris</TITLE>\n<H1>Favoris</H1>\n");
     s.push_str("<DL><p>\n    <DT><H3>Favoris Trame</H3>\n    <DL><p>\n");
-    for f in favoris {
+    let ligne = |s: &mut String, f: &Favori, retrait: &str| {
         let titre = if f.titre.trim().is_empty() { &f.url } else { &f.titre };
         let date = f.ajoute_le / 1000;
-        if date > 0 {
-            s.push_str(&format!(
-                "        <DT><A HREF=\"{}\" ADD_DATE=\"{date}\">{}</A>\n",
-                html_echapper(&f.url),
-                html_echapper(titre)
-            ));
-        } else {
-            s.push_str(&format!(
-                "        <DT><A HREF=\"{}\">{}</A>\n",
-                html_echapper(&f.url),
-                html_echapper(titre)
-            ));
+        let date = if date > 0 { format!(" ADD_DATE=\"{date}\"") } else { String::new() };
+        s.push_str(&format!(
+            "{retrait}<DT><A HREF=\"{}\"{date}>{}</A>\n",
+            html_echapper(&f.url),
+            html_echapper(titre)
+        ));
+    };
+    // Hors dossier d'abord, puis un <H3> par dossier, dans l'ordre ou chacun apparait.
+    for f in favoris.iter().filter(|f| f.dossier.is_empty()) {
+        ligne(&mut s, f, "        ");
+    }
+    let mut dossiers: Vec<&str> = Vec::new();
+    for f in favoris {
+        if !f.dossier.is_empty() && !dossiers.contains(&f.dossier.as_str()) {
+            dossiers.push(&f.dossier);
         }
+    }
+    for d in dossiers {
+        s.push_str(&format!("        <DT><H3>{}</H3>\n        <DL><p>\n", html_echapper(d)));
+        for f in favoris.iter().filter(|f| f.dossier == d) {
+            ligne(&mut s, f, "            ");
+        }
+        s.push_str("        </DL><p>\n");
     }
     s.push_str("    </DL><p>\n</DL><p>\n");
     crate::profile::ecrire_atomique(cible, &s).map_err(|e| format!("écriture impossible : {e}"))?;
@@ -775,8 +785,25 @@ pub fn importer_favoris_html(texte: &str, maintenant: u64) -> Vec<Favori> {
     let mut out: Vec<Favori> = Vec::new();
     let mut poses: HashSet<String> = HashSet::new();
     let mut pos = 0usize;
-    while let Some(i) = bas[pos..].find("<a ") {
-        let debut = pos + i;
+    // Les dossiers ouverts : un `<H3>` ouvre le sien, le `</DL>` de sa liste le referme. Le
+    // `</DL>` de la liste racine ne trouve rien a refermer.
+    let mut pile: Vec<String> = Vec::new();
+    loop {
+        let suivant = |motif: &str| bas[pos..].find(motif).map(|i| pos + i);
+        let (a, h3, fin_dl) = (suivant("<a "), suivant("<h3"), suivant("</dl"));
+        let Some(debut) = [a, h3, fin_dl].into_iter().flatten().min() else { break };
+        if Some(debut) == fin_dl {
+            pile.pop();
+            pos = debut + 4;
+            continue;
+        }
+        if Some(debut) == h3 {
+            let Some(fin_balise) = bas[debut..].find('>').map(|f| debut + f) else { break };
+            let Some(fin_titre) = bas[fin_balise..].find("</h3>").map(|f| fin_balise + f) else { break };
+            pile.push(html_decoder(texte[fin_balise + 1..fin_titre].trim()));
+            pos = fin_titre + 5;
+            continue;
+        }
         let Some(fin_balise) = bas[debut..].find('>').map(|f| debut + f) else { break };
         let Some(fin_texte) = bas[fin_balise..].find("</a>").map(|f| fin_balise + f) else {
             break;
@@ -799,6 +826,7 @@ pub fn importer_favoris_html(texte: &str, maintenant: u64) -> Vec<Favori> {
             titre: html_decoder(&titre),
             ajoute_le,
             icone: None,
+            dossier: nom_de_dossier(&pile),
         });
         if out.len() >= 5000 {
             alerte!("import de favoris : arrêté à 5 000 entrées");
@@ -806,6 +834,22 @@ pub fn importer_favoris_html(texte: &str, maintenant: u64) -> Vec<Favori> {
         }
     }
     out
+}
+
+/// Le dossier d'un favori importé : le chemin de ses dossiers, sans les racines que chaque
+/// navigateur pose d'office (« Barre des favoris », « Bookmarks Menu »…), qui ne disent rien.
+fn nom_de_dossier(pile: &[String]) -> String {
+    const RACINES: [&str; 16] = [
+        "barre des favoris", "barre de favoris", "bookmarks bar", "favorites bar", "bookmarks toolbar",
+        "barre personnelle", "autres favoris", "other bookmarks", "other favorites", "bookmarks menu",
+        "menu des marque-pages", "favoris sur mobile", "mobile bookmarks", "favoris trame", "favoris",
+        "bookmarks",
+    ];
+    pile.iter()
+        .map(|d| d.trim())
+        .filter(|d| !d.is_empty() && !RACINES.contains(&d.to_lowercase().as_str()))
+        .collect::<Vec<_>>()
+        .join(" › ")
 }
 
 /// Fusionne des favoris importés dans la liste existante : rend (liste, ajoutés, déjà présents).
@@ -1157,12 +1201,14 @@ mod tests {
                 titre: "Un « titre » & une esperluette".into(),
                 ajoute_le: 1_700_000_000_000,
                 icone: None,
+                dossier: "Lectures › Presse".into(),
             },
             Favori {
                 url: "https://trame.local/a/b".into(),
                 titre: String::new(),
                 ajoute_le: 0,
                 icone: None,
+                dossier: String::new(),
             },
         ];
         let fichier = racine.join("favoris.html");
@@ -1172,6 +1218,10 @@ mod tests {
         assert!(texte.contains("ADD_DATE=\"1700000000\""));
         let relus = importer_favoris_html(&texte, 42);
         assert_eq!(relus.len(), 2);
+        // Hors dossier d'abord a l'export : l'ordre relu suit le fichier.
+        let relus: Vec<Favori> = vec![relus[1].clone(), relus[0].clone()];
+        assert_eq!(relus[0].dossier, "Lectures › Presse", "le dossier fait l'aller-retour");
+        assert_eq!(relus[1].dossier, "");
         assert_eq!(relus[0].url, favoris[0].url);
         assert_eq!(relus[0].titre, favoris[0].titre);
         assert_eq!(relus[0].ajoute_le, 1_700_000_000_000);
@@ -1206,12 +1256,52 @@ mod tests {
             titre: "déjà là".into(),
             ajoute_le: 1,
             icone: None,
+            dossier: String::new(),
         }];
         let (ajoutes, doublons) = fusionner_favoris(&mut actuels, favoris);
         assert_eq!(ajoutes, 2);
         assert_eq!(doublons, 1);
         assert_eq!(actuels.len(), 3);
         assert_eq!(actuels[0].titre, "déjà là", "un import ne réécrit pas l'existant");
+    }
+
+    #[test]
+    fn un_import_garde_les_dossiers_sans_les_racines_du_navigateur() {
+        // Export de Chrome : la barre, un dossier, un sous-dossier, un dossier vide, puis
+        // « Autres favoris ». Les racines posees d'office ne deviennent pas des dossiers.
+        let texte = r#"<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<DL><p>
+    <DT><H3 PERSONAL_TOOLBAR_FOLDER="true">Barre de favoris</H3>
+    <DL><p>
+        <DT><A HREF="https://barre.fr">Barre</A>
+        <DT><H3>Cuisine</H3>
+        <DL><p>
+            <DT><A HREF="https://tarte.fr">Tarte</A>
+            <DT><H3>Desserts &amp; gâteaux</H3>
+            <DL><p>
+                <DT><A HREF="https://flan.fr">Flan</A>
+            </DL><p>
+            <DT><A HREF="https://soupe.fr">Soupe</A>
+        </DL><p>
+        <DT><H3>Vide</H3>
+        <DL><p>
+        </DL><p>
+        <DT><A HREF="https://apres.fr">Apres</A>
+    </DL><p>
+    <DT><H3>Autres favoris</H3>
+    <DL><p>
+        <DT><A HREF="https://autre.fr">Autre</A>
+    </DL><p>
+</DL><p>"#;
+        let f = importer_favoris_html(texte, 1);
+        let dossier = |u: &str| f.iter().find(|x| x.url.starts_with(u)).map(|x| x.dossier.clone()).unwrap();
+        assert_eq!(f.len(), 6);
+        assert_eq!(dossier("https://barre.fr"), "");
+        assert_eq!(dossier("https://tarte.fr"), "Cuisine");
+        assert_eq!(dossier("https://flan.fr"), "Cuisine › Desserts & gâteaux");
+        assert_eq!(dossier("https://soupe.fr"), "Cuisine", "on ressort bien du sous-dossier");
+        assert_eq!(dossier("https://apres.fr"), "", "un dossier vide se referme aussi");
+        assert_eq!(dossier("https://autre.fr"), "");
     }
 
     #[test]

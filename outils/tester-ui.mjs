@@ -1391,6 +1391,93 @@ async function suite() {
     await p.close();
   });
 
+  await cas("accueil : dossiers de favoris, et « Modifier… » un favori", async () => {
+    const p = await page("newtab.html");
+    await p.evaluate(() => localStorage.removeItem("trame.favoris.dossier"));
+    const etat = etatDeBase();
+    etat.carnet = Object.assign({}, etat.carnet, {
+      favoris: [
+        { url: "https://a.fr/tarte", titre: "Tarte", domaine: "a.fr", icone: null, dossier: "Cuisine" },
+        { url: "https://b.fr/doc", titre: "Doc", domaine: "b.fr", icone: null, dossier: "" },
+      ],
+      favorisDossiers: ["Cuisine", "Vide"],
+    });
+    await pousser(p, etat);
+    const dossiers = await p.$$eval("#dossiers-favoris .g", (n) => n.map((b) => b.textContent));
+    egal(JSON.stringify(dossiers), JSON.stringify(["Tous", "Cuisine", "Vide", "＋ dossier"]), "Tous, chaque dossier, puis « + dossier »");
+    egal(await p.$$eval("#favoris .fav", (n) => n.length), 2, "Tous : les deux favoris");
+    await p.click("#dossiers-favoris .g:nth-child(2)");
+    egal(await p.$$eval("#favoris .fav", (n) => n.length), 1, "Cuisine : un favori");
+    await p.click("#dossiers-favoris .g:nth-child(3)");
+    egal(await p.$$eval("#favoris .fav", (n) => n.length), 0, "Vide : aucun favori");
+    verifier(await p.$eval("#favoris", (n) => n.textContent.includes("Aucun favori dans ce dossier")), "un dossier vide le dit");
+    await p.click("#dossiers-favoris .g:nth-child(1)");
+    // Clic droit sur un favori → Modifier… → nom, adresse et dossier envoyés ensemble.
+    await vider(p);
+    await p.click("#favoris .fav >> nth=1", { button: "right" });
+    const lignes = await p.$$eval(".menu button", (n) => n.map((b) => b.textContent.trim()));
+    verifier(lignes.includes("Modifier…") && lignes.includes("Cuisine"), `menu du favori : ${JSON.stringify(lignes)}`);
+    await p.click(".menu button:has-text('Modifier…')");
+    const champs = await p.$$(".dialogue input");
+    egal(champs.length, 3, "nom, adresse, dossier");
+    await champs[0].fill("La doc");
+    await champs[2].fill("Travail");
+    await p.click(".dialogue .ok");
+    const envoi = (await messages(p)).find((m) => m.m === "favoriEnregistrer");
+    verifier(envoi && envoi.ancienne === "https://b.fr/doc" && envoi.titre === "La doc" && envoi.dossier === "Travail" && envoi.url === "https://b.fr/doc", `envoi : ${JSON.stringify(envoi)}`);
+    // Clic droit sur un dossier : renommer, supprimer.
+    await vider(p);
+    await p.click("#dossiers-favoris .g:nth-child(2)", { button: "right" });
+    await p.click(".menu button.rouge");
+    verifier((await messages(p)).some((m) => m.m === "favoriDossierRetirer" && m.nom === "Cuisine"), "supprimer le dossier");
+    await p.close();
+  });
+
+  await cas("barre : Ctrl+D ouvre la fenêtre du favori sous l'étoile", async () => {
+    const p = await page("chrome.html", { query: "?surface=barre" });
+    const etat = etatDeBase();
+    etat.actif = 1;
+    etat.onglets = [onglet(1, 1, "Article", "https://a.fr/article", { actif: true })];
+    etat.carnet = { pageWeb: true, favori: true, favoris: [], favorisDossiers: ["Lectures"], guets: [] };
+    await pousser(p, etat);
+    const carte = { url: "https://a.fr/article", titre: "Article", dossier: "", nouveau: true, dossiers: ["Lectures"] };
+    await p.evaluate((x) => window.trame.carteFavori(x), carte);
+    verifier(await p.$eval("#menu-commandes", (n) => !n.hidden), "la fenêtre est ouverte");
+    egal(await p.$eval(".carte-favori .mar-tete b", (n) => n.textContent), "Favori ajouté", "titre « Favori ajouté »");
+    const zone = await p.$eval(".carte-favori", (n) => n.getBoundingClientRect().right);
+    const etoile = await p.$eval("#btn-favori", (n) => n.getBoundingClientRect().right);
+    verifier(Math.abs(zone - etoile) < 2, `collée sous l'étoile (${zone} / ${etoile})`);
+    verifier(await p.evaluate(() => document.activeElement && document.activeElement.value === "Article"), "le nom a le focus");
+    // Entrée enregistre nom et dossier.
+    await vider(p);
+    const champs = await p.$$(".carte-favori input");
+    await champs[0].fill("Bon article");
+    await champs[1].fill("Lectures");
+    await champs[1].press("Enter");
+    const envoi = (await messages(p)).find((m) => m.m === "favoriEnregistrer");
+    verifier(envoi && envoi.titre === "Bon article" && envoi.dossier === "Lectures" && envoi.ancienne === "https://a.fr/article", `envoi : ${JSON.stringify(envoi)}`);
+    verifier(await p.$eval("#menu-commandes", (n) => n.hidden), "Entrée referme la fenêtre");
+    // Echap ne touche à rien ; « Supprimer » retire le favori.
+    await p.evaluate((x) => window.trame.carteFavori(x), Object.assign({}, carte, { nouveau: false }));
+    egal(await p.$eval(".carte-favori .mar-tete b", (n) => n.textContent), "Modifier le favori", "déjà favori : « Modifier le favori »");
+    await vider(p);
+    await (await p.$(".carte-favori input")).fill("Autre nom");
+    await p.keyboard.press("Escape");
+    verifier(!(await messages(p)).some((m) => m.m === "favoriEnregistrer"), "Échap n'enregistre rien");
+    await p.evaluate((x) => window.trame.carteFavori(x), carte);
+    await vider(p);
+    await p.click(".carte-favori button.rouge");
+    const recus = await messages(p);
+    verifier(recus.some((m) => m.m === "favoriRetirer" && m.url === "https://a.fr/article"), "Supprimer retire le favori");
+    verifier(!recus.some((m) => m.m === "favoriEnregistrer"), "Supprimer n'enregistre pas en plus");
+    // Sans changement, refermer n'envoie rien.
+    await p.evaluate((x) => window.trame.carteFavori(x), carte);
+    await vider(p);
+    await p.click(".carte-favori .ok");
+    verifier(!(await messages(p)).some((m) => m.m === "favoriEnregistrer"), "rien changé : rien envoyé");
+    await p.close();
+  });
+
   await cas("accueil : les fils deviennent des cartes, un onglet se clique", async () => {
     const p = await page("newtab.html");
     const etat = etatDeBase();
@@ -1864,7 +1951,7 @@ async function suite() {
     egal(await p.$eval("#page-badge", (n) => (n.hidden ? "" : n.textContent)), "1", "badge : un guet a changé");
     await vider(p);
     await p.click("#btn-favori");
-    verifier((await messages(p)).some((m) => m.m === "favori"), "l'étoile bascule le favori");
+    verifier((await messages(p)).some((m) => m.m === "favori"), "l'étoile demande le favori");
     await p.click("#btn-page");
     verifier(await p.$eval("#menu-page", (n) => !n.hidden), "le menu de la page s'ouvre");
     const texte = await p.$eval("#menu-page", (n) => n.textContent);

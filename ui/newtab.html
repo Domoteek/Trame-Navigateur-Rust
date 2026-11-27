@@ -243,7 +243,8 @@
       <div id="bloc-favoris" hidden>
         <div class="ar-tete">
           <h2>Favoris</h2>
-          <span class="fav-aide">des pages précises · Ctrl+D sur une page pour l'ajouter ou la retirer</span>
+          <div class="groupes" id="dossiers-favoris"></div>
+          <span class="fav-aide">des pages précises · Ctrl+D sur une page pour l'ajouter ou la modifier</span>
         </div>
         <div class="favoris" id="favoris"></div>
       </div>
@@ -504,16 +505,56 @@
 
         /* ------------------------------------------------------------ favoris */
         // Des pages precises (un article, une video), distinctes des acces rapides (des sites).
+        // Dossiers : une rangee de boutons comme les groupes d'acces (« Tous », chaque dossier,
+        // « + dossier »). Le dossier choisi est retenu d'une ouverture a l'autre.
         let signatureFavoris = "";
+        let dossierFiltre = TOUS;
+        try { dossierFiltre = localStorage.getItem("trame.favoris.dossier") || TOUS; } catch (e) {}
+        let dossierAttendu = null;
+        function dossiers() { return (etat && etat.carnet && etat.carnet.favorisDossiers) || []; }
+        function choisirDossier(d) {
+          dossierFiltre = d;
+          try { localStorage.setItem("trame.favoris.dossier", d); } catch (e) {}
+          signatureFavoris = "";
+          rendreFavoris();
+        }
         function rendreFavoris() {
           const liste = (etat && etat.carnet && etat.carnet.favoris) || [];
-          const signature = JSON.stringify(liste);
+          const ds = dossiers();
+          if (ds.includes(dossierAttendu)) dossierAttendu = null;
+          if (dossierFiltre !== TOUS && !ds.includes(dossierFiltre) && dossierFiltre !== dossierAttendu) dossierFiltre = TOUS;
+          const signature = JSON.stringify([liste, ds, dossierFiltre]);
           if (signature === signatureFavoris) return;
           signatureFavoris = signature;
-          document.getElementById("bloc-favoris").hidden = !liste.length;
+          document.getElementById("bloc-favoris").hidden = !liste.length && !ds.length;
+
+          const zoneD = document.getElementById("dossiers-favoris");
+          zoneD.textContent = "";
+          const bouton = (nom, libelle) => {
+            const n = nom === TOUS ? liste.length : liste.filter((f) => f.dossier === nom).length;
+            const b = elem("button", "g" + (dossierFiltre === nom ? " on" : ""), libelle);
+            b.title = `${n} favori(s)` + (nom !== TOUS ? "\nClic droit : renommer ou supprimer le dossier" : "");
+            b.onclick = () => choisirDossier(nom);
+            if (nom !== TOUS) b.oncontextmenu = (e) => { e.preventDefault(); menuDossier(nom, e.clientX, e.clientY); };
+            zoneD.appendChild(b);
+          };
+          if (ds.length) {
+            bouton(TOUS, "Tous");
+            for (const d of ds) bouton(d, d);
+          }
+          const plus = elem("button", "g plus", "＋ dossier");
+          plus.onclick = () => dialogueDossier(null);
+          zoneD.appendChild(plus);
+
           const zone = document.getElementById("favoris");
           zone.textContent = "";
-          for (const f of liste) zone.appendChild(ligneFavori(f));
+          const visibles = liste.filter((f) => dossierFiltre === TOUS || f.dossier === dossierFiltre);
+          for (const f of visibles) zone.appendChild(ligneFavori(f));
+          if (!visibles.length) {
+            zone.appendChild(elem("div", "ar-vide", liste.length
+              ? "Aucun favori dans ce dossier : clic droit sur un favori → « Modifier… » pour l'y ranger."
+              : "Aucun favori pour l'instant : Ctrl+D sur une page pour la garder."));
+          }
         }
 
         function ligneFavori(f) {
@@ -537,7 +578,7 @@
           d.appendChild(ico);
           const txt = elem("div", "txt");
           txt.appendChild(elem("span", "t", f.titre));
-          txt.appendChild(elem("span", "d", f.domaine || f.url));
+          txt.appendChild(elem("span", "d", (f.dossier && dossierFiltre === TOUS ? f.dossier + " · " : "") + (f.domaine || f.url)));
           d.appendChild(txt);
           const x = elem("button", "x", "×");
           x.title = "Retirer des favoris";
@@ -554,7 +595,17 @@
             const lignes = [
               { texte: "Ouvrir (nouvel onglet)", faire: () => ouvrir(false) },
               { texte: "Ouvrir à la place de cette page", faire: () => ouvrir(true) },
+              "-",
+              { texte: "Modifier…", faire: () => dialogueFavori(f) },
             ];
+            const ds = dossiers();
+            if (ds.length) {
+              lignes.push("-", { titre: "Dossier" });
+              for (const d of ds) {
+                lignes.push({ texte: (f.dossier === d ? "✓ " : "   ") + d, faire: () => ipc({ m: "favoriEnregistrer", ancienne: f.url, url: f.url, titre: f.titre, dossier: d }) });
+              }
+              if (f.dossier) lignes.push({ texte: "   Hors dossier", faire: () => ipc({ m: "favoriEnregistrer", ancienne: f.url, url: f.url, titre: f.titre, dossier: "" }) });
+            }
             if (site && /^https?:/.test(site)) {
               lignes.push("-", { texte: "Créer un accès rapide vers ce site", faire: () => ipc({ m: "accesEnregistrer", url: site, titre: "", groupe: "", rail: false, ancienne: "" }) });
             }
@@ -690,6 +741,54 @@
               rail: iRail.checked, ancienne: a ? a.url : "",
             });
           }, a ? () => ipc({ m: "accesRetirer", url: a.url }) : null);
+        }
+
+        function dialogueFavori(f) {
+          let iNom, iUrl, iDossier;
+          ouvrirDialogue("Modifier le favori", (d) => {
+            iNom = champTexte(d, "Nom", f.titre, "Laissé vide : l'adresse");
+            iUrl = champTexte(d, "Adresse", f.url);
+            iDossier = champTexte(d, "Dossier", f.dossier, "Aucun, ou un nom (créé s'il n'existe pas)");
+            const ds = dossiers();
+            if (ds.length) {
+              const dl = document.createElement("datalist");
+              dl.id = "liste-dossiers";
+              for (const x of ds) { const o = document.createElement("option"); o.value = x; dl.appendChild(o); }
+              d.appendChild(dl);
+              iDossier.setAttribute("list", "liste-dossiers");
+            }
+          }, () => {
+            const url = iUrl.value.trim();
+            if (!url) { iUrl.focus(); return false; }
+            ipc({ m: "favoriEnregistrer", ancienne: f.url, url, titre: iNom.value.trim(), dossier: iDossier.value.trim() });
+          }, () => ipc({ m: "favoriRetirer", url: f.url }));
+        }
+
+        function dialogueDossier(nom) {
+          let iNom;
+          ouvrirDialogue(nom ? "Renommer le dossier" : "Nouveau dossier de favoris", (d) => {
+            iNom = champTexte(d, "Nom du dossier", nom || "", "ex. Recettes, Travail, À lire…");
+          }, () => {
+            const v = iNom.value.trim();
+            if (!v) { iNom.focus(); return false; }
+            if (nom) {
+              if (v !== nom) {
+                ipc({ m: "favoriDossierRenommer", nom, nouveau: v });
+                if (dossierFiltre === nom) { dossierAttendu = v; choisirDossier(v); }
+              }
+            } else {
+              ipc({ m: "favoriDossierAjouter", nom: v });
+              dossierAttendu = v;
+              choisirDossier(v);
+            }
+          });
+        }
+
+        function menuDossier(nom, x, y) {
+          ouvrirMenu([
+            { texte: "Renommer…", faire: () => dialogueDossier(nom) },
+            { texte: "Supprimer le dossier (les favoris restent)", classe: "rouge", faire: () => ipc({ m: "favoriDossierRetirer", nom }) },
+          ], x, y);
         }
 
         function dialogueGroupe(nom) {

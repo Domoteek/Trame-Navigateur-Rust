@@ -394,6 +394,8 @@ pub struct App {
 
     // ---- carnet et outils (voir `app/outils.rs`)
     favoris: Vec<crate::carnet::Favori>,
+    /// Dossiers de favoris crees (`favoris-dossiers.json`), dans l'ordre choisi.
+    favoris_dossiers: Vec<String>,
     /// Acces rapides (sites), distincts des favoris (pages) depuis le 2026-11-22.
     acces: Vec<crate::carnet::Acces>,
     /// Groupes d'acces rapides, dans l'ordre d'affichage (un groupe peut etre vide).
@@ -902,6 +904,7 @@ impl App {
             modifie: false,
             dernier_toast: 0,
             favoris: Vec::new(),
+            favoris_dossiers: Vec::new(),
             acces: Vec::new(),
             acces_groupes: Vec::new(),
             guets: Vec::new(),
@@ -5911,7 +5914,7 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
             "zoomMoins" => self.zoom_pas(-1),
             "zoomZero" => self.zoom_reinitialiser(),
             "chercherPage" => self.chercher_dans_page(),
-            "favori" => self.basculer_favori(),
+            "favori" => self.favori_de_la_page(),
             "imprimer" => self.imprimer(),
             "recharger" => {
                 if let Some(w) = self.actif.and_then(|id| self.webviews.get(&id)) {

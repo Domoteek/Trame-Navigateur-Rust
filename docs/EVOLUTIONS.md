@@ -1626,6 +1626,28 @@ parallèle chez Cloudflare par le même tunnel → **entiers en 3,5 s (~165 Mbit
 à force de bancs (Trame tués par `/F`, sessions jamais closes), Nord répond `AUTH_FAILED` — limite
 d'appareils du compte ; espacer les bancs OpenVPN.
 
+**Favoris : fenêtre de Ctrl+D, modification, dossiers (2026-11-27, après 0.4.94).** Bilan du
+27/11 comparé à Chrome, Firefox et Opera : les favoris étaient en retard sur les accès rapides
+(ni modifier, ni ranger) et un second Ctrl+D les retirait sans rien demander. Choix de Clément :
+« 1, 2 et 3 ». (1) **Ctrl+D ou l'étoile** gardent la page puis ouvrent une fenêtre **sous l'étoile**
+(`App::favori_de_la_page` → `window.trame.carteFavori`, dessinée dans la zone des commandes de la
+barre) : Nom, Dossier, « Supprimer », « Terminé ». Entrée ou un clic ailleurs enregistre, Échap
+referme sans toucher au nom ni au dossier ; un second Ctrl+D rouvre la fenêtre (« Modifier le
+favori ») au lieu de retirer. (2) **« Modifier… »** au clic droit d'un favori du Nouvel onglet :
+nom, adresse, dossier (`favoriEnregistrer`, refus d'une adresse déjà en favori). (3) **Dossiers** :
+`Favori.dossier` (vide = hors dossier), `favoris-dossiers.json` pour les dossiers vides, rangée
+« Tous / dossiers / + dossier » au-dessus des favoris (clic droit : renommer — vers un nom existant
+= fusion — ou supprimer, les favoris restent), et choix du dossier au clic droit d'un favori.
+**L'import HTML garde les dossiers** (pile `<H3>`/`</DL>`, chemin « Parent › Enfant », racines
+d'office comme « Barre de favoris » écartées) et l'export écrit un `<H3>` par dossier. Preuves :
+`cargo test` 263/263 (dont un import de Chrome à sous-dossiers et dossier vide), `tester-ui`
+116/116 (deux cas : dossiers du Nouvel onglet, fenêtre de la barre), et une sonde sur le vrai
+binaire caché : Ctrl+D tapé **dans la page** → fenêtre ouverte, barre agrandie à 296 px, nom et
+dossier écrits dans `favoris.json`, second Ctrl+D = « Modifier », « Supprimer » éteint l'étoile.
+Pas encore fait : une page de gestion des favoris (recherche, tri, glisser), ni le rangement à la
+souris ; `favoris-dossiers.json` n'est pas dans la sauvegarde du profil (pas plus que
+`acces-groupes.json`), mais les dossiers portés par les favoris y sont.
+
 ## 11. L'état aujourd'hui
 
 ```
@@ -1666,8 +1688,8 @@ node outils/eprouver-entrees.mjs entrees d'interface : tout repond (les clics, d
 - La **sauvegarde du profil** peut être planifiée depuis la 0.4.51 (dossier, intervalle, rotation) ;
   elle n'a pas encore été mesurée sur une longue durée (un cycle de 24 h ne s'éprouve pas en une
   session) : ce qui est prouvé, c'est l'écriture, la rotation et l'état relu.
-- L'**import** de favoris HTML aplatit les dossiers de Chrome : un favori n'a pas de groupe dans
-  le modèle, seuls les accès rapides en ont.
+- Les **dossiers de favoris** n'ont qu'un niveau à l'écran : les sous-dossiers importés deviennent
+  un nom « Parent › Enfant ». Pas encore de page de gestion des favoris (recherche, tri, glisser).
 
 ## 12. Où lire quoi
 

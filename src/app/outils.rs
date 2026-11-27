@@ -39,6 +39,7 @@ impl App {
 
     pub(super) fn charger_carnet(&mut self) {
         self.favoris = self.profil.charger_liste(&self.profil.fichier_favoris());
+        self.favoris_dossiers = self.profil.charger_liste(&self.fichier_favoris_dossiers());
         self.guets = self.profil.charger_liste(&self.profil.fichier_guets());
         self.acces_groupes = self.profil.charger_liste(&self.fichier_acces_groupes());
         if self.fichier_acces().exists() {
@@ -132,6 +133,26 @@ impl App {
         self.profil.sauver_liste(&self.profil.fichier_favoris(), &self.favoris);
     }
 
+    fn fichier_favoris_dossiers(&self) -> std::path::PathBuf {
+        self.profil.racine().join(crate::carnet::NOM_FICHIER_FAVORIS_DOSSIERS)
+    }
+
+    fn sauver_favoris_dossiers(&self) {
+        self.profil.sauver_liste(&self.fichier_favoris_dossiers(), &self.favoris_dossiers);
+    }
+
+    /// Dossiers de favoris a afficher : ceux crees, puis ceux qu'un favori porte sans etre dans
+    /// la liste (un import, un fichier edite a la main).
+    pub(super) fn dossiers_affiches(&self) -> Vec<String> {
+        let mut d = self.favoris_dossiers.clone();
+        for f in &self.favoris {
+            if !f.dossier.is_empty() && !d.contains(&f.dossier) {
+                d.push(f.dossier.clone());
+            }
+        }
+        d
+    }
+
     fn sauver_acces_groupes(&self) {
         self.profil.sauver_liste(&self.fichier_acces_groupes(), &self.acces_groupes);
     }
@@ -222,7 +243,9 @@ impl App {
                 "titre": if f.titre.is_empty() { urls::affichage_court(&f.url) } else { f.titre.clone() },
                 "domaine": urls::domaine_enregistrable(&f.url),
                 "icone": f.icone.clone().or_else(|| self.icone_connue(&f.url)),
+                "dossier": f.dossier,
             })).collect::<Vec<_>>(),
+            "favorisDossiers": self.dossiers_affiches(),
             "acces": self.acces_json(),
             "accesRailMax": RAIL_MAX,
             "accesGroupes": self.groupes_affiches(),
@@ -289,7 +312,7 @@ impl App {
                 true
             }
             "favori" => {
-                self.basculer_favori();
+                self.favori_de_la_page();
                 true
             }
             "favoriOuvrir" => {
@@ -328,6 +351,81 @@ impl App {
                     self.sauver_favoris();
                     self.pousser_etat();
                 }
+                true
+            }
+            "favoriEnregistrer" => {
+                // Modifier un favori (fenetre de Ctrl+D, « Modifier… » du Nouvel onglet) :
+                // `ancienne` le designe, `url`, `titre` et `dossier` sont ses nouvelles valeurs.
+                let ancienne = v["ancienne"].as_str().unwrap_or("");
+                let Some(i) = self.favoris.iter().position(|f| f.url == ancienne) else {
+                    return true;
+                };
+                let saisie = v["url"].as_str().unwrap_or("").trim();
+                let url = if saisie.is_empty() {
+                    ancienne.to_string()
+                } else {
+                    urls::normaliser_avec(saisie, &self.reglages.moteur)
+                };
+                if !carnet::favorisable(&url) {
+                    self.signaler("Un favori doit être une adresse web.");
+                    return true;
+                }
+                if url != ancienne && self.favoris.iter().any(|f| f.url == url) {
+                    self.signaler("Cette adresse est déjà dans tes favoris.");
+                    return true;
+                }
+                let titre = v["titre"].as_str().unwrap_or("").trim().to_string();
+                let dossier = v["dossier"].as_str().unwrap_or("").trim().to_string();
+                if !dossier.is_empty() && !self.dossiers_affiches().contains(&dossier) {
+                    self.favoris_dossiers = self.dossiers_affiches();
+                    self.favoris_dossiers.push(dossier.clone());
+                    self.sauver_favoris_dossiers();
+                }
+                let f = &mut self.favoris[i];
+                if f.url != url {
+                    f.icone = None;
+                    f.url = url;
+                }
+                f.titre = if titre.is_empty() { urls::affichage_court(&f.url) } else { titre };
+                f.dossier = dossier;
+                self.sauver_favoris();
+                self.pousser_etat();
+                true
+            }
+            "favoriDossierAjouter" => {
+                let nom = v["nom"].as_str().unwrap_or("").trim().to_string();
+                if !nom.is_empty() && !self.dossiers_affiches().contains(&nom) {
+                    self.favoris_dossiers = self.dossiers_affiches();
+                    self.favoris_dossiers.push(nom);
+                    self.sauver_favoris_dossiers();
+                    self.pousser_etat();
+                }
+                true
+            }
+            "favoriDossierRenommer" | "favoriDossierRetirer" => {
+                // Renommer vers un dossier existant les fusionne ; retirer un dossier garde ses
+                // favoris, hors dossier.
+                let nom = v["nom"].as_str().unwrap_or("").trim().to_string();
+                let nouveau = if m == "favoriDossierRenommer" {
+                    v["nouveau"].as_str().unwrap_or("").trim().to_string()
+                } else {
+                    String::new()
+                };
+                if nom.is_empty() || (m == "favoriDossierRenommer" && nouveau.is_empty()) {
+                    return true;
+                }
+                self.favoris_dossiers = self.dossiers_affiches();
+                if nouveau.is_empty() || self.favoris_dossiers.contains(&nouveau) {
+                    self.favoris_dossiers.retain(|d| *d != nom);
+                } else if let Some(d) = self.favoris_dossiers.iter_mut().find(|d| **d == nom) {
+                    *d = nouveau.clone();
+                }
+                for f in self.favoris.iter_mut().filter(|f| f.dossier == nom) {
+                    f.dossier = nouveau.clone();
+                }
+                self.sauver_favoris_dossiers();
+                self.sauver_favoris();
+                self.pousser_etat();
                 true
             }
             // ---- acces rapides (page « Nouvel onglet » et bande du rail)
@@ -812,7 +910,10 @@ impl App {
 
     // ------------------------------------------------------------------ favoris, impression
 
-    pub(super) fn basculer_favori(&mut self) {
+    /// Ctrl+D ou l'etoile : la page entre dans les favoris si elle n'y est pas, puis la barre
+    /// ouvre sa fenetre sous l'etoile (nom, dossier, Supprimer). Avant la 0.4.95, un second
+    /// Ctrl+D retirait le favori sans rien demander ; c'est maintenant le bouton « Supprimer ».
+    pub(super) fn favori_de_la_page(&mut self) {
         // L'adresse vraie de la page, pas celle du dernier chargement (YouTube change de video
         // sans recharger : le favori gardait youtube.com, constate le 2026-11-22).
         if let Some(id) = self.actif {
@@ -823,21 +924,36 @@ impl App {
             self.signaler("Les favoris s'appliquent aux pages web.");
             return;
         }
-        if let Some(pos) = self.favoris.iter().position(|f| f.url == o.url) {
-            self.favoris.remove(pos);
-            self.signaler("Retiré des favoris.");
-        } else {
+        let nouveau = !self.favoris.iter().any(|f| f.url == o.url);
+        if nouveau {
             self.favoris.push(Favori {
                 url: o.url.clone(),
                 titre: o.libelle(),
                 ajoute_le: maintenant_ms(),
                 icone: o.favicon.clone(),
+                dossier: String::new(),
             });
-            self.signaler("Page ajoutée aux favoris (Ctrl+D pour la retirer).");
+            self.sauver_favoris();
+            self.pousser_etat();
+            self.capturer_icones_ouvertes();
         }
-        self.sauver_favoris();
-        self.pousser_etat();
-        self.capturer_icones_ouvertes();
+        let Some(f) = self.favoris.iter().find(|f| f.url == o.url) else { return };
+        let carte = json!({
+            "url": f.url,
+            "titre": f.titre,
+            "dossier": f.dossier,
+            "nouveau": nouveau,
+            "dossiers": self.dossiers_affiches(),
+        });
+        if let Some(barre) = &self.barre {
+            let _ = barre.evaluate_script(&format!(
+                "window.trame && window.trame.carteFavori && window.trame.carteFavori({carte})"
+            ));
+            // Le nom doit pouvoir se taper tout de suite, meme quand Ctrl+D venait de la page.
+            let _ = barre.focus();
+        } else if nouveau {
+            self.signaler("Page ajoutée aux favoris.");
+        }
     }
 
     /// Favoris qui repondent a une saisie (pour la barre). Vide : les plus recents.

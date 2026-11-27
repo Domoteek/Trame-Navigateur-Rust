@@ -63,16 +63,18 @@ window.NOTICE = {
       "chapeau": "Deux sortes de raccourcis vers des sites, à ne pas confondre : l'accès rapide ouvre un SITE, le favori retrouve une PAGE précise.",
       "etapes": [
         { "titre": "Accès rapide = un site", "texte": "Les icônes sous le logo du rail (10 places). Un clic ouvre toujours le site dans un nouvel onglet. Clic droit sur un onglet → « Ajouter le site aux accès rapides »." },
-        { "titre": "Favori = une page", "texte": "Ctrl+D ou l'étoile de la barre. Le favori ramène à l'onglet où la page est ouverte, sinon il l'ouvre." },
+        { "titre": "Favori = une page", "texte": "Ctrl+D ou l'étoile de la barre : la page est gardée, et une fenêtre s'ouvre sous l'étoile pour changer son nom, la ranger dans un dossier ou la supprimer. Le favori ramène à l'onglet où la page est ouverte, sinon il l'ouvre." },
+        { "titre": "Dossiers de favoris", "texte": "Sur le Nouvel onglet, les dossiers se choisissent au-dessus des favoris ; « + dossier » en crée un, clic droit sur un dossier pour le renommer ou le supprimer (ses favoris restent). Clic droit sur un favori → « Modifier… » pour son nom, son adresse et son dossier." },
         { "titre": "Replier le rail", "texte": "Ctrl+B : le rail devient une colonne d'icônes. Son aspect se choisit dans Réglages → Apparence." }
       ],
       "conseils": [
-        "Les favoris sortent aussi dans la barre dès que tu tapes leur nom, et en tuiles sur la page Nouvel onglet."
+        "Les favoris sortent aussi dans la barre dès que tu tapes leur nom, et en tuiles sur la page Nouvel onglet.",
+        "Les dossiers des favoris importés de Chrome, Edge ou Firefox sont gardés."
       ],
       "actions": [
         { "libelle": "Replier ou déplier le rail", "commande": "rail" }
       ],
-      "mots": ["rail", "accès rapide", "acces", "favori", "favoris", "étoile", "marque-page", "signet", "replier", "barre latérale"],
+      "mots": ["rail", "accès rapide", "acces", "favori", "favoris", "étoile", "marque-page", "signet", "replier", "barre latérale", "dossier", "dossier de favoris", "renommer un favori", "modifier un favori", "supprimer un favori"],
       "voir": ["onglets-fils", "sauvegarde"]
     },
     {
@@ -249,7 +251,7 @@ window.NOTICE = {
         { "titre": "Mises à jour", "texte": "Trame propose seul une nouvelle version (fenêtre en bas à droite) : « Installer » suffit." }
       ],
       "conseils": [
-        "Les favoris s'exportent et s'importent au format de Chrome, Edge et Firefox."
+        "Les favoris s'exportent et s'importent au format de Chrome, Edge et Firefox, dossiers compris."
       ],
       "actions": [
         { "libelle": "Téléchargements", "commande": "telechargements" },
@@ -307,7 +309,7 @@ window.NOTICE = {
     { "groupe": "Pages", "touche": "Ctrl+R / F5", "effet": "Recharger", "action": "recharger" },
     { "groupe": "Pages", "touche": "Échap", "effet": "Arrêter le chargement", "action": "arret" },
     { "groupe": "Pages", "touche": "Ctrl+F", "effet": "Chercher dans la page", "action": "chercherPage" },
-    { "groupe": "Pages", "touche": "Ctrl+D", "effet": "Ajouter ou retirer des favoris", "action": "favori" },
+    { "groupe": "Pages", "touche": "Ctrl+D", "effet": "Ajouter aux favoris, ou modifier le favori de la page", "action": "favori" },
     { "groupe": "Pages", "touche": "Ctrl+P", "effet": "Imprimer ou enregistrer en PDF", "action": "imprimer" },
     { "groupe": "Pages", "touche": "Ctrl+ + / -", "effet": "Zoom avant / arrière", "action": "zoomPlus" },
     { "groupe": "Pages", "touche": "Ctrl+0", "effet": "Zoom à 100 %", "action": "zoomZero" },

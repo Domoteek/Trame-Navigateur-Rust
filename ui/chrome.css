@@ -548,6 +548,10 @@ input {
   border: 1px solid var(--bord); border-radius: 7px; padding: 5px 10px;
 }
 .mar-boutons button.ok { color: #06231f; background: var(--vif); border-color: transparent; font-weight: 600; }
+.mar-boutons button.rouge { color: #f87171; }
+.mar-boutons button.gauche { margin-right: auto; }
+/* Fenetre d'un favori (Ctrl+D), sous l'etoile : un peu plus large que le menu d'un acces. */
+.menu-acces-rail.carte-favori { width: 320px; }
 
 .rail-pied {
   flex: 0 0 auto;

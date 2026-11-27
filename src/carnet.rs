@@ -29,7 +29,14 @@ pub struct Favori {
     /// Adresse de l'icone du site, reprise de l'onglet au moment de l'ajout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icone: Option<String>,
+    /// Dossier du favori (« Recettes », « Travail › Clients »…). Vide : hors dossier.
+    /// Un seul niveau dans l'interface ; un import garde le chemin des sous-dossiers en un nom.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub dossier: String,
 }
+
+/// Le fichier des dossiers de favoris crees (un dossier vide doit survivre a un redemarrage).
+pub const NOM_FICHIER_FAVORIS_DOSSIERS: &str = "favoris-dossiers.json";
 
 /// Le nom du fichier des acces rapides, ecrit ici et non a la main a chaque appel : la
 /// sauvegarde (`sauvegarde.rs`) doit emporter le meme fichier que l'application ecrit, sinon

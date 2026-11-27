@@ -119,6 +119,11 @@ window.trame = {
     if (surface !== "barre" || !x || !x.acces) return;
     ouvrirMenuAccesBarre(x);
   },
+  /** Ctrl+D ou l'etoile : la fenetre du favori de la page, sous l'etoile. */
+  carteFavori(x) {
+    if (surface !== "barre" || !x || !x.url) return;
+    ouvrirCarteFavori(x);
+  },
   toast,
   focusCouture() {
     if (surface !== "barre") return;
@@ -1097,6 +1102,13 @@ function ouvrirPanneau() {
 }
 
 function fermerPanneau() {
+  // La fenetre d'un favori enregistre ce qui a ete tape, quelle que soit la facon de la quitter
+  // (Entree, clic dans la page, autre menu) — sauf Echap et « Supprimer », qui l'ont videe.
+  if (carteFavoriOuverte) {
+    const c = carteFavoriOuverte;
+    carteFavoriOuverte = null;
+    c.enregistrer();
+  }
   if (!panneauOuvert) return;
   panneauOuvert = false;
   ipc({ m: "panneau", open: false });
@@ -1780,7 +1792,7 @@ function rendreBarre(s) {
   const etoile = document.getElementById("btn-favori");
   etoile.hidden = !carnet.pageWeb;
   etoile.classList.toggle("on", !!carnet.favori);
-  etoile.title = carnet.favori ? "Retirer des favoris (Ctrl+D)" : "Ajouter aux favoris (Ctrl+D)";
+  etoile.title = carnet.favori ? "Modifier le favori : nom, dossier, supprimer (Ctrl+D)" : "Ajouter aux favoris (Ctrl+D)";
   const badgePage = document.getElementById("page-badge");
   badgePage.hidden = !carnet.guetsNonVus;
   badgePage.textContent = carnet.guetsNonVus || "";
@@ -1831,6 +1843,93 @@ function ouvrirMenuAccesBarre(x) {
   const voulu = ancreAcces.y - haut;
   const maxi = ancreAcces.h ? ancreAcces.h - haut - 8 - hMenu : voulu;
   m.style.marginTop = Math.max(0, Math.min(voulu, maxi)) + "px";
+  ajusterHauteur();
+}
+
+/* Fenetre d'un favori, sous l'etoile (Ctrl+D ou clic sur l'etoile) : la page est deja gardee
+   quand elle s'ouvre. Nom et dossier se changent ici ; « Supprimer » retire le favori. Entree ou
+   « Terminé » enregistre, cliquer ailleurs aussi (comme Chrome) ; Echap referme sans toucher au
+   nom ni au dossier. Elle reprend la zone des commandes : un seul menu ouvert a la fois. */
+let carteFavoriOuverte = null; // { url, enregistrer } tant que la fenetre est ouverte
+function ouvrirCarteFavori(x) {
+  ouvrirMenuCommandes(null);
+  const zone = document.getElementById("menu-commandes");
+  zone.textContent = "";
+  const m = elem("div", "menu-acces-rail dans-barre carte-favori");
+  const tete = elem("div", "mar-tete");
+  tete.appendChild(elem("b", null, x.nouveau ? "Favori ajouté" : "Modifier le favori"));
+  tete.appendChild(elem("span", null, x.url));
+  m.appendChild(tete);
+  const f = document.createElement("form");
+  f.className = "mar-form";
+  const champ = (libelle, valeur, indice) => {
+    const l = elem("label", null, libelle);
+    const i = document.createElement("input");
+    i.type = "text";
+    i.spellcheck = false;
+    i.value = valeur || "";
+    if (indice) i.placeholder = indice;
+    l.appendChild(i);
+    f.appendChild(l);
+    return i;
+  };
+  const iNom = champ("Nom", x.titre);
+  const iDossier = champ("Dossier", x.dossier, "Aucun, ou un nom (créé s'il n'existe pas)");
+  const dossiers = x.dossiers || (etat && etat.carnet && etat.carnet.favorisDossiers) || [];
+  if (dossiers.length) {
+    const dl = document.createElement("datalist");
+    dl.id = "liste-dossiers-favoris";
+    for (const d of dossiers) {
+      const o = document.createElement("option");
+      o.value = d;
+      dl.appendChild(o);
+    }
+    f.appendChild(dl);
+    iDossier.setAttribute("list", dl.id);
+  }
+  const boutons = elem("div", "mar-boutons");
+  const suppr = elem("button", "rouge gauche", "Supprimer");
+  suppr.type = "button";
+  suppr.title = "Retirer cette page des favoris";
+  suppr.onclick = () => {
+    carteFavoriOuverte = null;
+    ipc({ m: "favoriRetirer", url: x.url });
+    toast("Retiré des favoris.");
+    fermerPanneau();
+  };
+  const ok = elem("button", "ok", "Terminé");
+  ok.type = "submit";
+  boutons.appendChild(suppr);
+  boutons.appendChild(ok);
+  f.appendChild(boutons);
+  const enregistrer = () => {
+    const titre = iNom.value.trim();
+    const dossier = iDossier.value.trim();
+    if (titre === (x.titre || "") && dossier === (x.dossier || "")) return;
+    ipc({ m: "favoriEnregistrer", ancienne: x.url, url: x.url, titre, dossier });
+  };
+  carteFavoriOuverte = { url: x.url, enregistrer };
+  f.onsubmit = (e) => {
+    e.preventDefault();
+    fermerPanneau();
+  };
+  f.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      carteFavoriOuverte = null;
+      fermerPanneau();
+    }
+  });
+  m.appendChild(f);
+  zone.appendChild(m);
+  // Collee sous l'etoile, bord droit aligne sur elle, sans sortir de la fenetre.
+  const etoile = document.getElementById("btn-favori").getBoundingClientRect();
+  const largeur = m.getBoundingClientRect().width || 290;
+  const gauche = Math.max(6, Math.min(etoile.right - largeur, window.innerWidth - largeur - 6));
+  m.style.marginLeft = Math.round(gauche) + "px";
+  iNom.focus();
+  iNom.select();
   ajusterHauteur();
 }
 
@@ -2188,7 +2287,7 @@ function rendreMenuPage(s) {
 
   if (c.pageWeb && surPage) {
     colonne.appendChild(
-      lignePage(c.favori ? "Retirer des favoris" : "Ajouter aux favoris", "Ctrl+D", "etoile", { m: "favori" }, c.favori ? "on" : "")
+      lignePage(c.favori ? "Modifier le favori" : "Ajouter aux favoris", "Ctrl+D", "etoile", { m: "favori" }, c.favori ? "on" : "")
     );
     colonne.appendChild(lignePage("Imprimer ou enregistrer en PDF", "Ctrl+P", "imprimer", { m: "imprimer" }));
     colonne.appendChild(lignePage("Chercher dans la page", "Ctrl+F", "search", { m: "chercherPage" }));
@@ -2520,6 +2619,11 @@ function brancherBarre() {
   document.getElementById("btn-reglages").onclick = () => ipc({ m: "ouvrirReglages" });
   document.getElementById("btn-favori").onclick = (e) => {
     e.stopPropagation();
+    // Second clic sur l'etoile, fenetre ouverte : elle se referme (en gardant ce qui est tape).
+    if (carteFavoriOuverte) {
+      fermerPanneau();
+      return;
+    }
     ipc({ m: "favori" });
   };
   document.getElementById("btn-page").onclick = () => {
