@@ -31,6 +31,7 @@ mod ovpn;
 mod probe;
 mod profile;
 mod protocol;
+mod rangement;
 mod reseau;
 mod ressources;
 mod sauvegarde;

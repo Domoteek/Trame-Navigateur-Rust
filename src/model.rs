@@ -433,6 +433,10 @@ pub struct Reglages {
     /// « Telechargements » de Windows.
     #[serde(default)]
     pub dossier_telechargements: String,
+    /// Rangement des telechargements dans des sous-dossiers, au moment ou ils arrivent
+    /// (`rangement.rs`). Coupe par defaut.
+    #[serde(default)]
+    pub rangement: crate::rangement::Rangement,
     /// Sauvegarde automatique du profil : une archive `.trame` deposee dans
     /// `dossier_sauvegardes` toutes les `sauvegarde_heures` heures, sans rien demander.
     #[serde(default)]
@@ -658,6 +662,7 @@ impl Default for Reglages {
             lecture_exclus: Vec::new(),
             paquets_zap: Vec::new(),
             dossier_telechargements: String::new(),
+            rangement: crate::rangement::Rangement::default(),
             sauvegarde_auto: false,
             dossier_sauvegardes: String::new(),
             sauvegarde_heures: sauvegarde_heures_defaut(),

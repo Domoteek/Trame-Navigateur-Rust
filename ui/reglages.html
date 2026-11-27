@@ -330,6 +330,10 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3a5 5 0 1 0 7 6.2A5.5 5.5 0 0 1 6 3z"/></svg>
             Onglets et mémoire <span class="nb" id="nav-mo"></span>
           </a>
+          <a data-rubrique="telechargements">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 4.5h4.2l1.5 1.5h7.3v7a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"/><path d="M8 7.5v4m0 0 1.7-1.7M8 11.5 6.3 9.8"/></svg>
+            Téléchargements <span class="nb" id="nav-rangement"></span>
+          </a>
           <a data-rubrique="confidentialite">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l5.5 2v4.2c0 3.3-2.3 5.8-5.5 6.8-3.2-1-5.5-3.5-5.5-6.8V3.5z"/></svg>
             Confidentialité
@@ -837,6 +841,74 @@
           </div>
         </section>
 
+        <!-- ============================ TÉLÉCHARGEMENTS ============================ -->
+        <!-- Le rendu et les gestes de cette rubrique vivent dans `rangement.js`. -->
+        <section class="rubrique" id="r-telechargements">
+          <h2 class="titre-rubrique">Téléchargements</h2>
+          <p class="chapo">Où arrivent les fichiers, et comment Trame les range au moment où ils arrivent, sans rien déplacer après coup.</p>
+
+          <div class="groupe" data-mots="dossier téléchargements emplacement changer ouvrir downloads">
+            <h3>Dossier</h3>
+            <div class="carte">
+              <div class="ligne">
+                <div class="libelle"><b>Dossier des téléchargements</b><span class="chemin" id="rg-racine">—</span></div>
+                <button id="rg-ouvrir" title="Ouvrir le dossier dans l'Explorateur">Ouvrir</button>
+                <button id="rg-changer">Changer…</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="groupe" data-mots="ranger rangement trier classer organiser sous-dossier folderfresh vrac">
+            <div class="rg-maitre">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 14h8M8 17h5"/></svg>
+              <div class="libelle">
+                <b>Ranger les téléchargements</b>
+                <span>Chaque fichier va directement dans le bon sous-dossier. Coupé, Trame fait comme avant : tout à la racine.</span>
+              </div>
+              <div class="bascule" id="rg-actif"></div>
+            </div>
+          </div>
+
+          <div class="rg-deux" id="rg-corps">
+            <div class="rg-gauche">
+              <div class="groupe" data-mots="types fichiers images vidéos musique documents archives installeurs extensions catégorie">
+                <h3>Par type de fichier <span class="rg-droite"><button class="rg-leger" id="rg-types-defaut" title="Remettre les six types comme au départ">Remettre par défaut</button></span></h3>
+                <div class="rg-cats" id="rg-cats"></div>
+                <p class="note">Le type se lit sur l'extension du nom, puis sur ce que le site annonce quand le nom n'en a pas. Un fichier d'un type coupé, ou d'aucun type connu, reste à la racine.</p>
+              </div>
+
+              <div class="groupe" data-mots="règles règle site pronote nom contient renommer dossier ordre">
+                <h3>Règles <span class="rg-pastille">passent avant les types</span><span class="rg-droite"><button class="principal" id="rg-ajouter">+ Règle</button></span></h3>
+                <div class="carte" id="rg-regles"></div>
+                <p class="note">De haut en bas, la première règle qui convient gagne. Glisser une règle par sa poignée, à gauche, pour changer l'ordre. Dans le dossier et le nouveau nom : <code>{année}</code>, <code>{mois}</code>, <code>{date}</code>, <code>{nom}</code>.</p>
+              </div>
+
+              <div class="groupe" data-mots="mois sous-dossier date options">
+                <h3>Options</h3>
+                <div class="carte">
+                  <div class="ligne">
+                    <div class="libelle"><b>Un sous-dossier par mois</b><span>Images\2026-11\…, pour que rien ne redevienne un vrac de 2 000 fichiers.</span></div>
+                    <div class="bascule" id="rg-mois"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="groupe" data-mots="essayer essai tester où irait fichier">
+                <h3>Essayer</h3>
+                <div class="carte pleine">
+                  <div class="rg-essai">
+                    <label>Nom du fichier<input id="rg-e-nom" value="facture-novembre.pdf" spellcheck="false" /></label>
+                    <label>Site d'origine<input id="rg-e-site" value="edf.fr" spellcheck="false" /></label>
+                  </div>
+                  <div class="rg-resultat" id="rg-e-res">—</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rg-arbre" id="rg-arbre"></div>
+          </div>
+        </section>
+
         <!-- =============================== DONNÉES =============================== -->
         <section class="rubrique" id="r-donnees">
           <h2 class="titre-rubrique">Données et sauvegarde</h2>
@@ -964,6 +1036,7 @@
 
     <script src="teintes.js"></script>
     <script src="bulles.js"></script>
+    <script src="rangement.js"></script>
     <script>
       /* Portee fermee : wry pose `window.ipc` en propriete non configurable, donc un
          `const ipc` de premier niveau jetterait une SyntaxError fatale. */
@@ -1007,7 +1080,7 @@
            Une rubrique visible a la fois. On s'en souvient pour la prochaine ouverture
            (commodite locale : sans stockage, on retombe sur « Général »), et
            `reglages.html#extensions` ouvre directement la bonne. */
-        const RUBRIQUES = ["general", "apparence", "onglets", "confidentialite", "extensions", "donnees"];
+        const RUBRIQUES = ["general", "apparence", "onglets", "telechargements", "confidentialite", "extensions", "donnees"];
         const lireRubrique = () => {
           const ancre = (location.hash || "").slice(1);
           if (RUBRIQUES.includes(ancre)) return ancre;
@@ -1293,7 +1366,7 @@
         }
 
         window.trame = {
-          etat(s) { etat = s; rendre(); },
+          etat(s) { etat = s; rendre(); if (window.TrameRangement) window.TrameRangement.rendre(s); },
           budget(b) { if (etat) { etat.budget = b; rendreCompteurs(); } },
           resultats() {},
           toast(message) {
