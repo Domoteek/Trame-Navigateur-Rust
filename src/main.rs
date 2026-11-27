@@ -15,6 +15,7 @@ mod app;
 mod carnet;
 mod chien_de_garde;
 mod crx;
+mod doublons;
 mod extensions;
 mod extensions_chrome;
 mod externe;

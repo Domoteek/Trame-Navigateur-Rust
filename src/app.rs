@@ -111,6 +111,9 @@ pub enum UserEvent {
         onglet: TabId,
         telechargement: crate::telechargements::Telechargement,
     },
+    /// Un telechargement termine a un jumeau identique deja present (`doublons.rs`, hors du fil
+    /// principal) : `de` est ce jumeau.
+    Doublon { id: u64, de: String },
     /// Le moteur signale un changement d'etat d'un telechargement.
     TelechargementEtat {
         id: u64,
@@ -452,6 +455,7 @@ pub struct App {
 mod aide;
 mod depannage;
 mod rangement;
+mod rangement_existant;
 mod fenetre;
 mod flottant;
 mod outils;
@@ -4081,6 +4085,7 @@ impl App {
             UserEvent::TelechargementEtat { id, termine, interrompu, reprenable, raison, recu } => {
                 self.telechargement_etat(id, termine, interrompu, reprenable, raison, recu)
             }
+            UserEvent::Doublon { id, de } => self.doublon_trouve(id, de),
             UserEvent::Maj(nouveaute) => self.maj(nouveaute),
             UserEvent::Telechargement {
                 url,
@@ -6309,6 +6314,9 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
         }
         let fini = !t.actif();
         let (url, chemin, nom, etat, raison_txt) = (t.url.clone(), t.chemin.clone(), t.fichier.clone(), t.etat.clone(), t.raison.clone());
+        if termine {
+            self.chercher_doublon(id);
+        }
         if fini {
             crate::telechargements::oublier(id);
         }
@@ -7989,8 +7997,21 @@ const POPUP_MAJ: &str = r#"(function () {
     rangee.appendChild(b);
   }
   bouton('Plus tard', T.surface2, '#e9eefa', 'majPlusTard');
-  // Texte sombre sur l'accent : lisible sur le bleu comme sur l'ambre ou la menthe.
-  bouton('Installer', T.accent, '#0b0f17', 'majInstaller');
+  // Texte sombre sur l'accent : lisible sur le bleu comme sur l'ambre ou la menthe. Mais en teinte
+  // « dynamique », l'accent est celui du SITE, parfois presque noir (GitHub) : le bouton principal
+  // se fondait dans la boite (vu par Clement le 2026-11-27). Sous une clarte de 0,2 (le violet des teintes est a 0,34), il garde le
+  // bleu de Trame.
+  function clarte(hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return 0;
+    var n = parseInt(m[1], 16);
+    var c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(function (v) {
+      v /= 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  }
+  bouton('Installer', clarte(T.accent) >= 0.2 ? T.accent : '#60a5fa', '#0b0f17', 'majInstaller');
   boite.appendChild(titre);
   boite.appendChild(detail);
   boite.appendChild(rangee);

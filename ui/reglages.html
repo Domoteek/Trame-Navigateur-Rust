@@ -883,14 +883,23 @@
                 <p class="note">De haut en bas, la première règle qui convient gagne. Glisser une règle par sa poignée, à gauche, pour changer l'ordre. Dans le dossier et le nouveau nom : <code>{année}</code>, <code>{mois}</code>, <code>{date}</code>, <code>{nom}</code>.</p>
               </div>
 
-              <div class="groupe" data-mots="mois sous-dossier date options">
+              <div class="groupe" data-mots="mois sous-dossier date options doublons doublon identique double corbeille">
                 <h3>Options</h3>
                 <div class="carte">
                   <div class="ligne">
                     <div class="libelle"><b>Un sous-dossier par mois</b><span>Images\2026-11\…, pour que rien ne redevienne un vrac de 2 000 fichiers.</span></div>
                     <div class="bascule" id="rg-mois"></div>
                   </div>
+                  <div class="ligne">
+                    <div class="libelle"><b>Prévenir des doublons</b><span>Si un fichier identique (même contenu, octet par octet) est déjà là, la page des téléchargements le dit et propose de mettre le nouveau à la Corbeille. Marche même sans rangement.</span></div>
+                    <div class="bascule" id="rg-doublons"></div>
+                  </div>
                 </div>
+              </div>
+
+              <div class="groupe" data-mots="vrac existant déjà ranger racine aperçu défaire annuler trier ancien">
+                <h3>Ce qui est déjà en vrac</h3>
+                <div class="carte" id="rg-existant"></div>
               </div>
 
               <div class="groupe" data-mots="essayer essai tester où irait fichier">
@@ -907,6 +916,7 @@
 
             <div class="rg-arbre" id="rg-arbre"></div>
           </div>
+          <p class="note rg-credit">Idée inspirée de <a id="rg-credit" href="https://github.com/Trihedron1240/FolderFresh" title="Ouvrir FolderFresh sur GitHub">FolderFresh</a>, de Trihedron1240 — un rangeur de dossiers pour Windows. Merci à lui. Aucun code n'en est repris : Trame range à l'arrivée, FolderFresh après coup.</p>
         </section>
 
         <!-- =============================== DONNÉES =============================== -->

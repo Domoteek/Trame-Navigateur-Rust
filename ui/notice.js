@@ -251,17 +251,20 @@ window.NOTICE = {
         { "titre": "Sauvegarde", "texte": "Réglages → Sauvegarde du profil : un fichier qui emporte réglages, fils, favoris et accès. La sauvegarde automatique en écrit un toutes les N heures dans le dossier choisi." },
         { "titre": "Téléchargements", "texte": "Ctrl+J. Les fichiers vont dans le dossier de Trame, jamais écrasés ; le dossier se change sur la même page." },
         { "titre": "Rangement", "texte": "Réglages → Téléchargements → « Ranger les téléchargements » : chaque fichier arrive directement dans son sous-dossier (Images, Vidéos, Documents…), selon son type ou selon une règle (« tout ce qui vient de pronote.fr → École »). Les règles passent avant les types ; « Essayer » montre où irait un fichier. Sur la page des téléchargements, « Remettre à la racine » annule un rangement." },
+        { "titre": "Doublons", "texte": "Quand un fichier arrive alors qu'un identique (même contenu, octet par octet) est déjà là, la page des téléchargements affiche « Déjà là » : « Garder les deux », ou « Mettre celui-ci à la Corbeille » (récupérable). Se coupe dans Réglages → Téléchargements → Options." },
+        { "titre": "Ranger ce qui est déjà en vrac", "texte": "Réglages → Téléchargements → « Voir l'aperçu… » : Trame montre où irait chaque fichier déjà à la racine, puis range sur « Ranger ». Les noms ne changent pas. « Défaire » remet tout en place pendant 30 jours." },
         { "titre": "Mises à jour", "texte": "Trame propose seul une nouvelle version (fenêtre en bas à droite) : « Installer » suffit." }
       ],
       "conseils": [
         "Les favoris s'exportent et s'importent au format de Chrome, Edge et Firefox, dossiers compris.",
-        "Le rangement ne déplace rien après coup : il choisit le dossier avant que le fichier arrive. Ce qui était déjà en vrac reste où il est."
+        "Le rangement choisit le dossier avant que le fichier arrive : rien ne tourne en fond. Ce qui était déjà en vrac ne bouge que sur « Ranger », après l'aperçu.",
+        "L'idée du rangement vient de FolderFresh, de Trihedron1240 (github.com/Trihedron1240/FolderFresh). Merci à lui."
       ],
       "actions": [
         { "libelle": "Téléchargements", "commande": "telechargements" },
         { "libelle": "Réglages", "commande": "reglages" }
       ],
-      "mots": ["sauvegarde", "sauvegarder", "restaurer", "exporter", "importer", "téléchargement", "téléchargements", "fichier", "ranger", "rangement", "trier", "classer", "vrac", "mise à jour", "version", "réglages", "paramètres", "options"],
+      "mots": ["sauvegarde", "sauvegarder", "restaurer", "exporter", "importer", "téléchargement", "téléchargements", "fichier", "ranger", "rangement", "trier", "classer", "vrac", "doublon", "doublons", "double", "corbeille", "défaire", "folderfresh", "mise à jour", "version", "réglages", "paramètres", "options"],
       "voir": ["rail-acces", "extensions"]
     },
     {

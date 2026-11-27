@@ -3126,6 +3126,75 @@ async function suite() {
     await p.close();
   });
 
+  await cas("reglages : doublons, ranger l'existant (aperçu, ranger, défaire) et crédit", async () => {
+    const p = await page("reglages.html");
+    const etat = etatDeBase();
+    const rg = rangementDeBase();
+    rg.doublons = true;
+    rg.existant = { apercu: null, dernier: null };
+    etat.reglages = { ...(etat.reglages || {}), rangement: rg };
+    await pousser(p, etat);
+    await rubrique(p, "telechargements");
+    // Doublons : allumés, la bascule les coupe ; jamais grisés quand le rangement est coupé.
+    egal(await p.$eval("#rg-doublons", (n) => n.classList.contains("on")), true, "doublons allumés");
+    const opacite = await p.$eval("#rg-doublons", (n) => getComputedStyle(n.closest(".groupe")).opacity);
+    egal(opacite, "1", "les options ne se grisent pas, rangement coupé");
+    await vider(p);
+    await p.click("#rg-doublons");
+    verifier((await messages(p)).some((m) => m.m === "rangementDoublons" && m.actif === false), "couper les doublons");
+    // Aperçu demandé : rien ne bouge avant « Ranger ».
+    await vider(p);
+    await p.click("#rg-existant button");
+    verifier((await messages(p)).some((m) => m.m === "rangementApercu"), "aperçu demandé");
+    rg.existant = {
+      apercu: { total: 5, restent: 2, coupe: false, groupes: [
+        { dossier: "Images", n: 3, exemples: ["a.png", "b.jpg", "c.gif"] },
+        { dossier: "Documents", n: 2, exemples: ["d.pdf", "e.odt"] },
+      ] },
+      dernier: null,
+    };
+    await pousser(p, etat);
+    const texte = await p.$eval("#rg-existant", (n) => n.textContent);
+    verifier(texte.includes("5 fichiers") && texte.includes("2 restent") && texte.includes("Images") && texte.includes("d.pdf"), `aperçu : ${texte}`);
+    await vider(p);
+    await p.click("#rg-existant button.principal");
+    verifier((await messages(p)).some((m) => m.m === "rangementValider"), "ranger après l'aperçu");
+    // Le dernier rangement se défait, après confirmation.
+    rg.existant = { apercu: null, dernier: { date: Date.now(), n: 5 } };
+    await pousser(p, etat);
+    await vider(p);
+    p.once("dialog", (d) => d.accept());
+    const boutons = await p.$$("#rg-existant button");
+    await boutons[boutons.length - 1].click();
+    verifier((await messages(p)).some((m) => m.m === "rangementDefaire"), "défaire le dernier rangement");
+    // Le crédit ouvre FolderFresh dans un onglet.
+    await vider(p);
+    await p.click("#rg-credit");
+    verifier((await messages(p)).some((m) => m.m === "nouvelOnglet" && m.url.includes("Trihedron1240/FolderFresh")), "crédit vers FolderFresh");
+    await p.close();
+  });
+
+  await cas("telechargements : un doublon se garde ou part à la Corbeille", async () => {
+    const p = await page("telechargements.html");
+    const d = {
+      id: 6, url: "https://x/a.png", fichier: "a (2).png", chemin: "C:\\dl\\a (2).png", site: "x.fr",
+      total: 10, recu: 10, etat: "termine", raison: "", debut: 1, fin: 2, existe: true,
+      doublon: "C:\\dl\\Images\\a.png",
+    };
+    await pousser(p, { ...etatDeBase(), telechargements: { actifs: 0, liste: [d], dossier: "C:\\dl", dernierTermine: 2 } });
+    egal(await p.$eval(".meta .doublon", (n) => n.textContent), "Déjà là : a.png", "pastille du doublon");
+    const cliquer = async (texte) => {
+      for (const b of await p.$$(".actions button")) if ((await b.textContent()) === texte) return b.click();
+      throw new Error(`bouton « ${texte} » absent`);
+    };
+    await vider(p);
+    await cliquer("Garder les deux");
+    await cliquer("Mettre celui-ci à la Corbeille");
+    const recus = (await messages(p)).map((m) => m.m);
+    egal(recus, ["telechargementDoublonGarder", "telechargementDoublonJeter"], "les deux choix partent vers l'hôte");
+    await p.close();
+  });
+
   await cas("teintes : chacune repeint fonds, surfaces et accents de la coquille, Défaut rend l'origine", async () => {
     const p = await page("chrome.html", { query: "?surface=rail" });
     const lire = () =>

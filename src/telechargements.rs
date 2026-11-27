@@ -61,6 +61,9 @@ pub struct Telechargement {
     /// Pourquoi ce sous-dossier (« type Images (.png) », « règle « pronote.fr » »).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub range_raison: String,
+    /// Un fichier deja present au contenu identique (`doublons.rs`) ; vide = aucun, ou garde.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub doublon: String,
 }
 
 impl Telechargement {
@@ -134,6 +137,21 @@ pub fn jour_local() -> crate::rangement::Jour {
     crate::rangement::Jour { annee: t.wYear, mois: t.wMonth as u8, jour: t.wDay as u8 }
 }
 
+/// Date locale d'un instant (la date de modification d'un fichier deja la, pour le ranger dans
+/// le mois ou il est arrive et non dans celui d'aujourd'hui). Decalage horaire pris sur
+/// l'horloge locale du moment : a une heure pres au changement d'heure, sans consequence ici.
+pub fn jour_de(instant: std::time::SystemTime) -> crate::rangement::Jour {
+    use std::time::UNIX_EPOCH;
+    let auj = jour_local();
+    let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+    let local_s = crate::rangement::jours_depuis_epoque(auj) * 86_400
+        + i64::from(t.wHour) * 3600 + i64::from(t.wMinute) * 60 + i64::from(t.wSecond);
+    let utc_s = UNIX_EPOCH.elapsed().map(|d| d.as_secs() as i64).unwrap_or(local_s);
+    let decalage = ((local_s - utc_s) as f64 / 900.0).round() as i64 * 900;
+    let s = instant.duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(utc_s);
+    crate::rangement::jour_depuis_epoque((s + decalage).div_euclid(86_400))
+}
+
 /// Ou ranger un fichier, avec le reglage en cours.
 pub fn choisir_rangement(nom: &str, site: &str, mime: &str) -> crate::rangement::Choix {
     RANGEMENT.with(|r| r.borrow().choisir(nom, site, mime, jour_local()))
@@ -146,17 +164,51 @@ pub fn remettre_a_la_racine(chemin: &Path, racine: &Path) -> Result<PathBuf, Str
         return Err("Ce fichier a été déplacé ou supprimé.".into());
     }
     let nom = chemin.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    let cible = destination(racine, &nom);
-    liberer(&cible.to_string_lossy());
+    let cible = chemin_libre(racine, &nom);
     std::fs::rename(chemin, &cible).map_err(|e| format!("Impossible de déplacer le fichier : {e}"))?;
-    let mut parent = chemin.parent().map(Path::to_path_buf);
+    retirer_dossiers_vides(chemin.parent(), racine);
+    Ok(cible)
+}
+
+/// Un chemin libre dans `dossier` pour `nom` (jamais d'ecrasement : `nom (2).ext`), sans le
+/// reserver : pour un deplacement immediat, pas pour un telechargement qui dure.
+pub fn chemin_libre(dossier: &Path, nom: &str) -> PathBuf {
+    let c = destination(dossier, nom);
+    liberer(&c.to_string_lossy());
+    c
+}
+
+/// Retire les dossiers devenus vides en remontant de `depart` jusqu'a `racine` (exclue).
+pub fn retirer_dossiers_vides(depart: Option<&Path>, racine: &Path) {
+    let mut parent = depart.map(Path::to_path_buf);
     while let Some(p) = parent {
         if p == racine || !p.starts_with(racine) || std::fs::remove_dir(&p).is_err() {
             break;
         }
         parent = p.parent().map(Path::to_path_buf);
     }
-    Ok(cible)
+}
+
+/// Met un fichier a la Corbeille de Windows (recuperable), jamais une suppression definitive.
+pub fn mettre_a_la_corbeille(chemin: &Path) -> Result<(), String> {
+    use windows::Win32::UI::Shell::{SHFileOperationW, FO_DELETE, SHFILEOPSTRUCTW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT};
+    if !chemin.is_file() {
+        return Err("Ce fichier a déjà été déplacé ou supprimé.".into());
+    }
+    // `pFrom` : liste de chemins terminee par DEUX zeros.
+    let mut source: Vec<u16> = chemin.as_os_str().to_string_lossy().encode_utf16().collect();
+    source.extend([0, 0]);
+    let mut op = SHFILEOPSTRUCTW {
+        wFunc: FO_DELETE,
+        pFrom: windows::core::PCWSTR(source.as_ptr()),
+        fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT).0 as u16,
+        ..Default::default()
+    };
+    let code = unsafe { SHFileOperationW(&mut op) };
+    if code != 0 || op.fAnyOperationsAborted.as_bool() || chemin.exists() {
+        return Err(format!("Windows n'a pas pu mettre ce fichier à la Corbeille (code {code})."));
+    }
+    Ok(())
 }
 
 fn liberer(chemin: &str) {
@@ -276,6 +328,7 @@ pub fn brancher(
                         .unwrap_or(nom),
                     range,
                     range_raison,
+                    doublon: String::new(),
                     chemin: chemin_txt,
                     site: site.clone(),
                     total: (total > 0).then_some(total as u64),

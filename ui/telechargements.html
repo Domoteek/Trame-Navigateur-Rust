@@ -83,6 +83,7 @@
       .meta .etat-ko { color: #fca5a5; }
       .meta .etat-pause { color: #fcd34d; }
       /* Rangé dans un sous-dossier (rubrique « Téléchargements » des réglages). */
+      .meta .doublon { color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.08); border-radius: 999px; padding: 0 7px; }
       .meta .range { color: #5eead4; border: 1px solid rgba(94, 234, 212, 0.35); background: rgba(94, 234, 212, 0.08); border-radius: 999px; padding: 0 7px; }
       .jauge { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; margin-top: 3px; }
       .jauge > span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 0.6s; }
@@ -233,6 +234,12 @@
             r.title = "Rangé dans " + d.range + (d.rangeRaison ? " : " + d.rangeRaison : "");
             meta.appendChild(r);
           }
+          if (d.doublon) {
+            const nomJumeau = d.doublon.split(/[\\/]/).pop();
+            const j = elem("span", "doublon", "Déjà là : " + nomJumeau);
+            j.title = "Même contenu, octet par octet, que " + d.doublon;
+            meta.appendChild(j);
+          }
           if (d.site) meta.appendChild(elem("span", null, d.site));
           meta.appendChild(elem("span", null, heure(d.debut)));
           corps.appendChild(meta);
@@ -254,6 +261,11 @@
           if (fini && !absent) {
             bouton("Ouvrir", "telechargementOuvrir");
             bouton("Afficher dans le dossier", "telechargementDossier");
+            if (d.doublon) {
+              bouton("Garder les deux", "telechargementDoublonGarder");
+              bouton("Mettre celui-ci à la Corbeille", "telechargementDoublonJeter");
+              actions.lastChild.title = "Le nouveau part à la Corbeille de Windows (récupérable) ; l'exemplaire déjà là reste";
+            }
             if (d.range) {
               bouton("Remettre à la racine", "telechargementRacine");
               actions.lastChild.title = "Sortir ce fichier de " + d.range + " et le remettre dans le dossier des téléchargements";

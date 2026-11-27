@@ -45,6 +45,8 @@ impl App {
         json!({
             "actif": r.actif,
             "parMois": r.par_mois,
+            "doublons": r.doublons,
+            "existant": self.etat_existant(),
             "categories": r.categories.iter().map(|c| json!({
                 "id": c.id, "nom": c.nom, "dossier": c.dossier, "extensions": c.extensions, "actif": c.actif,
             })).collect::<Vec<_>>(),
@@ -220,7 +222,7 @@ impl App {
                     Err(e) => self.signaler(&e),
                 }
             }
-            _ => return false,
+            _ => return self.traiter_ipc_existant(m, v),
         }
         true
     }

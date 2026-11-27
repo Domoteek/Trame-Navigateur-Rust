@@ -18,7 +18,10 @@
     .rg-maitre .libelle { flex: 1; color: var(--texte); }
     .rg-maitre b { font-size: 14px; display: block; }
     .rg-maitre span { color: var(--texte-2); font-size: 11.5px; }
-    #r-telechargements.rg-coupe .rg-deux { opacity: .45; filter: saturate(.4); }
+    /* Coupé : seuls les types, les règles et l'arborescence se grisent. Les doublons et le
+       rangement de l'existant marchent sans l'interrupteur. */
+    #r-telechargements.rg-coupe .rg-gauche > .groupe:nth-child(-n+2),
+    #r-telechargements.rg-coupe .rg-arbre { opacity: .45; filter: saturate(.4); }
     .rg-deux { display: grid; grid-template-columns: minmax(0,1fr) 250px; gap: 18px; align-items: start; transition: opacity .2s; }
     @media (max-width: 1100px) { .rg-deux { grid-template-columns: minmax(0,1fr); } .rg-arbre { position: static !important; } }
     .rg-droite { margin-left: auto; letter-spacing: 0; text-transform: none; font-weight: 400; display: flex; gap: 6px; }
@@ -78,6 +81,17 @@
     .rg-arbre li .n { color: var(--texte-3); font-size: 10.5px; margin-left: 5px; }
     .rg-arbre li.regle > a { color: var(--vif); }
     .rg-arbre .note { margin-bottom: 0; }
+    .rg-apercu { padding: 12px 2px 14px; display: flex; flex-direction: column; gap: 10px; }
+    .rg-apercu .resume { font-size: 12.5px; }
+    .rg-apercu .resume b { color: var(--vif); }
+    .rg-groupes { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; max-height: 300px; overflow: auto; }
+    .rg-groupe { border: 1px solid var(--bord); border-radius: 10px; padding: 9px 11px; background: rgba(255,255,255,.025); min-width: 0; }
+    .rg-groupe .dest { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--vif); display: flex; gap: 6px; }
+    .rg-groupe .dest .n { margin-left: auto; color: var(--texte-3); font-family: inherit; }
+    .rg-groupe .ex { font-size: 11px; color: var(--texte-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rg-apercu .boutons { display: flex; gap: 8px; }
+    .rg-credit a { color: var(--accent); text-decoration: none; cursor: pointer; }
+    .rg-credit a:hover { text-decoration: underline; }
   `;
   document.head.appendChild(style);
 
@@ -360,6 +374,85 @@
     essaiEnvoye = cle;
     ipc({ m: "rangementEssai", nom: $("rg-e-nom").value, site: $("rg-e-site").value });
   }
+  /* --------------------------------------------------------- existant
+     L'apercu est calcule par Trame (rien ne bouge avant « Ranger ») ; le dernier rangement se
+     defait pendant 30 jours. */
+  let apercuDemande = false;
+  function rendreExistant() {
+    const zone = $("rg-existant");
+    zone.textContent = "";
+    const ex = r.existant || {};
+    const a = ex.apercu;
+    if (a) {
+      apercuDemande = false;
+      const bloc = el("div", "rg-apercu");
+      const resume = el("div", "resume");
+      if (!a.total) {
+        resume.textContent = a.restent
+          ? `Rien à ranger : les ${a.restent} fichier${a.restent > 1 ? "s" : ""} de la racine n'ont aucun type ni aucune règle qui les prenne.`
+          : "La racine est vide : rien à ranger.";
+      } else {
+        resume.append(el("b", "", a.total + " fichier" + (a.total > 1 ? "s" : "")));
+        resume.append(document.createTextNode(
+          ` iront dans ${a.groupes.length} dossier${a.groupes.length > 1 ? "s" : ""}` +
+          (a.restent ? `, ${a.restent} reste${a.restent > 1 ? "nt" : ""} à la racine (aucun type connu).` : ".") +
+          (a.coupe ? " Beaucoup de fichiers : les 5 000 premiers seulement ; relancer ensuite." : "") +
+          " Les noms ne changent pas ; chacun va dans le mois où il est arrivé si l'option par mois est allumée."));
+      }
+      bloc.append(resume);
+      if (a.total) {
+        const grille = el("div", "rg-groupes");
+        for (const g of a.groupes) {
+          const carte = el("div", "rg-groupe");
+          const dest = el("div", "dest", "→ " + g.dossier + "\\");
+          dest.append(el("span", "n", g.n));
+          carte.append(dest);
+          for (const nom of g.exemples) carte.append(el("div", "ex", nom));
+          if (g.n > g.exemples.length) carte.append(el("div", "ex", `… et ${g.n - g.exemples.length} autre${g.n - g.exemples.length > 1 ? "s" : ""}`));
+          grille.append(carte);
+        }
+        bloc.append(grille);
+      }
+      const boutons = el("div", "boutons");
+      if (a.total) {
+        const ok = el("button", "principal", `Ranger ces ${a.total} fichier${a.total > 1 ? "s" : ""}`);
+        ok.onclick = () => { ok.disabled = true; ipc({ m: "rangementValider" }); };
+        boutons.append(ok);
+      }
+      const fermer = el("button", "", a.total ? "Annuler" : "Fermer");
+      fermer.onclick = () => ipc({ m: "rangementApercuFermer" });
+      boutons.append(fermer);
+      bloc.append(boutons);
+      zone.append(bloc);
+    } else {
+      const ligne = el("div", "ligne");
+      const lib = el("div", "libelle");
+      lib.append(el("b", "", "Ranger la racine du dossier"),
+        el("span", "", "Trame montre d'abord où irait chaque fichier déjà téléchargé, selon les types et les règles ci-dessus. Rien ne bouge avant « Ranger »."));
+      const voir = el("button", "", apercuDemande ? "Calcul…" : "Voir l'aperçu…");
+      voir.disabled = apercuDemande;
+      voir.onclick = () => { apercuDemande = true; rendreExistant(); ipc({ m: "rangementApercu" }); };
+      ligne.append(lib, voir);
+      zone.append(ligne);
+    }
+    if (ex.dernier) {
+      const ligne = el("div", "ligne");
+      const lib = el("div", "libelle");
+      const quand = new Date(ex.dernier.date);
+      const date = quand.toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) + " à " +
+        quand.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }).replace(":", " h ");
+      lib.append(el("b", "", "Dernier rangement"),
+        el("span", "", `${ex.dernier.n} fichier${ex.dernier.n > 1 ? "s" : ""} rangé${ex.dernier.n > 1 ? "s" : ""} le ${date}. Se défait pendant 30 jours.`));
+      const defaire = el("button", "", "Défaire");
+      defaire.title = "Remettre ces fichiers à la racine, là où ils étaient";
+      defaire.onclick = () => {
+        if (confirm(`Remettre les ${ex.dernier.n} fichiers de ce rangement à la racine du dossier ?`)) ipc({ m: "rangementDefaire" });
+      };
+      ligne.append(lib, defaire);
+      zone.append(ligne);
+    }
+  }
+
   function rendreEssai() {
     const e = r.essai;
     const zone = $("rg-e-res");
@@ -376,6 +469,8 @@
   /* --------------------------------------------------------------- boutons */
   $("rg-actif").onclick = () => r && ipc({ m: "rangementActif", actif: !r.actif });
   $("rg-mois").onclick = () => r && ipc({ m: "rangementParMois", actif: !r.parMois });
+  $("rg-doublons").onclick = () => r && ipc({ m: "rangementDoublons", actif: !r.doublons });
+  $("rg-credit").onclick = (e) => { e.preventDefault(); ipc({ m: "nouvelOnglet", url: e.currentTarget.href }); };
   $("rg-ajouter").onclick = () => { regleEditee = 0; rendreRegles(); };
   $("rg-types-defaut").onclick = () => {
     if (confirm("Remettre les six types de fichiers comme au départ ? Vos dossiers et extensions modifiés seront oubliés (les règles restent).")) {
@@ -393,6 +488,7 @@
       $("rg-racine").textContent = r.racine || "—";
       $("rg-actif").className = "bascule" + (r.actif ? " on" : "");
       $("rg-mois").className = "bascule" + (r.parMois ? " on" : "");
+      $("rg-doublons").className = "bascule" + (r.doublons ? " on" : "");
       $("r-telechargements").classList.toggle("rg-coupe", !r.actif);
       const nav = $("nav-rangement");
       if (nav) nav.textContent = r.actif ? "rangés" : "";
@@ -401,6 +497,7 @@
       if (!saisie) { rendreCats(); rendreRegles(); }
       rendreArbre();
       rendreEssai();
+      rendreExistant();
       if (!r.essai) demanderEssai();
     },
   };

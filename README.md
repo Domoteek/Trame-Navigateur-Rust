@@ -123,6 +123,13 @@ banque en ligne, et la barre de recherche se referme sur `Échap` en rendant le 
 (jamais écrasé — `rapport (2).pdf` au besoin), et l'application l'annonce. Sans ce branchement,
 WebView2 ouvrait son propre panneau, invisible ici : le clic ne produisait rien.
 
+**Rangement des téléchargements** (0.4.98, Réglages → Téléchargements) : chaque fichier arrive
+directement dans son sous-dossier, choisi **avant** le premier octet — par type (Images, Vidéos,
+Documents…) ou par règle (site, type, morceau du nom, renommage). Les **doublons** sont signalés
+(même contenu, octet par octet) et le nouveau peut partir à la Corbeille ; ce qui est **déjà en
+vrac** se range après un aperçu, et se défait pendant 30 jours. Code : `src/rangement.rs`,
+`src/doublons.rs`, `src/app/rangement*.rs`, `ui/rangement.js`.
+
 ## Sauvegarde, restauration, échange de favoris
 
 ![Sauvegarde du profil](docs/captures/sauvegarde.png)
@@ -874,6 +881,13 @@ outils/          graine de session, ajout d'un fil d'onglets (ajouter-fil.mjs + 
                  pilote de fenetre, mesure memoire, fabrication de l'ico
 docs/            concept, architecture, format d'extension, captures
 ```
+
+## Crédits
+
+- **Rangement des téléchargements** : idée inspirée de
+  [FolderFresh](https://github.com/Trihedron1240/FolderFresh), de Trihedron1240 — un rangeur de
+  dossiers par règles pour Windows. Aucun code n'en est repris (FolderFresh est en C# sous GPL-3,
+  Trame est en Rust sous MIT) : Trame range à l'arrivée du fichier, FolderFresh après coup.
 
 ## Licence
 

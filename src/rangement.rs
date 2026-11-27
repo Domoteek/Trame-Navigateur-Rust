@@ -32,11 +32,15 @@ pub struct Rangement {
     /// Un sous-dossier `AAAA-MM` sous chaque destination.
     #[serde(default)]
     pub par_mois: bool,
+    /// Prevenir quand un fichier arrive alors qu'un identique est deja la (`doublons.rs`).
+    /// Independant de `actif` : utile meme sans rangement.
+    #[serde(default = "vrai")]
+    pub doublons: bool,
 }
 
 impl Default for Rangement {
     fn default() -> Self {
-        Rangement { actif: false, categories: categories_defaut(), regles: Vec::new(), par_mois: false }
+        Rangement { actif: false, categories: categories_defaut(), regles: Vec::new(), par_mois: false, doublons: true }
     }
 }
 
@@ -243,6 +247,30 @@ impl Rangement {
     }
 }
 
+/// Jour civil d'un nombre de jours depuis le 1970-01-01 (algorithme de H. Hinnant).
+pub fn jour_depuis_epoque(jours: i64) -> Jour {
+    let z = jours + 719_468;
+    let ere = z.div_euclid(146_097);
+    let doe = z - ere * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let jour = (doy - (153 * mp + 2) / 5 + 1) as u8;
+    let mois = if mp < 10 { mp + 3 } else { mp - 9 } as u8;
+    let annee = (yoe + ere * 400 + i64::from(mois <= 2)) as u16;
+    Jour { annee, mois, jour }
+}
+
+/// Nombre de jours depuis le 1970-01-01 d'un jour civil (inverse de `jour_depuis_epoque`).
+pub fn jours_depuis_epoque(j: Jour) -> i64 {
+    let (a, m, d) = (i64::from(j.annee) - i64::from(j.mois <= 2), i64::from(j.mois), i64::from(j.jour));
+    let ere = a.div_euclid(400);
+    let yoe = a - ere * 400;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    ere * 146_097 + doe - 719_468
+}
+
 /// La regle en une phrase courte (pour la raison affichee).
 pub fn decrire(r: &Regle) -> String {
     let mut morceaux = Vec::new();
@@ -423,6 +451,16 @@ mod tests {
     }
 
     #[test]
+    fn calendrier() {
+        assert_eq!(jour_depuis_epoque(0), Jour { annee: 1970, mois: 1, jour: 1 });
+        assert_eq!(jour_depuis_epoque(20_419), Jour { annee: 2025, mois: 11, jour: 27 });
+        assert_eq!(jour_depuis_epoque(19_782), Jour { annee: 2024, mois: 2, jour: 29 });
+        for j in [0, 59, 60, 11_016, 19_782, 20_784, 40_000] {
+            assert_eq!(jours_depuis_epoque(jour_depuis_epoque(j)), j);
+        }
+    }
+
+    #[test]
     fn extensions() {
         assert_eq!(extension("archive.tar.gz"), "gz");
         assert_eq!(extension(".bashrc"), "");
@@ -435,5 +473,6 @@ mod tests {
         let r: Rangement = serde_json::from_str(r#"{"actif":true}"#).unwrap();
         assert_eq!(r.categories.len(), 6);
         assert!(r.regles.is_empty());
+        assert!(r.doublons, "les doublons sont signales par defaut");
     }
 }
