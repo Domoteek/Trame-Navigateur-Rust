@@ -454,6 +454,56 @@ struct Client {
     hote: Option<(IpAddr, u16)>,
     /// Le nom demandé, pour le journal.
     nom: String,
+    /// Dernier instant où des octets ont circulé (sonde des connexions figées).
+    dernier_progres: u64,
+    /// La sonde a déjà signalé ce client comme figé.
+    signale: bool,
+    /// Octets reçus du serveur, et comment la connexion s'est terminée (port, raison) — sonde.
+    octets_recus: u64,
+    fin: Option<(u16, String)>,
+    debut: u64,
+}
+
+/// Garde les derniers en-têtes TCP de chaque connexion (port local → lignes), pour la sonde
+/// `TRAME_SONDE_RELAIS`. Une connexion figée se lit alors paquet par paquet : qui attend qui.
+fn tracer(traces: &mut HashMap<u16, VecDeque<String>>, paquet: &[u8], entrant: bool, maintenant: u64) {
+    if paquet.len() < 20 || paquet[0] >> 4 != 4 || paquet[9] != 6 {
+        return;
+    }
+    let ihl = ((paquet[0] & 0x0f) as usize) * 4;
+    let total = u16::from_be_bytes([paquet[2], paquet[3]]) as usize;
+    let frag = u16::from_be_bytes([paquet[6], paquet[7]]);
+    if paquet.len() < ihl + 20 {
+        return;
+    }
+    let t = &paquet[ihl..];
+    let source = u16::from_be_bytes([t[0], t[1]]);
+    let dest = u16::from_be_bytes([t[2], t[3]]);
+    let seq = u32::from_be_bytes([t[4], t[5], t[6], t[7]]);
+    let ack = u32::from_be_bytes([t[8], t[9], t[10], t[11]]);
+    let decalage = ((t[12] >> 4) as usize) * 4;
+    let drapeaux = t[13];
+    let fenetre = u16::from_be_bytes([t[14], t[15]]);
+    let charge = total.saturating_sub(ihl + decalage);
+    let local = if entrant { dest } else { source };
+    let noms: String = [(0x02, 'S'), (0x10, 'A'), (0x08, 'P'), (0x01, 'F'), (0x04, 'R')]
+        .iter()
+        .filter(|(b, _)| drapeaux & b != 0)
+        .map(|(_, c)| *c)
+        .collect();
+    let file = traces.entry(local).or_default();
+    if !entrant && drapeaux & 0x02 != 0 && drapeaux & 0x10 == 0 {
+        file.clear(); // nouveau SYN : le port sert une nouvelle connexion
+    }
+    let fragment = if frag & 0x3fff != 0 { format!(" FRAG({frag:#06x})") } else { String::new() };
+    file.push_back(format!(
+        "{} {} seq={seq} ack={ack} {noms} len={charge} win={fenetre} ip={total}{fragment}",
+        maintenant % 100_000,
+        if entrant { "<-" } else { "->" }
+    ));
+    while file.len() > 60 {
+        file.pop_front();
+    }
 }
 
 /// Au-delà, on cesse de lire le navigateur tant que le tunnel n'a pas absorbé.
@@ -526,6 +576,9 @@ fn boucle(
     // tunnel UNE fois, N secondes après son montage, pour éprouver la reprise
     // (`outils/eprouver-fuites.mjs`).
     static COUPURE_FAITE: AtomicBool = AtomicBool::new(false);
+    // Sonde `TRAME_SONDE_RELAIS` : trace des en-têtes TCP et signalement des connexions figées.
+    let sonde = std::env::var("TRAME_SONDE_RELAIS").is_ok();
+    let mut traces: HashMap<u16, VecDeque<String>> = HashMap::new();
     let coupure_a = std::env::var("TRAME_SONDE_COUPURE_S")
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
@@ -544,6 +597,9 @@ fn boucle(
         // 1. Le tunnel : ce qui arrive, ce qui part.
         tunnel.pomper()?;
         while let Some(paquet) = tunnel.prendre_paquet() {
+            if sonde {
+                tracer(&mut traces, &paquet, true, maintenant);
+            }
             pile.entrants.push_back(paquet);
             actif = true;
         }
@@ -562,6 +618,11 @@ fn boucle(
                         navigateur_fini: false,
                         hote: None,
                         nom: String::new(),
+                        dernier_progres: maintenant,
+                        signale: false,
+                        octets_recus: 0,
+                        fin: None,
+                        debut: maintenant,
                     });
                     actif = true;
                 }
@@ -582,12 +643,34 @@ fn boucle(
                 }
             }
         }
+        if sonde {
+            signaler_figes(&mut clients, &mut sockets, &traces, maintenant);
+            for client in clients.iter().filter(|c| matches!(c.etat, Etat::Fini)) {
+                if let Some((port, raison)) = &client.fin {
+                    crate::info!(
+                        "sonde relais : fin « {} » (port {port}) après {} ms, {} o reçus — {raison}, navigateur fini {}",
+                        client.nom,
+                        maintenant - client.debut,
+                        client.octets_recus,
+                        client.navigateur_fini
+                    );
+                    if client.octets_recus < 20_000 {
+                        for ligne in traces.get(port).into_iter().flatten().rev().take(14).collect::<Vec<_>>().into_iter().rev() {
+                            crate::info!("sonde relais :   {port} {ligne}");
+                        }
+                    }
+                }
+            }
+        }
         clients.retain(|client| !matches!(client.etat, Etat::Fini));
         commun.ranger(&mut sockets, maintenant);
 
         // 5. Ce que la pile et les clients ont produit part dans le tunnel.
         iface.poll(temps, &mut pile, &mut sockets);
         while let Some(paquet) = pile.sortants.pop_front() {
+            if sonde {
+                tracer(&mut traces, &paquet, false, maintenant);
+            }
             tunnel.envoyer_paquet(&paquet)?;
             actif = true;
         }
@@ -601,6 +684,48 @@ fn boucle(
     }
     crate::info!("mandataire : arrêt demandé");
     Ok(())
+}
+
+/// Sonde : un client en relais sans progrès depuis 8 s est décrit au journal, avec ses paquets.
+fn signaler_figes(clients: &mut [Client], sockets: &mut SocketSet<'_>, traces: &HashMap<u16, VecDeque<String>>, maintenant: u64) {
+    for client in clients.iter_mut() {
+        let Etat::Relais { socket, port, fin_envoyee } = client.etat else { continue };
+        let fige = maintenant.saturating_sub(client.dernier_progres) > 8_000;
+        if !fige {
+            if client.signale {
+                crate::info!("sonde relais : « {} » (port {port}) repart", client.nom);
+                client.signale = false;
+            }
+            continue;
+        }
+        if client.signale {
+            continue;
+        }
+        client.signale = true;
+        let s = sockets.get_mut::<tcp::Socket>(socket);
+        crate::info!(
+            "sonde relais : « {} » (port {port}) FIGÉ depuis {} ms — tcp {:?}, à lire {} o, à envoyer {} o, \
+             fenêtre locale {}, vers navigateur {} o, du navigateur {} o, navigateur fini {}, FIN envoyé {fin_envoyee}, \
+             may_recv {}, can_recv {}, can_send {}",
+            client.nom,
+            maintenant - client.dernier_progres,
+            s.state(),
+            s.recv_queue(),
+            s.send_queue(),
+            s.recv_capacity() - s.recv_queue(),
+            client.vers_navigateur.len(),
+            client.tampon.len(),
+            client.navigateur_fini,
+            s.may_recv(),
+            s.can_recv(),
+            s.can_send()
+        );
+        if let Some(lignes) = traces.get(&port) {
+            for ligne in lignes {
+                crate::info!("sonde relais :   {port} {ligne}");
+            }
+        }
+    }
 }
 
 fn instant(ms: u64) -> InstantSmol {
@@ -638,8 +763,14 @@ impl Client {
     fn liberer(&mut self, sockets: &mut SocketSet<'_>, commun: &mut Commun, maintenant: u64, net: bool) {
         match std::mem::replace(&mut self.etat, Etat::Fini) {
             Etat::Resolution { socket, port, .. } => commun.retirer_udp(sockets, socket, port),
-            Etat::Connexion { socket, port, .. } => commun.fermer_tcp(sockets, socket, port, maintenant, true),
-            Etat::Relais { socket, port, .. } => commun.fermer_tcp(sockets, socket, port, maintenant, net),
+            Etat::Connexion { socket, port, .. } => {
+                self.fin = Some((port, format!("échec en connexion, tcp {:?}", sockets.get::<tcp::Socket>(socket).state())));
+                commun.fermer_tcp(sockets, socket, port, maintenant, true)
+            }
+            Etat::Relais { socket, port, .. } => {
+                self.fin = Some((port, format!("relais interrompu, tcp {:?}", sockets.get::<tcp::Socket>(socket).state())));
+                commun.fermer_tcp(sockets, socket, port, maintenant, net)
+            }
             _ => {}
         }
         let _ = self.flux.shutdown(std::net::Shutdown::Both);
@@ -904,6 +1035,7 @@ impl Client {
             match socket.recv_slice(&mut recu) {
                 Ok(n) if n > 0 => {
                     self.vers_navigateur.extend_from_slice(&recu[..n]);
+                    self.octets_recus += n as u64;
                     actif = true;
                 }
                 _ => break,
@@ -913,12 +1045,16 @@ impl Client {
         // Le serveur a tout envoyé et le navigateur a tout pris : fin propre.
         let serveur_fini = !socket.may_recv() && !matches!(socket.state(), tcp::State::SynSent | tcp::State::SynReceived);
         if serveur_fini && self.vers_navigateur.is_empty() {
+            self.fin = Some((port, format!("le serveur a fini, tcp {:?}", socket.state())));
             self.etat = Etat::Fini;
             commun.fermer_tcp(sockets, handle, port, maintenant, false);
             let _ = self.flux.shutdown(std::net::Shutdown::Both);
             return Ok(true);
         }
         self.etat = Etat::Relais { socket: handle, port, fin_envoyee };
+        if actif {
+            self.dernier_progres = maintenant;
+        }
         Ok(actif)
     }
 

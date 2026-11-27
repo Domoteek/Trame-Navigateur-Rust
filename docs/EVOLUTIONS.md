@@ -1615,6 +1615,16 @@ tomber le tunnel »), `tester-ui` 114/114, banc de charge 135/135 sur 0.4.93 com
 **Reste à surveiller** : de rares requêtes figées jusqu'au délai de curl (3 sur 270 au banc de
 charge, microsoft.com surtout), vues sur 0.4.94 mais pas expliquées par ses changements (le relais
 n'a pas bougé) ; piste : l'assembleur de smoltcp (4 trous au plus) quand des paquets se perdent.
+→ **Élucidé le 2026-11-27 : ce n'est pas Trame, c'est le serveur.** Sonde `TRAME_SONDE_RELAIS`
+(trace des 60 derniers en-têtes TCP par connexion, connexions sans progrès depuis 8 s, fin de chaque
+connexion avec sa raison). Sur 12 pages Amazon de 6 Mo en parallèle par le VPN Nord : sept fois sur
+douze, Amazon **accuse réception du ClientHello en 58 ms puis raccroche à 3 s** sans un octet (curl
+code 35), et une autre fois il répond à la requête **15 s** plus tard — bridage anti-robot d'une
+adresse de VPN connue (sans VPN : douze fois 200 en 0,6 s). Aucune perte, aucun retard de notre côté
+dans les traces : accusés immédiats, fenêtre ouverte (256 Ko). Contre-épreuve : 12 × 6 Mo en
+parallèle chez Cloudflare par le même tunnel → **entiers en 3,5 s (~165 Mbit/s)**. Piège rencontré :
+à force de bancs (Trame tués par `/F`, sessions jamais closes), Nord répond `AUTH_FAILED` — limite
+d'appareils du compte ; espacer les bancs OpenVPN.
 
 ## 11. L'état aujourd'hui
 
