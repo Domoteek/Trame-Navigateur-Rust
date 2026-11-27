@@ -1648,6 +1648,33 @@ Pas encore fait : une page de gestion des favoris (recherche, tri, glisser), ni 
 souris ; `favoris-dossiers.json` n'est pas dans la sauvegarde du profil (pas plus que
 `acces-groupes.json`), mais les dossiers portés par les favoris y sont.
 
+## 10 tervicies. 2026-11-27 — ranger les téléchargements à l'arrivée
+
+Demande de Clément, en regardant FolderFresh (outil Windows qui range un dossier après coup) :
+« c'est exactement ce que je veux, c'est exactement ce que mes enfants veulent ». Maquette
+`docs/maquettes/rangement.html`, variante 3 choisie (types + règles + aperçu). Idées seulement :
+FolderFresh est en C# et sous GPL-3, aucun code repris.
+
+**Le principe : choisir le dossier AVANT le premier octet.** `DownloadStarting` donne déjà la main
+sur le chemin (`SetResultFilePath`) : `src/rangement.rs` (module pur, testé seul) décide le
+sous-dossier, `telechargements.rs` l'applique. Rien ne tourne en fond, rien n'est déplacé, et
+Trame sait ce qu'un outil de dossier ignore : le site d'origine et le type MIME annoncé.
+Ordre : règles de haut en bas (site, type, morceau du nom ; `{année}`, `{mois}`, `{date}`, `{nom}` ;
+renommage qui garde l'extension) → six types par défaut → la racine. Chemins nettoyés
+(jamais `..`, ni absolu, ni nom réservé de Windows). **Coupé par défaut.**
+
+Réglages → nouvelle rubrique **Téléchargements** (`ui/rangement.js` : tuiles des types, règles en
+phrases glissables, « Essayer » calculé par Trame lui-même, arborescence avec ce qui a été rangé).
+Page des téléchargements : pastille « → dossier » (raison au survol) et « Remettre à la racine »
+(le sous-dossier vidé est retiré). Fiche dans la Notice.
+
+Preuves : `cargo test` 276/276 (13 nouveaux), `tester-ui` 118/118 (2 nouveaux), et
+`outils/eprouver-rangement.mjs` sur le vrai binaire caché : `photo.png` → `Images\`,
+`facture-edf.pdf` → `Papiers\Factures\2026-11-27 facture-edf.pdf`, `plan.sh3d` à la racine,
+fichier sans extension annoncé `image/webp` → `Images\`, puis « Remettre à la racine » suivi par la
+liste. **Pas encore fait** : doublons, « demander à chaque fois », ranger ce qui est déjà en vrac
+(aperçu puis déplacement annulable) — dessinés dans la maquette, laissés pour une suite.
+
 ## 11. L'état aujourd'hui
 
 ```

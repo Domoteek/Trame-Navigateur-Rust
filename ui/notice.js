@@ -248,16 +248,18 @@ window.NOTICE = {
       "etapes": [
         { "titre": "Sauvegarde", "texte": "Réglages → Sauvegarde du profil : un fichier qui emporte réglages, fils, favoris et accès. La sauvegarde automatique en écrit un toutes les N heures dans le dossier choisi." },
         { "titre": "Téléchargements", "texte": "Ctrl+J. Les fichiers vont dans le dossier de Trame, jamais écrasés ; le dossier se change sur la même page." },
+        { "titre": "Rangement", "texte": "Réglages → Téléchargements → « Ranger les téléchargements » : chaque fichier arrive directement dans son sous-dossier (Images, Vidéos, Documents…), selon son type ou selon une règle (« tout ce qui vient de pronote.fr → École »). Les règles passent avant les types ; « Essayer » montre où irait un fichier. Sur la page des téléchargements, « Remettre à la racine » annule un rangement." },
         { "titre": "Mises à jour", "texte": "Trame propose seul une nouvelle version (fenêtre en bas à droite) : « Installer » suffit." }
       ],
       "conseils": [
-        "Les favoris s'exportent et s'importent au format de Chrome, Edge et Firefox, dossiers compris."
+        "Les favoris s'exportent et s'importent au format de Chrome, Edge et Firefox, dossiers compris.",
+        "Le rangement ne déplace rien après coup : il choisit le dossier avant que le fichier arrive. Ce qui était déjà en vrac reste où il est."
       ],
       "actions": [
         { "libelle": "Téléchargements", "commande": "telechargements" },
         { "libelle": "Réglages", "commande": "reglages" }
       ],
-      "mots": ["sauvegarde", "sauvegarder", "restaurer", "exporter", "importer", "téléchargement", "téléchargements", "fichier", "mise à jour", "version", "réglages", "paramètres", "options"],
+      "mots": ["sauvegarde", "sauvegarder", "restaurer", "exporter", "importer", "téléchargement", "téléchargements", "fichier", "ranger", "rangement", "trier", "classer", "vrac", "mise à jour", "version", "réglages", "paramètres", "options"],
       "voir": ["rail-acces", "extensions"]
     },
     {

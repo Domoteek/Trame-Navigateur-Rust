@@ -449,6 +449,7 @@ pub struct App {
 
 mod aide;
 mod depannage;
+mod rangement;
 mod fenetre;
 mod flottant;
 mod outils;
@@ -1075,6 +1076,7 @@ impl App {
         self.appliquer_nettoyage();
         // Telechargements : la liste, et ceux qu'une fermeture a coupes en route.
         *self.dossier_dl.borrow_mut() = self.dossier_telechargements();
+        crate::telechargements::regler_rangement(&self.reglages.rangement);
         self.telechargements = self.profil.charger_telechargements();
         let mut repris = 0;
         let mut coupes = 0;
@@ -3462,6 +3464,7 @@ impl App {
                 "pauseOnglets": self.reglages.pause_onglets,
                 "memoireLecture": self.reglages.memoire_lecture,
                 "astuces": self.reglages.astuces,
+                "rangement": self.etat_rangement(),
                 "lectureExclus": self.reglages.lecture_exclus.clone(),
                 "parDefaut": self.par_defaut,
                 "adressesNettoyees": self.adresses_nettoyees,
@@ -4275,7 +4278,7 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
             self.fermer_apercu();
         }
 
-        if self.traiter_ipc_outils(source, m, &v) || self.traiter_ipc_fenetre(source, m, &v) || self.traiter_ipc_aide(m, &v) || self.traiter_ipc_depannage(m) {
+        if self.traiter_ipc_outils(source, m, &v) || self.traiter_ipc_fenetre(source, m, &v) || self.traiter_ipc_aide(m, &v) || self.traiter_ipc_rangement(m, &v) || self.traiter_ipc_depannage(m) {
             return;
         }
 
@@ -6547,6 +6550,9 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
                     "fin": t.fin,
                     // Un fichier termine puis deplace ou supprime : on le dit.
                     "existe": existe,
+                    // Range dans un sous-dossier (`rangement.rs`) : ou, et pourquoi.
+                    "range": t.range,
+                    "rangeRaison": t.range_raison,
                 })
             })
             .collect();
@@ -6555,6 +6561,7 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
             "actifs": actifs.len(),
             "progression": progression,
             "dossier": self.dossier_dl.borrow().display().to_string(),
+            "rangement": self.reglages.rangement.actif,
             "dernierTermine": self.telechargements.iter().rev().find(|t| t.etat == "termine").map(|t| t.fin).unwrap_or(0),
         })
     }

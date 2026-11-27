@@ -54,6 +54,13 @@ pub struct Telechargement {
     pub debut: u64,
     #[serde(default)]
     pub fin: u64,
+    /// Sous-dossier choisi par le rangement (`rangement.rs`), relatif au dossier des
+    /// telechargements ; vide = la racine.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub range: String,
+    /// Pourquoi ce sous-dossier (« type Images (.png) », « règle « pronote.fr » »).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub range_raison: String,
 }
 
 impl Telechargement {
@@ -81,6 +88,9 @@ thread_local! {
     /// Operations en cours, par identifiant. Objets COM : fil principal seulement, comme les
     /// gestionnaires du moteur qui les fournissent.
     static OPERATIONS: RefCell<HashMap<u64, ICoreWebView2DownloadOperation>> = RefCell::new(HashMap::new());
+    /// Reglage du rangement, recopie par l'application a chaque changement (`regler_rangement`) :
+    /// le gestionnaire du moteur le lit au debut de chaque telechargement.
+    static RANGEMENT: RefCell<crate::rangement::Rangement> = RefCell::new(crate::rangement::Rangement::default());
     /// Destinations deja attribuees a un telechargement en cours : deux fichiers de meme nom
     /// lances ensemble ne doivent pas viser le meme chemin (le fichier n'existe qu'a la fin).
     static RESERVES: RefCell<Vec<PathBuf>> = const { RefCell::new(Vec::new()) };
@@ -110,6 +120,43 @@ fn destination(dossier: &Path, nom: &str) -> PathBuf {
         reserves.push(candidat.clone());
         candidat
     })
+}
+
+/// Le rangement a appliquer aux prochains telechargements.
+pub fn regler_rangement(r: &crate::rangement::Rangement) {
+    RANGEMENT.with(|x| *x.borrow_mut() = r.clone());
+}
+
+/// Date locale du jour (pour `{année}`, `{date}` et les sous-dossiers par mois).
+pub fn jour_local() -> crate::rangement::Jour {
+    use windows::Win32::System::SystemInformation::GetLocalTime;
+    let t = unsafe { GetLocalTime() };
+    crate::rangement::Jour { annee: t.wYear, mois: t.wMonth as u8, jour: t.wDay as u8 }
+}
+
+/// Ou ranger un fichier, avec le reglage en cours.
+pub fn choisir_rangement(nom: &str, site: &str, mime: &str) -> crate::rangement::Choix {
+    RANGEMENT.with(|r| r.borrow().choisir(nom, site, mime, jour_local()))
+}
+
+/// Remet a la racine du dossier un fichier range dans un sous-dossier. Renvoie le nouveau chemin.
+/// Le sous-dossier vide est retire (et ses parents vides, jusqu'au dossier des telechargements).
+pub fn remettre_a_la_racine(chemin: &Path, racine: &Path) -> Result<PathBuf, String> {
+    if !chemin.is_file() {
+        return Err("Ce fichier a été déplacé ou supprimé.".into());
+    }
+    let nom = chemin.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let cible = destination(racine, &nom);
+    liberer(&cible.to_string_lossy());
+    std::fs::rename(chemin, &cible).map_err(|e| format!("Impossible de déplacer le fichier : {e}"))?;
+    let mut parent = chemin.parent().map(Path::to_path_buf);
+    while let Some(p) = parent {
+        if p == racine || !p.starts_with(racine) || std::fs::remove_dir(&p).is_err() {
+            break;
+        }
+        parent = p.parent().map(Path::to_path_buf);
+    }
+    Ok(cible)
 }
 
 fn liberer(chemin: &str) {
@@ -173,7 +220,12 @@ pub fn brancher(
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| "telechargement".to_string());
-            let chemin = destination(&dossier.borrow(), &nom);
+            let mut brut = PWSTR::null();
+            let mime = if operation.MimeType(&mut brut).is_ok() { take_pwstr(brut) } else { String::new() };
+            let choix = choisir_rangement(&nom, &site, &mime);
+            let chemin = destination(&dossier.borrow().join(&choix.sous_dossier), &choix.nom);
+            let range = choix.sous_dossier.to_string_lossy().to_string();
+            let range_raison = if range.is_empty() { String::new() } else { choix.raison };
             args.SetResultFilePath(&HSTRING::from(chemin.as_os_str()))?;
             // Le panneau de WebView2 serait invisible (webview enfant) : Trame montre le sien.
             args.SetHandled(true)?;
@@ -222,6 +274,8 @@ pub fn brancher(
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or(nom),
+                    range,
+                    range_raison,
                     chemin: chemin_txt,
                     site: site.clone(),
                     total: (total > 0).then_some(total as u64),

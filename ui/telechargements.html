@@ -82,6 +82,8 @@
       .meta .etat-ok { color: var(--ok); }
       .meta .etat-ko { color: #fca5a5; }
       .meta .etat-pause { color: #fcd34d; }
+      /* Rangé dans un sous-dossier (rubrique « Téléchargements » des réglages). */
+      .meta .range { color: #5eead4; border: 1px solid rgba(94, 234, 212, 0.35); background: rgba(94, 234, 212, 0.08); border-radius: 999px; padding: 0 7px; }
       .jauge { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; margin-top: 3px; }
       .jauge > span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 0.6s; }
       .jauge.indetermine > span { width: 30% !important; animation: glisse 1.3s ease-in-out infinite; }
@@ -226,6 +228,11 @@
             const libelle = { echoue: "Échec", annule: "Annulé", interrompu: "Interrompu" }[d.etat] || d.etat;
             meta.appendChild(elem("span", "etat-ko", d.raison && d.etat !== "annule" ? `${libelle} — ${d.raison}` : libelle));
           }
+          if (d.range) {
+            const r = elem("span", "range", "→ " + d.range);
+            r.title = "Rangé dans " + d.range + (d.rangeRaison ? " : " + d.rangeRaison : "");
+            meta.appendChild(r);
+          }
           if (d.site) meta.appendChild(elem("span", null, d.site));
           meta.appendChild(elem("span", null, heure(d.debut)));
           corps.appendChild(meta);
@@ -247,6 +254,10 @@
           if (fini && !absent) {
             bouton("Ouvrir", "telechargementOuvrir");
             bouton("Afficher dans le dossier", "telechargementDossier");
+            if (d.range) {
+              bouton("Remettre à la racine", "telechargementRacine");
+              actions.lastChild.title = "Sortir ce fichier de " + d.range + " et le remettre dans le dossier des téléchargements";
+            }
           }
           if (d.etat === "en_cours") bouton("Pause", "telechargementPause");
           if (d.etat === "en_pause") bouton("Reprendre", "telechargementReprendre");

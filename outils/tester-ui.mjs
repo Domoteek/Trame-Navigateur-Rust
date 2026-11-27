@@ -2945,6 +2945,88 @@ async function suite() {
     await p.close();
   });
 
+  // ---------------------------------------------------------------- rangement (2026-11-27)
+
+  const rangementDeBase = () => ({
+    actif: false,
+    parMois: false,
+    racine: "C:\\Users\\x\\Downloads",
+    categories: [
+      { id: "images", nom: "Images", dossier: "Images", extensions: ["jpg", "png", "gif", "webp", "heic"], actif: true },
+      { id: "documents", nom: "Documents", dossier: "Documents", extensions: ["pdf", "odt"], actif: false },
+    ],
+    regles: [
+      { id: 11, actif: true, sites: ["pronote.fr"], types: [], nomContient: "", dossier: "École", renommer: "" },
+      { id: 12, actif: true, sites: [], types: ["pdf"], nomContient: "facture", dossier: "Papiers\\{année}", renommer: "{date} {nom}" },
+    ],
+    compteurs: { "École": 3, "Papiers\\2026": 2, "Images": 7 },
+    essai: { nom: "a.pdf", site: "pronote.fr", chemin: "École\\a.pdf", raison: "règle « pronote.fr »" },
+  });
+
+  await cas("reglages : rubrique Téléchargements, rangement par types et par règles", async () => {
+    const p = await page("reglages.html");
+    const etat = etatDeBase();
+    etat.reglages = { ...(etat.reglages || {}), rangement: rangementDeBase() };
+    await pousser(p, etat);
+    await rubrique(p, "telechargements");
+    egal(await p.$$eval(".rubrique.vue", (n) => n.map((x) => x.id)), ["r-telechargements"], "la rubrique s'ouvre");
+    // Coupé : grisé, et l'interrupteur l'annonce.
+    egal(await p.$eval("#r-telechargements", (n) => n.classList.contains("rg-coupe")), true, "coupé = grisé");
+    await vider(p);
+    await p.click("#rg-actif");
+    verifier((await messages(p)).some((m) => m.m === "rangementActif" && m.actif === true), "allumer part vers l'hôte");
+    // Les tuiles : une par type, la coupée est éteinte, sa bascule l'allume.
+    egal(await p.$$eval(".rg-cat .nom", (n) => n.map((x) => x.textContent)), ["Images", "Documents"], "tuiles");
+    egal(await p.$$eval(".rg-cat", (n) => n.map((x) => x.classList.contains("eteinte"))), [false, true], "tuile coupée");
+    await vider(p);
+    await p.click(".rg-cat:nth-child(2) .bascule");
+    verifier((await messages(p)).some((m) => m.m === "rangementCategorie" && m.id === "documents" && m.actif === true), "bascule d'un type");
+    // Les règles se lisent en phrase, avec ce qu'elles ont déjà rangé ({année} compris).
+    const phrases = await p.$$eval(".rg-regle .phrase", (n) => n.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
+    verifier(phrases[0].includes("pronote.fr") && phrases[0].includes("École"), `phrase 1 : ${phrases[0]}`);
+    verifier(phrases[1].includes("PDF") && phrases[1].includes("facture") && phrases[1].includes("{date} {nom}"), `phrase 2 : ${phrases[1]}`);
+    egal(await p.$$eval(".rg-regle .rg-compte", (n) => n.map((x) => x.textContent)), ["3 fichiers", "2 fichiers"], "compteurs");
+    // Ajouter une règle : le formulaire part entier vers l'hôte.
+    await p.click("#rg-ajouter");
+    const champs = await p.$$(".rg-edition input");
+    await champs[0].fill("ameli.fr");
+    await champs[3].fill("Papiers\\Santé");
+    await vider(p);
+    await p.click(".rg-edition button.principal");
+    const envoi = (await messages(p)).find((m) => m.m === "rangementRegle");
+    verifier(envoi && envoi.regle.id === 0 && envoi.regle.sites === "ameli.fr" && envoi.regle.dossier === "Papiers\\Santé", `nouvelle règle : ${JSON.stringify(envoi)}`);
+    // L'essai affiche le chemin complet et la raison données par Trame.
+    const essai = await p.$eval("#rg-e-res", (n) => n.textContent);
+    verifier(essai.includes("Downloads\\École\\a.pdf") && essai.includes("pronote.fr"), `essai : ${essai}`);
+    // L'arborescence montre les dossiers de premier niveau et leurs comptes.
+    const arbre = await p.$eval("#rg-arbre", (n) => n.textContent);
+    verifier(arbre.includes("Downloads") && arbre.includes("École") && arbre.includes("Papiers") && arbre.includes("Images") && !arbre.includes("Documents"), `arbre : ${arbre}`);
+    // La recherche trouve la rubrique par « ranger ».
+    await p.fill("#recherche", "ranger");
+    const visibles = await p.$$eval(".groupe", (g) => g.filter((x) => x.offsetParent).map((x) => x.closest(".rubrique").id));
+    verifier(visibles.includes("r-telechargements"), `recherche « ranger » : ${visibles}`);
+    await p.close();
+  });
+
+  await cas("telechargements : un fichier rangé dit où, et se remet à la racine", async () => {
+    const p = await page("telechargements.html");
+    const d = {
+      id: 5, url: "https://x/a.pdf", fichier: "a.pdf", chemin: "C:\\dl\\École\\a.pdf", site: "pronote.fr",
+      total: 10, recu: 10, etat: "termine", raison: "", debut: 1, fin: 2, existe: true,
+      range: "École", rangeRaison: "règle « pronote.fr »",
+    };
+    await pousser(p, { ...etatDeBase(), telechargements: { actifs: 0, liste: [d], dossier: "C:\\dl", rangement: true, dernierTermine: 2 } });
+    egal(await p.$eval(".meta .range", (n) => n.textContent), "→ École", "pastille du rangement");
+    await vider(p);
+    let clique = false;
+    for (const b of await p.$$(".actions button")) {
+      if ((await b.textContent()) === "Remettre à la racine") { await b.click(); clique = true; }
+    }
+    verifier(clique, "bouton « Remettre à la racine » présent");
+    verifier((await messages(p)).some((m) => m.m === "telechargementRacine" && m.id === 5), "remettre à la racine part vers l'hôte");
+    await p.close();
+  });
+
   await cas("teintes : chacune repeint fonds, surfaces et accents de la coquille, Défaut rend l'origine", async () => {
     const p = await page("chrome.html", { query: "?surface=rail" });
     const lire = () =>
