@@ -2302,6 +2302,20 @@ function rendreMenuPage(s) {
         { m: "prive" }
       )
     );
+    if (actif.url && /^https?:/.test(actif.url)) {
+      let hote = "";
+      try {
+        hote = new URL(actif.url).hostname.replace(/^www\./, "");
+      } catch (_) {}
+      colonne.appendChild(
+        lignePage(
+          "Effacer les cookies de ce site",
+          (hote ? hote + " · " : "") + "vous déconnecte de ce site, qui redemandera votre choix de cookies",
+          "x",
+          { m: "effacerCookiesSite", onglet: actif.id }
+        )
+      );
+    }
   }
 
   // Rendez-vous

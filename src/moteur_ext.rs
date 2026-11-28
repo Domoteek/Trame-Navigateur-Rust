@@ -276,6 +276,86 @@ pub fn vider_caches(webview: &WebView, proxy: EventLoopProxy<UserEvent>, quoi: S
     }
 }
 
+/// Vrai si un cookie de domaine `domaine` (`.aliexpress.com`, `fr.aliexpress.com`) appartient au
+/// site `site` (domaine enregistrable : `aliexpress.com`).
+pub fn cookie_du_site(domaine: &str, site: &str) -> bool {
+    let d = domaine.trim_start_matches('.').to_ascii_lowercase();
+    let s = site.to_ascii_lowercase();
+    !s.is_empty() && (d == s || d.ends_with(&format!(".{s}")))
+}
+
+/// « Effacer les cookies de ce site » : retire tous les cookies du site (domaine enregistrable,
+/// sous-domaines compris) et le stockage local de l'origine affichee — c'est souvent la que les
+/// bandeaux de consentement gardent le choix. Les autres sites ne sont pas touches.
+///
+/// Par le protocole DevTools de la webview (aucun port ouvert) : `Storage.getCookies` rend
+/// tous les cookies du profil, `Network.deleteCookies` les retire un par un, puis
+/// `Storage.clearDataForOrigin`. Les appels passent dans l'ordre sur la meme session : le
+/// dernier rappel arrive apres les retraits. Le bilan revient en `UserEvent::CookiesEffaces`.
+pub fn effacer_cookies_site(webview: &WebView, proxy: EventLoopProxy<UserEvent>, onglet: u32, site: String, origines: Vec<String>) {
+    use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
+
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2CallDevToolsProtocolMethodCompletedHandler as Rappel;
+    fn appeler(coeur: &ICoreWebView2, methode: &str, params: &str, fin: Rappel) -> windows::core::Result<()> {
+        unsafe { coeur.CallDevToolsProtocolMethod(&HSTRING::from(methode), &HSTRING::from(params), &fin) }
+    }
+    let rien = || CallDevToolsProtocolMethodCompletedHandler::create(Box::new(|_, _| Ok(())));
+
+    let coeur = webview.webview();
+    let pour_suite = coeur.clone();
+    let retour = proxy.clone();
+    let site_suite = site.clone();
+    let lire = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |resultat, json: String| {
+        let echec = |detail: String| {
+            let _ = retour.send_event(UserEvent::CookiesEffaces { onglet, site: site_suite.clone(), nombre: 0, erreur: Some(detail) });
+        };
+        if let Err(e) = resultat {
+            echec(e.message().to_string());
+            return Ok(());
+        }
+        let cookies = serde_json::from_str::<serde_json::Value>(&json)
+            .ok()
+            .and_then(|v| v["cookies"].as_array().cloned())
+            .unwrap_or_default();
+        let a_retirer: Vec<&serde_json::Value> = cookies
+            .iter()
+            .filter(|c| cookie_du_site(c["domain"].as_str().unwrap_or(""), &site_suite))
+            .collect();
+        let nombre = a_retirer.len();
+        for c in a_retirer {
+            let params = serde_json::json!({
+                "name": c["name"], "domain": c["domain"], "path": c["path"],
+            });
+            if let Err(e) = appeler(&pour_suite, "Network.deleteCookies", &params.to_string(), rien()) {
+                echec(e.message().to_string());
+                return Ok(());
+            }
+        }
+        for origine in &origines {
+            let params = serde_json::json!({
+                "origin": origine,
+                "storageTypes": "local_storage,indexeddb,websql,cache_storage,service_workers",
+            });
+            let _ = appeler(&pour_suite, "Storage.clearDataForOrigin", &params.to_string(), rien());
+        }
+        // Dernier appel de la file : son rappel dit que tout ce qui precede est fait.
+        let fin_retour = retour.clone();
+        let fin_site = site_suite.clone();
+        let fin = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |_, _| {
+            let _ = fin_retour.send_event(UserEvent::CookiesEffaces { onglet, site: fin_site, nombre, erreur: None });
+            Ok(())
+        }));
+        if let Err(e) = appeler(&pour_suite, "Storage.getCookies", "{}", fin) {
+            echec(e.message().to_string());
+        }
+        Ok(())
+    }));
+    if let Err(e) = appeler(&coeur, "Storage.getCookies", "{}", lire) {
+        let _ = proxy.send_event(UserEvent::CookiesEffaces { onglet, site, nombre: 0, erreur: Some(e.message().to_string()) });
+    }
+}
+
 /// Lit l'image de l'icone de la page (PNG), telle que WebView2 l'a deja chargee pour l'onglet :
 /// aucune requete de plus, et rien que l'anti-pistage puisse bloquer (l'adresse de l'icone,
 /// rechargee depuis l'interface de Trame, est un tiers : celle d'Amazon y etait refusee).
@@ -847,5 +927,23 @@ pub fn retirer(webview: &WebView, proxy: EventLoopProxy<UserEvent>, id: &str, no
     ));
     if let Err(e) = unsafe { profil.GetBrowserExtensions(&gestionnaire) } {
         echec(&proxy, Action::Retrait, id, e.message().to_string());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cookie_du_site;
+
+    #[test]
+    fn un_cookie_appartient_au_site_et_a_ses_sous_domaines_seulement() {
+        assert!(cookie_du_site(".aliexpress.com", "aliexpress.com"));
+        assert!(cookie_du_site("fr.aliexpress.com", "aliexpress.com"));
+        assert!(cookie_du_site("aliexpress.com", "aliexpress.com"));
+        assert!(cookie_du_site(".AliExpress.com", "aliexpress.com"));
+        // Un autre site qui finit pareil n'est pas le meme site.
+        assert!(!cookie_du_site("notaliexpress.com", "aliexpress.com"));
+        assert!(!cookie_du_site(".google.com", "aliexpress.com"));
+        // Un site vide ne doit jamais tout effacer.
+        assert!(!cookie_du_site(".google.com", ""));
     }
 }

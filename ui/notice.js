@@ -198,7 +198,8 @@ window.NOTICE = {
       "etapes": [
         { "titre": "Ouvrir", "texte": "Ctrl+Maj+N, le bouton « Privé » en bas du rail, ou le Nouvel onglet." },
         { "titre": "Ce qui est oublié", "texte": "Les onglets privés ne sont jamais sauvegardés, rien n'entre dans l'historique ni dans la mémoire de lecture." },
-        { "titre": "Effacé", "texte": "Tout ce que la navigation privée a écrit est effacé au démarrage suivant." }
+        { "titre": "Effacé", "texte": "Tout ce que la navigation privée a écrit est effacé au démarrage suivant." },
+        { "titre": "Les cookies d'un seul site", "texte": "Hors navigation privée, les cookies sont gardés. Menu de la page → « Effacer les cookies de ce site » : ce site seul (sous-domaines compris) vous déconnecte et redemande votre choix de cookies ; les autres sites ne bougent pas." }
       ],
       "conseils": [
         "Pour garder des comptes séparés de façon durable, un fil cloisonné (bouclier dans l'en-tête du fil) a son propre profil et ses propres extensions."
@@ -206,7 +207,7 @@ window.NOTICE = {
       "actions": [
         { "libelle": "Ouvrir un onglet privé", "commande": "prive" }
       ],
-      "mots": ["privé", "prive", "incognito", "anonyme", "secret", "cookies", "cloisonné", "profil", "compte"],
+      "mots": ["privé", "prive", "incognito", "anonyme", "secret", "cookies", "effacer les cookies", "consentement", "bandeau", "cloisonné", "profil", "compte"],
       "voir": ["onglets-fils", "extensions"]
     },
     {

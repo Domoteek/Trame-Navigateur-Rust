@@ -82,6 +82,13 @@ pub enum UserEvent {
         onglet: TabId,
         donnees: String,
     },
+    /// Bilan de « Effacer les cookies de ce site » (`moteur_ext::effacer_cookies_site`).
+    CookiesEffaces {
+        onglet: TabId,
+        site: String,
+        nombre: usize,
+        erreur: Option<String>,
+    },
     NouvelleFenetre {
         onglet: TabId,
         url: String,
@@ -3936,6 +3943,7 @@ impl App {
                 self.capturer_icone_si_utile(onglet);
             }
             UserEvent::IconeImage { onglet, donnees } => self.icone_capturee(onglet, donnees),
+            UserEvent::CookiesEffaces { onglet, site, nombre, erreur } => self.cookies_effaces(onglet, &site, nombre, erreur),
             UserEvent::PleinEcran { onglet, actif } => self.sur_plein_ecran(onglet, actif),
             UserEvent::NouvelleFenetre { onglet, url } => {
                 // Une fenêtre demandée SANS adresse (`window.open()` ou `about:blank`) ne donne pas
@@ -5298,6 +5306,7 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
             // et l'hote les ignorait EN SILENCE (constate le 2026-11-23) — les entrees ne
             // faisaient rien, et les tests d'interface, qui ne regardent que l'envoi, passaient.
             "prive" => self.ouvrir_prive(),
+            "effacerCookiesSite" => self.effacer_cookies_site(v["onglet"].as_u64().map(|n| n as TabId)),
             // ---- sauvegarde automatique (meme piege, meme correction)
             "sauvegardeAuto" => {
                 self.reglages.sauvegarde_auto = v["actif"]
@@ -7846,6 +7855,46 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
             }
         }
         info!("extension {id} : clic d'action transmis pour {}", urls::affichage_court(&adresse));
+    }
+
+    /// « Effacer les cookies de ce site » (menu de la page) : cookies du site entier, stockage
+    /// de l'origine affichee, puis la page est rechargee (`cookies_effaces`).
+    fn effacer_cookies_site(&mut self, onglet: Option<TabId>) {
+        let Some(id) = onglet.or(self.actif) else { return };
+        let Some(o) = self.trouver(id).cloned() else { return };
+        let Ok(u) = url::Url::parse(&o.url) else { return };
+        if !matches!(u.scheme(), "http" | "https") {
+            self.signaler("Les cookies ne concernent que les sites web.");
+            return;
+        }
+        let site = o.domaine();
+        let Some(w) = self.webviews.get(&id) else {
+            self.signaler("Réveillez l'onglet d'abord : ses cookies s'effacent depuis la page.");
+            return;
+        };
+        let origine = u.origin().ascii_serialization();
+        let mut origines = vec![origine];
+        for hote in [site.clone(), format!("www.{site}")] {
+            let autre = format!("{}://{hote}", u.scheme());
+            if !origines.contains(&autre) {
+                origines.push(autre);
+            }
+        }
+        info!("cookies : effacement demande pour {site} (onglet {id})");
+        crate::moteur_ext::effacer_cookies_site(w, self.proxy.clone(), id, site, origines);
+    }
+
+    fn cookies_effaces(&mut self, onglet: TabId, site: &str, nombre: usize, erreur: Option<String>) {
+        if let Some(e) = erreur {
+            alerte!("cookies de {site} : effacement refuse ({e})");
+            self.signaler(&format!("Impossible d'effacer les cookies de {site}."));
+            return;
+        }
+        info!("cookies : {nombre} cookie(s) de {site} effaces, stockage du site vide");
+        self.signaler(&format!(
+            "Cookies de {site} effacés ({nombre}) — page rechargée : le site redemandera votre choix."
+        ));
+        self.recharger_onglet(onglet);
     }
 
     fn recharger_onglet(&mut self, id: TabId) {
