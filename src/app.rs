@@ -6329,6 +6329,12 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
                 info!("telechargement termine : {nom}");
             }
             "echoue" => {
+                // « Ajouter à Chrome » : WebView2 redirige vers `permanently-removed.invalid`,
+                // qui echoue toujours. L'identifiant est dans l'adresse : on installe par lui.
+                if let SuiteTelechargement::InstallerIdentifiant(_) = suite_telechargement(&url, None, false) {
+                    self.traiter(UserEvent::Telechargement { url, chemin: None, reussi: false });
+                    return;
+                }
                 alerte!("telechargement echoue : {url} ({raison_txt})");
                 self.signaler(&format!("Téléchargement échoué : {nom} — {raison_txt}"));
             }
