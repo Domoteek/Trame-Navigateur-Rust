@@ -83,12 +83,29 @@ try {
     );
     throw new Error(`${e.message} — boutons vus : ${JSON.stringify(vus)}`);
   }
-  await pause(500);
-  const { x, y } = await page.evaluer(trouver);
-  for (const type of ["mousePressed", "mouseReleased"]) {
-    await page.envoyer("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 });
+  // La fiche se remet parfois en page juste après le bandeau : un clic peut tomber à côté.
+  // On reclique (3 fois au plus) tant que le journal ne montre pas le téléchargement.
+  const journalProfil = () => (existsSync(join(profil, "trame.log")) ? readFileSync(join(profil, "trame.log"), "utf8") : "");
+  let parti = false;
+  for (let essai = 1; essai <= 3 && !parti; essai++) {
+    await pause(1500);
+    const point = await page.evaluer(trouver);
+    if (!point) {
+      const vus = await page.evaluer(
+        `({ boutons: [...document.querySelectorAll("button,[role=button],[role=dialog],[role=alertdialog]")].map((b) => (b.getAttribute("role") || "b") + ":" + (b.textContent || "").trim().slice(0, 80)).filter((t) => t.length > 2).slice(0, 15), haut: document.body.innerText.slice(0, 600) })`
+      );
+      console.log(`      plus de bouton à cliquer — boutons vus : ${JSON.stringify(vus)}`);
+      break;
+    }
+    const { x, y } = point;
+    for (const type of ["mousePressed", "mouseReleased"]) {
+      await page.envoyer("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 });
+    }
+    console.log(`      clic ${essai} sur « Ajouter à Chrome » (${Math.round(x)}, ${Math.round(y)})`);
+    const limite = Date.now() + 8000;
+    while (!(parti = /telechargement :|installation d'extension/.test(journalProfil())) && Date.now() < limite) await pause(400);
   }
-  ok(true, `clic sur « Ajouter à Chrome » (${Math.round(x)}, ${Math.round(y)})`);
+  ok(parti, "le clic déclenche l'installation");
   page.fermer();
 
   const fin = Date.now() + 60000;

@@ -6209,7 +6209,11 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
             }
         }
         info!("telechargement : {} -> {}", t.url, t.chemin);
-        self.signaler(&format!("Téléchargement : {}", t.fichier));
+        // « Ajouter à Chrome » : c'est l'installation qui parle (« Téléchargement de
+        // l'extension… », puis « installée »), pas un fichier .crx au nom illisible.
+        if !crate::crx::du_magasin(&t.url) {
+            self.signaler(&format!("Téléchargement : {}", t.fichier));
+        }
         self.telechargements.push(t.clone());
         self.profil.sauver_telechargements(&self.telechargements);
         self.pousser_etat();
@@ -6332,6 +6336,11 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
                 // « Ajouter à Chrome » : WebView2 redirige vers `permanently-removed.invalid`,
                 // qui echoue toujours. L'identifiant est dans l'adresse : on installe par lui.
                 if let SuiteTelechargement::InstallerIdentifiant(_) = suite_telechargement(&url, None, false) {
+                    // Cet echec est la voie normale du magasin : il ne doit pas rester dans la
+                    // liste comme un telechargement « interrompu ».
+                    self.telechargements.retain(|x| x.id != id);
+                    self.profil.sauver_telechargements(&self.telechargements);
+                    self.pousser_etat();
                     self.traiter(UserEvent::Telechargement { url, chemin: None, reussi: false });
                     return;
                 }
@@ -7782,7 +7791,11 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
             .or_else(|| manifeste["browser_action"]["default_popup"].as_str())
             .map(|s| s.trim_start_matches('/').to_string());
         let Some(page) = page else {
-            self.signaler("Cette extension n'a pas de fenêtre d'action.");
+            if manifeste["action"].is_object() || manifeste["browser_action"].is_object() {
+                self.clic_action_extension(id, &dossier);
+            } else {
+                self.signaler("Cette extension n'a pas de fenêtre d'action.");
+            }
             return;
         };
         let url = format!("chrome-extension://{id}/{page}");
@@ -7804,6 +7817,35 @@ fn etat_tunnels(racine: &std::path::Path) -> serde_json::Value {
         }
         info!("panneau droit : popup de l'extension {id}");
         self.pousser_etat();
+    }
+
+    /// Clic sur l'icone d'une extension sans fenetre d'action (Joko) : comme Chrome, on remet le
+    /// clic a l'extension pour l'onglet actif. Le panneau (cache) charge la page relais, qui
+    /// previent le service worker adapte (`extensions_chrome::ADAPTATEUR` v2).
+    fn clic_action_extension(&mut self, id: &str, dossier: &Path) {
+        crate::extensions_chrome::adapter(dossier);
+        let Some(adresse) = self.actif.and_then(|a| self.trouver(a)).map(|o| o.url.clone()) else {
+            self.signaler("Aucun onglet actif pour cette extension.");
+            return;
+        };
+        if self.zap_ouvert {
+            self.fermer_panneau_droit();
+        }
+        let url = format!(
+            "chrome-extension://{id}/{}?url={}&t={}",
+            crate::extensions_chrome::PAGE_RELAIS_ACTION,
+            percent_encoding::utf8_percent_encode(&adresse, percent_encoding::NON_ALPHANUMERIC),
+            maintenant_ms()
+        );
+        if let Some(w) = &self.zap {
+            let _ = w.set_visible(false);
+            if let Err(e) = charger(w, &url) {
+                alerte!("clic d'action de {id} : {e}");
+                self.signaler("Impossible de transmettre le clic à l'extension.");
+                return;
+            }
+        }
+        info!("extension {id} : clic d'action transmis pour {}", urls::affichage_court(&adresse));
     }
 
     fn recharger_onglet(&mut self, id: TabId) {

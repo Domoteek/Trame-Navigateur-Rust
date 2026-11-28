@@ -131,6 +131,12 @@ fn lire_dossier(dossier: &Path, actif: bool, sources: &Value) -> Vec<Value> {
                 .or_else(|| m["browser_action"]["default_popup"].as_str())
                 .map(|s| s.to_string())
         });
+        // Une icone d'action sans fenetre (Joko) : le clic est remis a l'extension
+        // (`chrome.action.onClicked`), qui agit dans la page.
+        let clic = popup.is_none()
+            && manifeste
+                .as_ref()
+                .is_some_and(|m| m["action"].is_object() || m["browser_action"].is_object());
         let options = manifeste.as_ref().and_then(|m| {
             m["options_ui"]["page"]
                 .as_str()
@@ -154,6 +160,7 @@ fn lire_dossier(dossier: &Path, actif: bool, sources: &Value) -> Vec<Value> {
             "valide": manifeste.is_some(),
             "actif": actif,
             "popup": popup,
+            "clic": clic,
             "options": options,
             "permissions": manifeste.as_ref().map(permissions).unwrap_or_default(),
             "tailleKo": taille_ko(&chemin),
@@ -429,7 +436,7 @@ fn inscrire_cle(cible: &Path, identifiant: &str, cle_publique: Option<&str>) {
 
 /// Marque de l'adaptateur en tete du service worker : sa presence suffit a ne pas l'ajouter deux
 /// fois. Changer la version reapplique l'adaptateur (l'ancien bloc est remplace).
-const MARQUE_ADAPTATEUR: &str = "/* trame-adaptateur v1 */";
+const MARQUE_ADAPTATEUR: &str = "/* trame-adaptateur v2 */";
 const FIN_ADAPTATEUR: &str = "/* fin trame-adaptateur */";
 
 /// WebView2 ouvre bien la fenetre demandee par `chrome.windows.create`, mais repond `undefined`
@@ -438,7 +445,41 @@ const FIN_ADAPTATEUR: &str = "/* fin trame-adaptateur */";
 /// (« Cannot read properties of undefined (reading 'id') ») et abandonnait, Google affichait
 /// « Impossible de créer votre clé d'accès ». L'adaptateur retrouve la fenetre nouvellement
 /// apparue et la renvoie, comme Chrome. Il ne fait rien si le moteur repond correctement.
-const ADAPTATEUR: &str = r#"/* trame-adaptateur v1 */
+///
+/// v2 (2026-11-28, Joko) : une extension sans fenetre d'action attend `chrome.action.onClicked`,
+/// que WebView2 ne declenche jamais (il n'a pas de barre d'outils). L'adaptateur garde les
+/// ecouteurs, et la page relais `trame-relais/action.html` (chargee par Trame au clic sur l'icone)
+/// lui envoie `{__trame_action: {url}}` : il retrouve l'onglet de cette adresse et appelle les
+/// ecouteurs avec lui, comme Chrome.
+const ADAPTATEUR: &str = r#"/* trame-adaptateur v2 */
+(() => {
+  const a = globalThis.chrome && (chrome.action || chrome.browserAction);
+  const r = globalThis.chrome && chrome.runtime;
+  if (!a || !a.onClicked || !r || !r.onMessage || a.onClicked.__trame) return;
+  const ev = a.onClicked;
+  const ecouteurs = new Set();
+  const ajouter = ev.addListener.bind(ev);
+  const retirer = ev.removeListener.bind(ev);
+  try {
+    ev.addListener = (f) => { ecouteurs.add(f); return ajouter(f); };
+    ev.removeListener = (f) => { ecouteurs.delete(f); return retirer(f); };
+    ev.__trame = true;
+  } catch (_) { return; }
+  r.onMessage.addListener((m, envoyeur) => {
+    if (!m || !m.__trame_action || !envoyeur || envoyeur.id !== r.id) return;
+    (async () => {
+      const onglets = await chrome.tabs.query({});
+      const url = m.__trame_action.url || "";
+      const pages = onglets.filter((t) => t.url && !/^(http:\/\/trame\.localhost|chrome-extension:)/.test(t.url));
+      const onglet = pages.find((t) => t.url === url && t.active) || pages.find((t) => t.url === url)
+        || pages.find((t) => t.active);
+      if (!onglet) return;
+      for (const f of ecouteurs) {
+        try { f(onglet); } catch (e) { console.error("trame : onClicked", e); }
+      }
+    })();
+  });
+})();
 (() => {
   const w = globalThis.chrome && chrome.windows;
   if (!w || typeof w.create !== "function" || w.create.__trame) return;
@@ -476,6 +517,7 @@ pub fn adapter(dossier: &Path) -> bool {
     let Some(chemin) = service_worker(dossier) else {
         return false;
     };
+    poser_relais_action(dossier);
     let Ok(contenu) = std::fs::read_to_string(&chemin) else {
         return false;
     };
@@ -490,6 +532,31 @@ pub fn adapter(dossier: &Path) -> bool {
         Err(e) => {
             alerte!("adaptateur WebView2 : ecriture impossible dans {} ({e})", chemin.display());
             false
+        }
+    }
+}
+
+/// Page relais du clic sur l'icone (voir `ADAPTATEUR` v2), relative au dossier de l'extension.
+pub const PAGE_RELAIS_ACTION: &str = "trame-relais/action.html";
+
+/// Le script est dans un fichier a part : la CSP des pages d'extension MV3 refuse le script en
+/// ligne. La page previent le service worker (ce qui le reveille s'il dort), puis se vide.
+const RELAIS_ACTION_HTML: &str = "<!doctype html><meta charset=\"utf-8\"><script src=\"action.js\"></script>\n";
+const RELAIS_ACTION_JS: &str = r#"const url = new URLSearchParams(location.search).get("url") || "";
+chrome.runtime.sendMessage({ __trame_action: { url } }, () => void chrome.runtime.lastError);
+"#;
+
+/// Ecrit la page relais du clic dans le dossier de l'extension, si elle manque ou a change.
+fn poser_relais_action(dossier: &Path) {
+    let relais = dossier.join("trame-relais");
+    for (nom, texte) in [("action.html", RELAIS_ACTION_HTML), ("action.js", RELAIS_ACTION_JS)] {
+        let chemin = relais.join(nom);
+        if std::fs::read_to_string(&chemin).ok().as_deref() == Some(texte) {
+            continue;
+        }
+        let _ = std::fs::create_dir_all(&relais);
+        if let Err(e) = std::fs::write(&chemin, texte) {
+            alerte!("relais d'action : ecriture impossible dans {} ({e})", chemin.display());
         }
     }
 }

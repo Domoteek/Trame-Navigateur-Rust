@@ -1354,8 +1354,8 @@ function ligneCloison(e, cloison, epinglees, s) {
   const ligne = elem("div", "menu-ligne" + (dedans ? "" : " off") + (ouverte ? " ouverte" : ""));
   const principal = actionMenu(
     "menu-principal",
-    dedans && e.popup ? `Ouvrir ${e.nom}` : dedans ? `${e.nom} n'a pas de fenêtre d'action` : `Activer ${e.nom} dans ce fil`,
-    dedans && e.popup
+    dedans && e.popup ? `Ouvrir ${e.nom}` : dedans && e.clic ? `Lancer ${e.nom} sur cette page` : dedans ? `${e.nom} n'a pas de fenêtre d'action` : `Activer ${e.nom} dans ce fil`,
+    dedans && (e.popup || e.clic)
       ? { m: "chromePopup", id: e.id }
       : { m: "cloisonExtension", fil: cloison.fil, id: e.id, actif: !dedans }
   );
@@ -1407,7 +1407,7 @@ function rendreExtensions(s) {
   const signature = JSON.stringify([
     cloison,
     Math.round((s.budget && s.budget.extensionsMo) || 0),
-    chrome.map((e) => [e.id, e.nom, e.actif, e.chargee, e.icone, e.popup, e.valide, Math.round(e.coutMo || 0)]),
+    chrome.map((e) => [e.id, e.nom, e.actif, e.chargee, e.icone, e.popup, e.clic, e.valide, Math.round(e.coutMo || 0)]),
     epinglees,
     installations,
     s.panneauExtension,
@@ -1496,8 +1496,8 @@ function rendreExtensions(s) {
     // Icone + nom : ouvre la fenetre d'action, comme un clic sur l'extension dans Chrome.
     const principal = actionMenu(
       "menu-principal",
-      e.popup && e.actif ? `Ouvrir ${e.nom}` : e.actif ? `${e.nom} n'a pas de fenêtre d'action` : `${e.nom} est désactivée`,
-      e.popup && e.actif ? { m: "chromePopup", id: e.id } : { m: "ouvrirReglages" }
+      e.popup && e.actif ? `Ouvrir ${e.nom}` : e.clic && e.actif ? `Lancer ${e.nom} sur cette page` : e.actif ? `${e.nom} n'a pas de fenêtre d'action` : `${e.nom} est désactivée`,
+      (e.popup || e.clic) && e.actif ? { m: "chromePopup", id: e.id } : { m: "ouvrirReglages" }
     );
     principal.appendChild(iconeExtension(e, "menu-icone"));
     const corps = elem("span", "corps");
@@ -1605,7 +1605,9 @@ function rendreEpingles(s) {
         ? ouvert
           ? "Cliquer pour refermer"
           : "Cliquer pour ouvrir"
-        : "Cette extension n'a pas de fenêtre d'action");
+        : e.clic
+          ? "Cliquer pour la lancer sur cette page"
+          : "Cette extension n'a pas de fenêtre d'action");
     // `pointerdown` et non `click` : l'action part au contact, sans dependre du relachement.
     chip.addEventListener("pointerdown", (ev) => {
       ev.preventDefault();
